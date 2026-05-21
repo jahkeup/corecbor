@@ -1,0 +1,12 @@
+TODO: pick a license before the first tagged release.
+
+Candidates worth considering:
+  - Apache-2.0 — permissive + explicit patent grant; matches Smithy /
+    AWS-SDK-Go / smithy-go ecosystem corecbor sits adjacent to.
+  - MIT — simpler, widely-understood.
+  - BSD-3-Clause — Go core's choice.
+
+The decision is a tier-2 proposal (no spec change, no contract change,
+purely operational). Until then this file is a placeholder; downstream
+consumers should NOT depend on corecbor in production until a license
+is chosen and committed.

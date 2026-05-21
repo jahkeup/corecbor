@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 005 |
 | **Tier** | 3 |
-| **Status** | Accepted |
+| **Status** | Closed |
 | **Filed** | 2026-05-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (corecbor), 002 (COSE), 003 (CWT) |

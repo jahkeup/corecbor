@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 006 |
 | **Tier** | 2 |
-| **Status** | Accepted |
+| **Status** | Closed |
 | **Filed** | 2026-05-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (corecbor primitives) |

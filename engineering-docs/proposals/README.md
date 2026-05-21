@@ -11,18 +11,20 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [002](002-cose-structures-and-signing.md) | 3 | Accepted | COSE structures and cryptographic operations (RFC 9052 + RFC 9053) | corecbor maintainers | 001 | 2026-05-20 |
-| [003](003-cwt-cbor-web-tokens.md) | 3 | Accepted | CWT: CBOR Web Tokens (RFC 8392) | corecbor maintainers | 001, 002 | 2026-05-20 |
-| [004](004-edhoc-key-exchange.md) | 3 | Accepted | EDHOC: Ephemeral DH Over COSE (RFC 9528) | corecbor maintainers | 001, 002 | 2026-05-20 |
-| [005](005-eat-entity-attestation.md) | 3 | Accepted | EAT: Entity Attestation Tokens (RFC 9711) | corecbor maintainers | 001, 002, 003 | 2026-05-20 |
-| [006](006-iana-registry-sync-codegen.md) | 2 | Accepted | IANA CBOR registry sync, codegen, and embedding | corecbor maintainers | 001 | 2026-05-20 |
-| [007](007-cross-library-compatibility-testing.md) | 2 | Accepted | Cross-library compatibility testing | corecbor maintainers | 001 | 2026-05-20 |
+
+_(none — all proposals closed)_
 
 ## Closed proposals
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
 | [001](001-phase-1-foundational-primitives.md) | 1 | Closed | Phase 1: Foundational primitives | corecbor maintainers | 2026-05-20 | All acceptance criteria met. Phases 1-4 implemented. §9 perf targets exceeded. |
+| [002](002-cose-structures-and-signing.md) | 3 | Closed | COSE structures and cryptographic operations | corecbor maintainers | 2026-05-21 | Phases A-E complete. Sign1, Encrypt0, Mac0, multi-recipient, AES-KW, ECDH-ES, PBES2, HPKE, key escrow patterns. |
+| [003](003-cwt-cbor-web-tokens.md) | 3 | Closed | CWT: CBOR Web Tokens | corecbor maintainers | 2026-05-21 | Phases A-B complete. Sign/Verify/Encrypt/Decrypt/MAC + Validator. |
+| [004](004-edhoc-key-exchange.md) | 3 | Closed | EDHOC: Ephemeral DH Over COSE | corecbor maintainers | 2026-05-21 | Phases A-C complete. Suite 0+2, msg4, Exporter, CWT credentials. |
+| [005](005-eat-entity-attestation.md) | 3 | Closed | EAT: Entity Attestation Tokens | corecbor maintainers | 2026-05-21 | Phases A-C complete. Claims, SW measurements, profile, submodules. |
+| [006](006-iana-registry-sync-codegen.md) | 2 | Closed | IANA CBOR registry sync + codegen | corecbor maintainers | 2026-05-21 | Full IANA fetch (260 tags), codegen tool, go:embed registry. |
+| [007](007-cross-library-compatibility-testing.md) | 2 | Closed | Cross-library compatibility testing | corecbor maintainers | 2026-05-21 | 55 vectors (41 canonical + 14 quirky), 209 test cases. |
 
 ## Numbering
 

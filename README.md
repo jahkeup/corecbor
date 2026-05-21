@@ -9,9 +9,10 @@ A strict-RFC-conformant CBOR encoder plus a forgiving CBOR decoder, with
 the same primitives serving both storage / cryptographic-AAD use cases
 and wire-protocol implementation use cases.
 
-**Status:** Skeleton. No implementation yet. Phase 1 (foundational
-primitives) is the first work; see
-[`engineering-docs/proposals/001-phase-1-foundational-primitives.md`](engineering-docs/proposals/001-phase-1-foundational-primitives.md).
+**Status:** Active development. Core codec (encode, decode, streaming,
+deterministic modes), COSE signing/encryption, CWT, EAT, and EDHOC
+sub-modules are implemented. See closed proposals under
+[`engineering-docs/proposals/`](engineering-docs/proposals/) for history.
 
 ## Documentation
 
@@ -35,14 +36,23 @@ The contract, design, and process all live under
 ```
 .
 ├── README.md                     — this file
-├── LICENSE
+├── LICENSE                       — Apache-2.0
 ├── go.mod / go.sum
 ├── Makefile                      — fmt / lint / test / bench / fuzz / check
-├── .golangci.yml                 — lint config (default linter set + gofumpt)
+├── .golangci.yml                 — lint config (golangci-lint v2 + gofumpt)
 ├── .github/workflows/ci.yml      — gate on `make check` + `make fuzz` (60s)
-├── doc.go                        — package-level godoc
-├── engineering-docs/             — see "Documentation" above
-└── (encode.go, decode.go, value.go, errors.go, ... — added during Phase 1)
+├── *.go                          — core codec (encoder, decoder, streaming, marshal, diagnostic)
+├── cbor/                         — shared value types and helpers
+├── wire/                         — low-level wire format (heads, float16)
+├── rfc8949/                      — RFC 8949 encode/decode internals
+├── registry/                     — IANA CBOR tag registry (codegen'd)
+├── cose/                         — COSE sign/encrypt/MAC (RFC 9052, separate module)
+├── cwt/                          — CWT claims + validation (RFC 8392, separate module)
+├── eat/                          — EAT entity attestation (RFC 9711, separate module)
+├── edhoc/                        — EDHOC key exchange (RFC 9528, separate module)
+├── cmd/                          — CLI tools (cbor-diag, cbor-registry-gen)
+├── testdata/                     — fuzz corpora + compatibility fixtures
+└── engineering-docs/             — see "Documentation" above
 ```
 
 ## Build
@@ -61,4 +71,4 @@ hint. CI installs it; developer machines may skip.
 
 ## License
 
-See `LICENSE`. (TODO: pick one before any release.)
+Apache-2.0. See [`LICENSE`](LICENSE).

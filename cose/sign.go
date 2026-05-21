@@ -22,9 +22,11 @@ func WithSignerExternalData(ext []byte) SignerOption {
 }
 
 type Signer struct {
-	key      crypto.Signer
-	alg      Algorithm
-	external []byte
+	key            crypto.Signer
+	alg            Algorithm
+	external       []byte
+	enc            *corecbor.Encoder
+	protectedBytes []byte
 }
 
 func NewSigner(key crypto.Signer, opts ...SignerOption) (*Signer, error) {
@@ -32,9 +34,20 @@ func NewSigner(key crypto.Signer, opts ...SignerOption) (*Signer, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Signer{key: key, alg: alg}
+	s := &Signer{
+		key: key,
+		alg: alg,
+		enc: corecbor.New(corecbor.ModeCoreDeterministic),
+	}
 	for _, o := range opts {
 		o(s)
+	}
+	// Pre-encode the protected headers once; they are invariant for this Signer.
+	var h Headers
+	h.SetAlgorithm(s.alg)
+	s.protectedBytes, err = h.encodeProtected()
+	if err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -45,14 +58,7 @@ func (s *Signer) Sign(payload []byte) (*Sign1, error) {
 	}
 	msg.Protected.SetAlgorithm(s.alg)
 
-	protectedBytes, err := msg.Protected.encodeProtected()
-	if err != nil {
-		return nil, err
-	}
-
-	sigStructure := buildSigStructure(protectedBytes, s.external, payload)
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
-	toBeSigned, err := enc.Encode(nil, sigStructure)
+	toBeSigned, err := encodeSigStructure(s.enc, s.protectedBytes, s.external, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -105,6 +111,7 @@ type Verifier struct {
 	key      crypto.PublicKey
 	alg      Algorithm
 	external []byte
+	enc      *corecbor.Encoder
 }
 
 func NewVerifier(key crypto.PublicKey, opts ...VerifierOption) (*Verifier, error) {
@@ -112,7 +119,11 @@ func NewVerifier(key crypto.PublicKey, opts ...VerifierOption) (*Verifier, error
 	if err != nil {
 		return nil, err
 	}
-	v := &Verifier{key: key, alg: alg}
+	v := &Verifier{
+		key: key,
+		alg: alg,
+		enc: corecbor.New(corecbor.ModeCoreDeterministic),
+	}
 	for _, o := range opts {
 		o(v)
 	}
@@ -127,9 +138,7 @@ func (v *Verifier) Verify(msg *Sign1) error {
 		return err
 	}
 
-	sigStructure := buildSigStructure(protectedBytes, v.external, msg.Payload)
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
-	toBeSigned, err := enc.Encode(nil, sigStructure)
+	toBeSigned, err := encodeSigStructure(v.enc, protectedBytes, v.external, msg.Payload)
 	if err != nil {
 		return err
 	}
@@ -177,8 +186,9 @@ func (v *Verifier) ecdsaVerify(data, sig []byte, hash crypto.Hash, curve ellipti
 	return nil
 }
 
-// Sig_structure = ["Signature1", protectedBytes, externalAAD, payload]
-func buildSigStructure(protectedBytes, external, payload []byte) corecbor.Array {
+// encodeSigStructure encodes Sig_structure = ["Signature1", protectedBytes, externalAAD, payload]
+// using a stack-allocated fixed-size array to avoid a heap slice allocation.
+func encodeSigStructure(enc *corecbor.Encoder, protectedBytes, external, payload []byte) ([]byte, error) {
 	if protectedBytes == nil {
 		protectedBytes = []byte{}
 	}
@@ -188,12 +198,12 @@ func buildSigStructure(protectedBytes, external, payload []byte) corecbor.Array 
 	if payload == nil {
 		payload = []byte{}
 	}
-	return corecbor.Array{
-		corecbor.Text("Signature1"),
-		corecbor.Bytes(protectedBytes),
-		corecbor.Bytes(external),
-		corecbor.Bytes(payload),
-	}
+	var elems [4]corecbor.Value
+	elems[0] = corecbor.Text("Signature1")
+	elems[1] = corecbor.Bytes(protectedBytes)
+	elems[2] = corecbor.Bytes(external)
+	elems[3] = corecbor.Bytes(payload)
+	return enc.Encode(nil, corecbor.Array(elems[:]))
 }
 
 func algForKey(key crypto.Signer) (Algorithm, error) {

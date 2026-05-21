@@ -311,14 +311,12 @@ func TestSigStructure_Deterministic(t *testing.T) {
 
 	enc := corecbor.New(corecbor.ModeCoreDeterministic)
 
-	sig1 := buildSigStructure(protected, external, payload)
-	data1, err := enc.Encode(nil, sig1)
+	data1, err := encodeSigStructure(enc, protected, external, payload)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	sig2 := buildSigStructure(protected, external, payload)
-	data2, err := enc.Encode(nil, sig2)
+	data2, err := encodeSigStructure(enc, protected, external, payload)
 	if err != nil {
 		t.Fatal(err)
 	}

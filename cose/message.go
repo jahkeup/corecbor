@@ -26,6 +26,32 @@ type Mac0 struct {
 	Tag         []byte
 }
 
+// Sign represents a COSE_Sign message (multi-signer signing).
+// CBOR structure: Tag(98, [protectedBstr, unprotectedMap, payload/nil, [+signature]])
+type Sign struct {
+	Protected   Headers
+	Unprotected Headers
+	Payload     []byte
+	Signatures  []Signature
+}
+
+// Signature represents one entry in COSE_Sign's signatures array.
+type Signature struct {
+	Protected   Headers
+	Unprotected Headers
+	Signature   []byte
+}
+
+// Mac represents a COSE_Mac message (multi-recipient MAC).
+// CBOR structure: Tag(97, [protectedBstr, unprotectedMap, payload, tag, [+recipient]])
+type Mac struct {
+	Protected   Headers
+	Unprotected Headers
+	Payload     []byte
+	Tag         []byte
+	Recipients  []Recipient
+}
+
 // Encrypt represents a COSE_Encrypt message (multi-recipient encryption).
 // CBOR structure: Tag(96, [protectedBstr, unprotectedMap, ciphertext, [+recipient]])
 type Encrypt struct {

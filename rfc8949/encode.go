@@ -2,27 +2,25 @@ package rfc8949
 
 // PERFORMANCE PROFILE NOTES (M3 Max, go1.26, 2026-05-21):
 //
-// EncodeScalars: 1025 MB/s, 0 allocs/op. Scalar encoding is
+// EncodeScalars: 1007 MB/s, 0 allocs/op. Scalar encoding is
 // allocation-free and throughput-limited only by AppendHead's
 // branch-on-argument-size. No further optimization possible without
 // architecture-specific SIMD (out of scope).
 //
-// EncodeNestedMap: 117 MB/s, 21 allocs/op. Allocation sources:
-// - sortEntry slice per map (pooled via sync.Pool — amortized)
-// - keyBuf []byte per map (pooled — amortized)
-// - convTslice: interface boxing of []MapEntry/[]Value in sort callback
-//   (irreducible: sort.Slice takes func(i,j int) which captures slice)
+// EncodeNestedMap: 226 MB/s, 0 allocs/op. Previous bottleneck was
+// sort.Slice using reflectlite.Swapper (67% of allocs). Replaced
+// with slices.SortFunc which operates directly on typed slice.
+// Combined with sync.Pool'd sort state, achieves zero allocations.
 //
-// The remaining 21 allocs are dominated by sort infrastructure and
-// interface conversions within the pooled sort path. Eliminating them
-// would require a custom non-generic sort (possible but diminishing
-// returns at 117 MB/s).
+// Remaining CPU cost in encodeMap: bytes.Compare during sort (data-
+// dependent, irreducible) and the encode() calls per map value.
 
 import (
 	"bytes"
+	"cmp"
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"unicode/utf8"
 
@@ -258,15 +256,15 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 
 	keyBuf := ss.keyBuf
 	entries := ss.entries
-	sort.Slice(entries, func(i, j int) bool {
-		ei := keyBuf[entries[i].keyStart:entries[i].keyEnd]
-		ej := keyBuf[entries[j].keyStart:entries[j].keyEnd]
+	slices.SortFunc(entries, func(a, b sortEntry) int {
+		ea := keyBuf[a.keyStart:a.keyEnd]
+		eb := keyBuf[b.keyStart:b.keyEnd]
 		if opts.SortMode == SortLengthFirst {
-			if len(ei) != len(ej) {
-				return len(ei) < len(ej)
+			if c := cmp.Compare(len(ea), len(eb)); c != 0 {
+				return c
 			}
 		}
-		return bytes.Compare(ei, ej) < 0
+		return bytes.Compare(ea, eb)
 	})
 
 	var err error

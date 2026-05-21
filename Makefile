@@ -46,8 +46,12 @@ test: ## go test -race ./...
 	$(GO) test -race ./...
 
 .PHONY: bench
-bench: ## go test -run NONE -bench . -benchmem ./...
+bench: ## run all benchmarks (root + sub-modules) with -benchmem
 	$(GO) test -run NONE -bench . -benchmem ./...
+	@for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+		echo ">>> benchmarks in $$mod"; \
+		(cd "$$mod" && $(GO) test -run NONE -bench . -benchmem ./...) || exit 1; \
+	done
 
 .PHONY: fuzz
 fuzz: ## run every registered Fuzz* target for FUZZTIME (default 30s)

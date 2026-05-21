@@ -13,11 +13,11 @@ func DecodeFloat16(bits uint16) float64 {
 	exp := int((bits >> 10) & 0x1f)
 	mant := bits & 0x3ff
 	var val float64
-	switch {
-	case exp == 0:
+	switch exp {
+	case 0:
 		// Subnormal or zero.
 		val = math.Ldexp(float64(mant), -24)
-	case exp == 31:
+	case 31:
 		// Infinity or NaN.
 		if mant == 0 {
 			val = math.Inf(1)

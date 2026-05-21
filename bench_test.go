@@ -12,18 +12,18 @@ func buildScalarArray() Value {
 
 func buildNestedMap() Value {
 	inner := Map{
-		{Text("x"), Uint(1)},
-		{Text("y"), Uint(2)},
+		{Key: Text("x"), Value: Uint(1)},
+		{Key: Text("y"), Value: Uint(2)},
 	}
 	mid := Map{
-		{Text("alpha"), inner},
-		{Text("beta"), inner},
-		{Text("gamma"), Array{Uint(1), Uint(2), Uint(3)}},
+		{Key: Text("alpha"), Value: inner},
+		{Key: Text("beta"), Value: inner},
+		{Key: Text("gamma"), Value: Array{Uint(1), Uint(2), Uint(3)}},
 	}
 	outer := Map{
-		{Text("level1a"), mid},
-		{Text("level1b"), mid},
-		{Text("level1c"), Bytes([]byte{0xde, 0xad, 0xbe, 0xef})},
+		{Key: Text("level1a"), Value: mid},
+		{Key: Text("level1b"), Value: mid},
+		{Key: Text("level1c"), Value: Bytes([]byte{0xde, 0xad, 0xbe, 0xef})},
 	}
 	return outer
 }

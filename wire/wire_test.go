@@ -130,7 +130,7 @@ func TestDecodeFloat16(t *testing.T) {
 }
 
 func TestEncodeFloat16RoundTrip(t *testing.T) {
-	lossless := []float64{0.0, -0.0, 1.0, 1.5, -4.0, 65504.0, math.Inf(1), math.Inf(-1), math.NaN()}
+	lossless := []float64{0.0, math.Copysign(0, -1), 1.0, 1.5, -4.0, 65504.0, math.Inf(1), math.Inf(-1), math.NaN()}
 	for _, f := range lossless {
 		bits, ok := EncodeFloat16(f)
 		if !ok {

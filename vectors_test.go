@@ -55,7 +55,7 @@ var rfc8949Vectors = []vectorCase{
 
 	// Maps
 	{"Map(nil)", Map(nil), "a0", false},
-	{"Map{1:2,3:4}", Map{{Uint(1), Uint(2)}, {Uint(3), Uint(4)}}, "a201020304", false},
+	{"Map{1:2,3:4}", Map{{Key: Uint(1), Value: Uint(2)}, {Key: Uint(3), Value: Uint(4)}}, "a201020304", false},
 
 	// Tags
 	{"Tag{1,1363896240}", Tag{ID: 1, Inner: Uint(1363896240)}, "c11a514b67b0", false},

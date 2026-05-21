@@ -18,10 +18,10 @@ func cborEncodeValue(buf []byte, v cbor.Value) ([]byte, error) {
 }
 
 type message1 struct {
-	Method  int64
-	Suites  int64
-	GX      []byte
-	CI      []byte
+	Method int64
+	Suites int64
+	GX     []byte
+	CI     []byte
 }
 
 type message2 struct {

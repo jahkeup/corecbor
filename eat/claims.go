@@ -22,10 +22,10 @@ const (
 type SecurityLevel int64
 
 const (
-	SecLevelUnrestricted    SecurityLevel = 1
-	SecLevelRestrictedOS    SecurityLevel = 2
+	SecLevelUnrestricted     SecurityLevel = 1
+	SecLevelRestrictedOS     SecurityLevel = 2
 	SecLevelSecureRestricted SecurityLevel = 3
-	SecLevelHardware        SecurityLevel = 4
+	SecLevelHardware         SecurityLevel = 4
 )
 
 // DebugStatus represents the EAT debug status claim (RFC 9711 §4.3.3).

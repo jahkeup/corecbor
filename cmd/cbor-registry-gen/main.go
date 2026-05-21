@@ -104,7 +104,7 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error creating output: %v\n", err)
 			os.Exit(1)
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		out = f
 	}
 

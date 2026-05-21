@@ -1,0 +1,15 @@
+{
+  "name": "non-shortest-uint-zero",
+  "description": "Uint 0 encoded in 2 bytes (0x1800) instead of 1 byte (0x00)",
+  "source": "hand-crafted: older encoders may emit non-shortest",
+  "hex": "1800",
+  "expect": {
+    "mode": "strict_error",
+    "error": "shortest",
+    "forgiving": {
+      "type": "uint",
+      "re_encode_hex": "00",
+      "notes": "forgiving decoder reads value 0, canonical re-encode is single byte"
+    }
+  }
+}

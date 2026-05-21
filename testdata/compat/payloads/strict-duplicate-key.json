@@ -1,0 +1,16 @@
+{
+  "name": "duplicate-map-key-last-wins",
+  "description": "Map with key 'a' appearing twice — forgiving keeps last value, strict rejects",
+  "source": "hand-crafted: simulates buggy encoder emitting duplicate keys",
+  "hex": "a2616101616102",
+  "expect": {
+    "mode": "strict_error",
+    "error": "duplicate",
+    "forgiving": {
+      "type": "map",
+      "length": 1,
+      "re_encode_hex": "a1616102",
+      "notes": "forgiving decoder keeps last occurrence: {\"a\": 2}. Canonical re-encode has 1 entry."
+    }
+  }
+}

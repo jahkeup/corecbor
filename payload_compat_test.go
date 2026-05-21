@@ -19,14 +19,15 @@ type payloadFixture struct {
 }
 
 type payloadExpect struct {
-	Mode        string `json:"mode"`
-	Type        string `json:"type"`
-	Error       string `json:"error"`
-	Length      *int   `json:"length"`
-	TagID       *int   `json:"tag_id"`
-	Keys        []any  `json:"keys"`
-	ReEncodeHex string `json:"re_encode_hex"`
-	Notes       string `json:"notes"`
+	Mode        string         `json:"mode"`
+	Type        string         `json:"type"`
+	Error       string         `json:"error"`
+	Length      *int           `json:"length"`
+	TagID       *int           `json:"tag_id"`
+	Keys        []any          `json:"keys"`
+	ReEncodeHex string         `json:"re_encode_hex"`
+	Notes       string         `json:"notes"`
+	Forgiving   *payloadExpect `json:"forgiving"`
 }
 
 func TestCompatPayloads(t *testing.T) {
@@ -75,16 +76,30 @@ func TestCompatPayloads(t *testing.T) {
 				}
 
 			case "strict_error":
-				_, err := dec.Decode(data)
-				if err != nil {
-					t.Logf("note: forgiving decoder also rejects this: %v", err)
+				val, forgivingErr := dec.Decode(data)
+				if forgivingErr != nil {
+					t.Logf("note: forgiving decoder also rejects this: %v", forgivingErr)
 				}
-				_, err = strict.Decode(data)
-				if err == nil {
+				if p.Expect.Forgiving != nil && forgivingErr == nil {
+					validateType(t, val, p.Expect.Forgiving.Type)
+					validateStructure(t, val, *p.Expect.Forgiving)
+					if p.Expect.Forgiving.ReEncodeHex != "" {
+						got, err := enc.Encode(nil, val)
+						if err != nil {
+							t.Fatalf("forgiving re-encode failed: %v", err)
+						}
+						gotHex := hex.EncodeToString(got)
+						if gotHex != p.Expect.Forgiving.ReEncodeHex {
+							t.Errorf("forgiving re-encode mismatch:\n  got:  %s\n  want: %s", gotHex, p.Expect.Forgiving.ReEncodeHex)
+						}
+					}
+				}
+				_, strictErr := strict.Decode(data)
+				if strictErr == nil {
 					t.Fatal("expected strict decode error, got success")
 				}
-				if p.Expect.Error != "" && !strings.Contains(err.Error(), p.Expect.Error) {
-					t.Errorf("strict error %q does not contain expected substring %q", err.Error(), p.Expect.Error)
+				if p.Expect.Error != "" && !strings.Contains(strictErr.Error(), p.Expect.Error) {
+					t.Errorf("strict error %q does not contain expected substring %q", strictErr.Error(), p.Expect.Error)
 				}
 
 			default:

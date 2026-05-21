@@ -1,0 +1,15 @@
+{
+  "name": "indefinite-text-concatenation",
+  "description": "Indefinite-length text string 'strea' + 'ming' — forgiving concatenates, strict rejects",
+  "source": "RFC 8949 Appendix A example: (_ \"strea\", \"ming\")",
+  "hex": "7f657374726561646d696e67ff",
+  "expect": {
+    "mode": "strict_error",
+    "error": "indefinite",
+    "forgiving": {
+      "type": "text",
+      "re_encode_hex": "6973747265616d696e67",
+      "notes": "forgiving concatenates chunks into 'streaming'; canonical is definite-length 9-byte text"
+    }
+  }
+}

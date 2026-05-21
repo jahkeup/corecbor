@@ -1,0 +1,16 @@
+{
+  "name": "indefinite-array-reassembly",
+  "description": "Indefinite-length array [1, 2, 3] — forgiving reassembles, strict rejects",
+  "source": "streaming encoder output (e.g., constrained device writing without pre-count)",
+  "hex": "9f010203ff",
+  "expect": {
+    "mode": "strict_error",
+    "error": "indefinite",
+    "forgiving": {
+      "type": "array",
+      "length": 3,
+      "re_encode_hex": "83010203",
+      "notes": "forgiving decoder accumulates 3 items; canonical re-encode uses definite length"
+    }
+  }
+}

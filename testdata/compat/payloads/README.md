@@ -44,7 +44,35 @@ Each file is a JSON object:
 
 - **`decode_ok`**: The payload decodes successfully with the forgiving decoder. The `type` field specifies what the decoded value should be.
 - **`decode_error`**: The payload is malformed and MUST produce a decode error (even forgiving mode rejects it). The `error` field is a substring of the expected error.
-- **`strict_error`**: The payload decodes with the forgiving decoder but MUST fail with `StrictDecoder`. The `error` field is a substring of the strict-mode error.
+- **`strict_error`**: The payload decodes with the forgiving decoder but MUST fail with `StrictDecoder`. The `error` field is a substring of the strict-mode error. Optionally, `expect.forgiving` describes what the forgiving decoder produces (for verifying partial/quirky decode correctness).
+
+## The `forgiving` field (for strict_error mode)
+
+When mode is `strict_error`, you can declare what the forgiving decoder
+SHOULD produce for the same input. This is critical for payloads where
+the forgiving decode result matters (e.g., duplicate key resolution,
+non-shortest value interpretation, indefinite-length reassembly):
+
+```json
+{
+  "name": "duplicate-key-last-wins",
+  "hex": "a2616101616102",
+  "expect": {
+    "mode": "strict_error",
+    "error": "duplicate",
+    "forgiving": {
+      "type": "map",
+      "length": 1,
+      "re_encode_hex": "a1616102",
+      "notes": "forgiving decoder keeps last value for duplicate key 'a'"
+    }
+  }
+}
+```
+
+The `forgiving` object supports the same fields as the top-level
+`expect` for `decode_ok` mode: `type`, `length`, `tag_id`, `keys`,
+`re_encode_hex`, `notes`.
 
 ## Examples
 

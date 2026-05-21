@@ -1,6 +1,7 @@
 package corecbor
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/jahkeup/corecbor/cbor"
@@ -50,6 +51,9 @@ func New(mode Mode, opts ...Option) *Encoder {
 }
 
 func (e *Encoder) Encode(dst []byte, v cbor.Value) ([]byte, error) {
+	if e.mode < ModePermissive || e.mode > ModeCTAP2 {
+		return dst, fmt.Errorf("%w: %d", cbor.ErrInvalidMode, e.mode)
+	}
 	opts := e.encodeOpts()
 	if e.cfg.bufferPool != nil {
 		bp := e.cfg.bufferPool.Get().(*[]byte)

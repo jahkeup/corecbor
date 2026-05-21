@@ -32,21 +32,32 @@ fmt-check: ## fail if gofumpt would change anything (CI gate)
 	fi
 
 .PHONY: vet
-vet: ## go vet ./...
+vet: ## go vet ./... (root + sub-modules)
 	$(GO) vet ./...
+	@for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+		(cd "$$mod" && $(GO) vet ./...) || exit 1; \
+	done
 
 .PHONY: lint
 lint: vet ## go vet always; golangci-lint enforced if on PATH (skipped if absent)
 	@if command -v golangci-lint >/dev/null 2>&1; then \
 		echo "golangci-lint $$(golangci-lint --version | head -1)"; \
 		golangci-lint run --timeout 5m ./...; \
+		for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+			echo ">>> lint in $$mod"; \
+			(cd "$$mod" && golangci-lint run --timeout 5m ./...) || exit 1; \
+		done; \
 	else \
 		echo "golangci-lint not on PATH; skipping (install: brew install golangci-lint)"; \
 	fi
 
 .PHONY: test
-test: ## go test -race ./...
+test: ## go test -race ./... (root + sub-modules)
 	$(GO) test -race ./...
+	@for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+		echo ">>> tests in $$mod"; \
+		(cd "$$mod" && $(GO) test -race ./...) || exit 1; \
+	done
 
 .PHONY: bench
 bench: ## run all benchmarks (root + sub-modules) with -benchmem

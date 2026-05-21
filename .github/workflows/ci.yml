@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright The corecbor Authors
+
 name: CI
 
 on:
@@ -9,24 +12,31 @@ on:
 permissions:
   contents: read
 
+env:
+  GOPROXY: https://proxy.golang.org,direct
+
 jobs:
   check:
     name: lint + test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
+      - name: Download sub-module dependencies
+        run: |
+          for mod in $(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do
+            (cd "$mod" && go mod download)
+          done
+
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: latest
-          # We run it ourselves via `make lint` so the local + CI
-          # behavior matches. The action is installed only.
           install-mode: binary
           args: --version
 
@@ -36,14 +46,10 @@ jobs:
   fuzz:
     name: fuzz (60s per target)
     runs-on: ubuntu-latest
-    # Phase 1 registers the fuzz catalog with empty seed corpora;
-    # CI runs each registered target for 60s on every push to main
-    # and every PR. Failures lock new corpus entries into testdata/fuzz/
-    # which the next run picks up.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -53,7 +59,7 @@ jobs:
 
       - name: upload fuzz failures (if any)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-corpus-${{ github.sha }}
           path: '**/testdata/fuzz/**'
@@ -62,24 +68,26 @@ jobs:
   bench:
     name: bench (no gate)
     runs-on: ubuntu-latest
-    # Per encoder-decoder-spec §10 Phase 1: benches MUST exist and
-    # produce numbers, but their numbers are NOT gating in Phase 1.
-    # This job runs them to surface drift in PR-comment form via
-    # follow-up tooling; it does not block merge.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Download sub-module dependencies
+        run: |
+          for mod in $(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do
+            (cd "$mod" && go mod download)
+          done
 
       - name: make bench
         run: make bench | tee bench.txt
 
       - name: upload bench output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bench-${{ github.sha }}
           path: bench.txt

@@ -17,6 +17,7 @@ proposal lifecycle.
 | [011](011-cose-multi-signer.md) | 3 | Draft | COSE_Sign + COSE_Mac (multi-signer) | corecbor maintainers | 002 | 2026-05-21 |
 | [012](012-cwt-proof-of-possession.md) | 3 | Draft | CWT Proof-of-Possession / cnf claim (RFC 8747) | corecbor maintainers | 003 | 2026-05-21 |
 | [013](013-diagnostic-cli.md) | 2 | Draft | Diagnostic CLI Tool (cmd/cbor-diag) | corecbor maintainers | 009 | 2026-05-21 |
+| [014](014-raw-message-and-tag-wrapping.md) | 1 | Accepted | RawMessage, RawTag, and declarative tag wrapping | corecbor maintainers | 008 | 2026-05-21 |
 
 _(stale note removed)_
 
@@ -34,7 +35,7 @@ _(stale note removed)_
 
 ## Numbering
 
-Next available proposal number: **014**
+Next available proposal number: **015**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than

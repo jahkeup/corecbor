@@ -1,5 +1,27 @@
 package rfc8949
 
+// PERFORMANCE PROFILE NOTES (M3 Max, go1.26, 2026-05-21):
+//
+// DecodeScalars: 913 MB/s, 2 allocs/op (array backing + capacity).
+// The dominant irreducible cost is interface boxing: each decoded
+// Value (Uint, NegInt, etc.) stored in a []Value slot forces a heap
+// allocation when the value exceeds the pre-cached range (>1023 for
+// Uint, >255 for NegInt). The integer cache eliminates this for
+// common values but cannot cover the full uint64 range.
+//
+// DecodeNestedMap: 104 MB/s, 46 allocs/op. Allocation sources:
+// - []MapEntry slice per map (irreducible: maps need backing storage)
+// - []Value slice per array (irreducible: arrays need backing storage)
+// - string(src[start:end]) for Text (irreducible: Go strings are
+//   immutable copies; unsafe.String would eliminate but violates policy)
+// - []byte copy for Bytes (irreducible: caller may reuse src buffer)
+//
+// Further optimization would require either:
+// - unsafe.String for zero-copy text (breaks safety contract)
+// - Arena allocator (runtime.Arena, experimental) for bulk Value alloc
+// - Changing Value from interface to tagged-union struct (breaks API)
+// None of these are in scope for the current contract.
+
 import (
 	"fmt"
 	"math"

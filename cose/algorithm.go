@@ -15,9 +15,22 @@ const (
 
 	// AlgES512 is ECDSA w/ SHA-512 using P-521.
 	AlgES512 Algorithm = -36
+
+	// Content encryption algorithms (RFC 9053 §4.1)
+	AlgA128GCM Algorithm = 1
+	AlgA192GCM Algorithm = 2
+	AlgA256GCM Algorithm = 3
+
+	// MAC algorithms (RFC 9053 §3.1)
+	AlgHMAC256_64 Algorithm = 4
+	AlgHMAC256    Algorithm = 5
+	AlgHMAC384    Algorithm = 6
+	AlgHMAC512    Algorithm = 7
+
+	// Key distribution algorithms (RFC 9052 §8.5)
+	AlgDirect Algorithm = -6
 )
 
-// String returns the algorithm name.
 func (a Algorithm) String() string {
 	switch a {
 	case AlgEdDSA:
@@ -28,6 +41,22 @@ func (a Algorithm) String() string {
 		return "ES384"
 	case AlgES512:
 		return "ES512"
+	case AlgA128GCM:
+		return "A128GCM"
+	case AlgA192GCM:
+		return "A192GCM"
+	case AlgA256GCM:
+		return "A256GCM"
+	case AlgHMAC256_64:
+		return "HMAC256/64"
+	case AlgHMAC256:
+		return "HMAC256"
+	case AlgHMAC384:
+		return "HMAC384"
+	case AlgHMAC512:
+		return "HMAC512"
+	case AlgDirect:
+		return "direct"
 	default:
 		return "unknown"
 	}

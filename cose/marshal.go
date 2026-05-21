@@ -6,7 +6,11 @@ import (
 	"github.com/jahkeup/corecbor"
 )
 
-const tagSign1 uint64 = 18
+const (
+	tagSign1    uint64 = 18
+	tagEncrypt0 uint64 = 16
+	tagMac0     uint64 = 17
+)
 
 // MarshalSign1 encodes a Sign1 message as CBOR with tag 18.
 func MarshalSign1(msg *Sign1) ([]byte, error) {
@@ -106,5 +110,196 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 		Unprotected: *unprot,
 		Payload:     payload,
 		Signature:   []byte(sig),
+	}, nil
+}
+
+func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
+	protectedBytes, err := msg.Protected.encodeProtected()
+	if err != nil {
+		return nil, err
+	}
+	if protectedBytes == nil {
+		protectedBytes = []byte{}
+	}
+
+	unprotectedMap := msg.Unprotected.toCBORMap()
+	if unprotectedMap == nil {
+		unprotectedMap = corecbor.Map{}
+	}
+
+	var ciphertextVal corecbor.Value
+	if msg.Ciphertext == nil {
+		ciphertextVal = corecbor.Null{}
+	} else {
+		ciphertextVal = corecbor.Bytes(msg.Ciphertext)
+	}
+
+	arr := corecbor.Array{
+		corecbor.Bytes(protectedBytes),
+		unprotectedMap,
+		ciphertextVal,
+	}
+
+	tagged := corecbor.Tag{ID: tagEncrypt0, Inner: arr}
+	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	return enc.Encode(nil, tagged)
+}
+
+func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
+	dec := corecbor.NewDecoder()
+	v, err := dec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	var arr corecbor.Array
+	switch x := v.(type) {
+	case corecbor.Tag:
+		if x.ID != tagEncrypt0 {
+			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, x.ID)
+		}
+		a, ok := x.Inner.(corecbor.Array)
+		if !ok {
+			return nil, fmt.Errorf("%w: tag 16 inner is not array", ErrMalformed)
+		}
+		arr = a
+	case corecbor.Array:
+		arr = x
+	default:
+		return nil, fmt.Errorf("%w: expected array or tag, got %T", ErrMalformed, v)
+	}
+
+	if len(arr) != 3 {
+		return nil, fmt.Errorf("%w: Encrypt0 array must have 3 elements, got %d", ErrMalformed, len(arr))
+	}
+
+	protectedBstr, ok := arr[0].(corecbor.Bytes)
+	if !ok {
+		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
+	}
+
+	prot, err := decodeProtected([]byte(protectedBstr))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	unprot, err := decodeUnprotected(arr[1])
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	var ciphertext []byte
+	switch c := arr[2].(type) {
+	case corecbor.Bytes:
+		ciphertext = []byte(c)
+	case corecbor.Null:
+		ciphertext = nil
+	default:
+		return nil, fmt.Errorf("%w: ciphertext must be bstr or null", ErrMalformed)
+	}
+
+	return &Encrypt0{
+		Protected:   *prot,
+		Unprotected: *unprot,
+		Ciphertext:  ciphertext,
+	}, nil
+}
+
+func MarshalMac0(msg *Mac0) ([]byte, error) {
+	protectedBytes, err := msg.Protected.encodeProtected()
+	if err != nil {
+		return nil, err
+	}
+	if protectedBytes == nil {
+		protectedBytes = []byte{}
+	}
+
+	unprotectedMap := msg.Unprotected.toCBORMap()
+	if unprotectedMap == nil {
+		unprotectedMap = corecbor.Map{}
+	}
+
+	var payloadVal corecbor.Value
+	if msg.Payload == nil {
+		payloadVal = corecbor.Null{}
+	} else {
+		payloadVal = corecbor.Bytes(msg.Payload)
+	}
+
+	arr := corecbor.Array{
+		corecbor.Bytes(protectedBytes),
+		unprotectedMap,
+		payloadVal,
+		corecbor.Bytes(msg.Tag),
+	}
+
+	tagged := corecbor.Tag{ID: tagMac0, Inner: arr}
+	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	return enc.Encode(nil, tagged)
+}
+
+func UnmarshalMac0(data []byte) (*Mac0, error) {
+	dec := corecbor.NewDecoder()
+	v, err := dec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	var arr corecbor.Array
+	switch x := v.(type) {
+	case corecbor.Tag:
+		if x.ID != tagMac0 {
+			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, x.ID)
+		}
+		a, ok := x.Inner.(corecbor.Array)
+		if !ok {
+			return nil, fmt.Errorf("%w: tag 17 inner is not array", ErrMalformed)
+		}
+		arr = a
+	case corecbor.Array:
+		arr = x
+	default:
+		return nil, fmt.Errorf("%w: expected array or tag, got %T", ErrMalformed, v)
+	}
+
+	if len(arr) != 4 {
+		return nil, fmt.Errorf("%w: Mac0 array must have 4 elements, got %d", ErrMalformed, len(arr))
+	}
+
+	protectedBstr, ok := arr[0].(corecbor.Bytes)
+	if !ok {
+		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
+	}
+
+	prot, err := decodeProtected([]byte(protectedBstr))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	unprot, err := decodeUnprotected(arr[1])
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	var payload []byte
+	switch p := arr[2].(type) {
+	case corecbor.Bytes:
+		payload = []byte(p)
+	case corecbor.Null:
+		payload = nil
+	default:
+		return nil, fmt.Errorf("%w: payload must be bstr or null", ErrMalformed)
+	}
+
+	tag, ok := arr[3].(corecbor.Bytes)
+	if !ok {
+		return nil, fmt.Errorf("%w: tag must be bstr", ErrMalformed)
+	}
+
+	return &Mac0{
+		Protected:   *prot,
+		Unprotected: *unprot,
+		Payload:     payload,
+		Tag:         []byte(tag),
 	}, nil
 }

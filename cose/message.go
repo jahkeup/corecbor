@@ -3,15 +3,25 @@ package cose
 // Sign1 represents a COSE_Sign1 message (single-signer signing).
 // CBOR structure: Tag(18, [protectedBstr, unprotectedMap, payload/nil, signature])
 type Sign1 struct {
-	// Protected contains the integrity-protected header parameters.
-	Protected Headers
-
-	// Unprotected contains the non-integrity-protected header parameters.
+	Protected   Headers
 	Unprotected Headers
+	Payload     []byte
+	Signature   []byte
+}
 
-	// Payload is the serialized content. nil indicates detached payload.
-	Payload []byte
+// Encrypt0 represents a COSE_Encrypt0 message (single-recipient encryption).
+// CBOR structure: Tag(16, [protectedBstr, unprotectedMap, ciphertext])
+type Encrypt0 struct {
+	Protected   Headers
+	Unprotected Headers
+	Ciphertext  []byte
+}
 
-	// Signature is the computed signature value.
-	Signature []byte
+// Mac0 represents a COSE_Mac0 message (single-recipient MAC).
+// CBOR structure: Tag(17, [protectedBstr, unprotectedMap, payload, tag])
+type Mac0 struct {
+	Protected   Headers
+	Unprotected Headers
+	Payload     []byte
+	Tag         []byte
 }

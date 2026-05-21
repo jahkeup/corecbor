@@ -1,0 +1,13 @@
+{
+  "name": "fxamacker-nested-map",
+  "description": "Nested map encoded by fxamacker/cbor v2 in CoreDet mode",
+  "source": "fxamacker/cbor v2 CoreDetEncOptions",
+  "hex": "a2616101616283020383040506",
+  "expect": {
+    "mode": "decode_ok",
+    "type": "map",
+    "length": 2,
+    "re_encode_hex": "a2616101616283020383040506",
+    "notes": "map {\"a\": 1, \"b\": [2, 3, [4, 5, 6]]}"
+  }
+}

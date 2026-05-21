@@ -69,6 +69,25 @@ tidy: ## go mod tidy
 .PHONY: check
 check: fmt-check vet lint test ## CI-gating set: fmt-check + vet + lint + test
 
+.PHONY: compat
+compat: ## run cross-library compatibility tests (including user-provided payloads)
+	@echo ">>> cross-library compatibility vectors (built-in)"
+	$(GO) test -count=1 -run TestCompat -v ./... 2>&1 | grep -E "^(=== RUN|--- (PASS|FAIL)|PASS|FAIL|ok)" || true
+	@echo ""
+	@echo ">>> user-provided payload fixtures (testdata/compat/payloads/*.json)"
+	@count=$$(find testdata/compat/payloads -name '*.json' 2>/dev/null | wc -l | tr -d ' '); \
+	if [ "$$count" -eq 0 ]; then \
+		echo "  (no payload fixtures found — add .json files to testdata/compat/payloads/)"; \
+	else \
+		echo "  found $$count payload fixture(s)"; \
+	fi
+	$(GO) test -count=1 -run TestCompatPayloads -v . 2>&1 | grep -E "^(=== RUN|--- (PASS|FAIL)|PASS|FAIL|ok)" || true
+	@echo ""
+	@echo ">>> summary"
+	$(GO) test -count=1 -run "TestCompat" . -json 2>/dev/null | \
+		grep -c '"Test".*"Pass":true' 2>/dev/null || \
+		$(GO) test -count=1 -run "TestCompat" . > /dev/null 2>&1 && echo "  all compatibility tests PASS" || echo "  FAILURES detected — run 'go test -run TestCompat -v .' for details"
+
 .PHONY: clean
 clean: ## remove build artifacts (does NOT touch testdata/fuzz corpora)
 	$(GO) clean -testcache

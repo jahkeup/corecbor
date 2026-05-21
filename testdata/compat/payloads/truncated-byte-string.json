@@ -1,0 +1,10 @@
+{
+  "name": "truncated-byte-string",
+  "description": "Byte string declares 10 bytes but only 3 follow",
+  "source": "hand-crafted malformed input",
+  "hex": "4a010203",
+  "expect": {
+    "mode": "decode_error",
+    "error": "unexpected end"
+  }
+}

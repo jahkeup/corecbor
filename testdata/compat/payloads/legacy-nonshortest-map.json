@@ -1,0 +1,10 @@
+{
+  "name": "legacy-nonshortest-map-length",
+  "description": "Map with 2 entries encoded with 1-byte length (0xb802 instead of 0xa2)",
+  "source": "hand-crafted to simulate older encoder behavior",
+  "hex": "b80261610161620282030405",
+  "expect": {
+    "mode": "strict_error",
+    "error": "shortest"
+  }
+}

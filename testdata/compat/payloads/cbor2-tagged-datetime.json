@@ -1,0 +1,13 @@
+{
+  "name": "cbor2-tagged-datetime",
+  "description": "Tagged epoch datetime from Python cbor2 canonical mode",
+  "source": "cbor2.dumps(CBORTag(1, 1700000000), canonical=True)",
+  "hex": "c11a6554f700",
+  "expect": {
+    "mode": "decode_ok",
+    "type": "tag",
+    "tag_id": 1,
+    "re_encode_hex": "c11a6554f700",
+    "notes": "Tag(1, Uint(1700000000)) — epoch timestamp 2023-11-14T22:13:20Z"
+  }
+}

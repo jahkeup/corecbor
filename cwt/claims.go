@@ -1,11 +1,15 @@
 package cwt
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
 	"fmt"
 	"math"
 	"time"
 
 	"github.com/jahkeup/corecbor"
+	"github.com/jahkeup/corecbor/cose"
 )
 
 const (
@@ -16,18 +20,35 @@ const (
 	claimNbf = 5
 	claimIat = 6
 	claimCti = 7
+	claimCnf = 8
 )
+
+// cnf map keys per RFC 8747.
+const (
+	cnfKeyByCOSEKey = 1
+	cnfKeyEncrypted = 2
+	cnfKeyByKid     = 3
+)
+
+// Confirmation represents the cnf (confirmation) claim (key 8)
+// per RFC 8747. Binds the token to a specific cryptographic key.
+type Confirmation struct {
+	Key       *cose.Key // cnf map key 1: COSE_Key by value
+	KeyID     []byte    // cnf map key 3: key ID reference
+	Encrypted []byte    // cnf map key 2: encrypted COSE_Key
+}
 
 // ClaimsSet represents the set of claims in a CWT.
 type ClaimsSet struct {
-	Issuer     string
-	Subject    string
-	Audience   string
-	Expiration time.Time
-	NotBefore  time.Time
-	IssuedAt   time.Time
-	CWTID      []byte
-	Private    map[any]any
+	Issuer       string
+	Subject      string
+	Audience     string
+	Expiration   time.Time
+	NotBefore    time.Time
+	IssuedAt     time.Time
+	CWTID        []byte
+	Confirmation *Confirmation
+	Private      map[any]any
 }
 
 // Encode serializes the ClaimsSet as a CBOR map using CoreDeterministic mode.
@@ -54,6 +75,13 @@ func (c *ClaimsSet) Encode() ([]byte, error) {
 	}
 	if len(c.CWTID) > 0 {
 		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimCti), Value: corecbor.Bytes(c.CWTID)})
+	}
+	if c.Confirmation != nil {
+		cnfMap, err := encodeCnf(c.Confirmation)
+		if err != nil {
+			return nil, fmt.Errorf("%w: cnf: %v", ErrMalformedClaims, err)
+		}
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimCnf), Value: cnfMap})
 	}
 
 	for k, v := range c.Private {
@@ -139,6 +167,12 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedClaims)
 			}
 			cs.CWTID = []byte(b)
+		case claimCnf:
+			cnf, err := decodeCnf(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: cnf: %v", ErrMalformedClaims, err)
+			}
+			cs.Confirmation = cnf
 		default:
 			if cs.Private == nil {
 				cs.Private = make(map[any]any)
@@ -238,5 +272,209 @@ func fromValue(v corecbor.Value) any {
 		return bool(x)
 	default:
 		return v
+	}
+}
+
+func encodeCnf(cnf *Confirmation) (corecbor.Map, error) {
+	var m corecbor.Map
+	if cnf.Key != nil {
+		keyMap, err := marshalCOSEKey(cnf.Key)
+		if err != nil {
+			return nil, err
+		}
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyByCOSEKey), Value: keyMap})
+	}
+	if len(cnf.Encrypted) > 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyEncrypted), Value: corecbor.Bytes(cnf.Encrypted)})
+	}
+	if len(cnf.KeyID) > 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyByKid), Value: corecbor.Bytes(cnf.KeyID)})
+	}
+	return m, nil
+}
+
+func decodeCnf(v corecbor.Value) (*Confirmation, error) {
+	m, ok := v.(corecbor.Map)
+	if !ok {
+		return nil, fmt.Errorf("expected map, got %T", v)
+	}
+	cnf := &Confirmation{}
+	for _, entry := range m {
+		k, isInt := entryKeyInt(entry.Key)
+		if !isInt {
+			continue
+		}
+		switch k {
+		case cnfKeyByCOSEKey:
+			keyMap, ok := entry.Value.(corecbor.Map)
+			if !ok {
+				return nil, fmt.Errorf("COSE_Key must be map")
+			}
+			key, err := unmarshalCOSEKey(keyMap)
+			if err != nil {
+				return nil, err
+			}
+			cnf.Key = key
+		case cnfKeyEncrypted:
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
+				return nil, fmt.Errorf("encrypted key must be bytes")
+			}
+			cnf.Encrypted = []byte(b)
+		case cnfKeyByKid:
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
+				return nil, fmt.Errorf("kid must be bytes")
+			}
+			cnf.KeyID = []byte(b)
+		}
+	}
+	return cnf, nil
+}
+
+func marshalCOSEKey(k *cose.Key) (corecbor.Map, error) {
+	pub, err := k.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("marshalCOSEKey: %w", err)
+	}
+	return cosePublicKeyToMap(pub, k)
+}
+
+func cosePublicKeyToMap(pub interface{}, k *cose.Key) (corecbor.Map, error) {
+	switch p := pub.(type) {
+	case ed25519.PublicKey:
+		return corecbor.Map{
+			{Key: corecbor.Uint(1), Value: corecbor.Uint(int64(cose.KeyTypeOKP))},
+			{Key: corecbor.NegInt(0), Value: corecbor.Uint(int64(cose.CurveEd25519))},
+			{Key: corecbor.NegInt(1), Value: corecbor.Bytes([]byte(p))},
+		}, nil
+	case *ecdsa.PublicKey:
+		crv := k.Curve()
+		size := (p.Curve.Params().BitSize + 7) / 8
+		x := padLeftBytes(p.X.Bytes(), size)
+		y := padLeftBytes(p.Y.Bytes(), size)
+		return corecbor.Map{
+			{Key: corecbor.Uint(1), Value: corecbor.Uint(int64(cose.KeyTypeEC2))},
+			{Key: corecbor.NegInt(0), Value: corecbor.Uint(int64(crv))},
+			{Key: corecbor.NegInt(1), Value: corecbor.Bytes(x)},
+			{Key: corecbor.NegInt(2), Value: corecbor.Bytes(y)},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unsupported public key type %T", pub)
+	}
+}
+
+func padLeftBytes(b []byte, size int) []byte {
+	if len(b) >= size {
+		return b
+	}
+	out := make([]byte, size)
+	copy(out[size-len(b):], b)
+	return out
+}
+
+func unmarshalCOSEKey(m corecbor.Map) (*cose.Key, error) {
+	pos := make(map[int64]any)
+	neg := make(map[int64]any)
+	for _, entry := range m {
+		switch kv := entry.Key.(type) {
+		case corecbor.Uint:
+			switch val := entry.Value.(type) {
+			case corecbor.Uint:
+				pos[int64(kv)] = int64(val)
+			case corecbor.NegInt:
+				pos[int64(kv)] = int64(val)
+			case corecbor.Bytes:
+				pos[int64(kv)] = []byte(val)
+			}
+		case corecbor.NegInt:
+			switch val := entry.Value.(type) {
+			case corecbor.Uint:
+				neg[int64(kv)] = int64(val)
+			case corecbor.NegInt:
+				neg[int64(kv)] = int64(val)
+			case corecbor.Bytes:
+				neg[int64(kv)] = []byte(val)
+			}
+		}
+	}
+	return coseKeyFromMaps(pos, neg)
+}
+
+func coseKeyFromMaps(pos, neg map[int64]any) (*cose.Key, error) {
+	ktyRaw, ok := pos[1]
+	if !ok {
+		return nil, fmt.Errorf("missing kty")
+	}
+	kty, ok := ktyRaw.(int64)
+	if !ok {
+		return nil, fmt.Errorf("kty must be int")
+	}
+
+	switch cose.KeyType(kty) {
+	case cose.KeyTypeOKP:
+		xRaw, ok := neg[1]
+		if !ok {
+			return nil, fmt.Errorf("OKP key missing x (NegInt 1 = label -2)")
+		}
+		x, ok := xRaw.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("OKP x must be bytes")
+		}
+		return cose.NewKeyFromPublic(ed25519.PublicKey(x))
+	case cose.KeyTypeEC2:
+		crvRaw, ok := neg[0]
+		if !ok {
+			return nil, fmt.Errorf("EC2 key missing crv (NegInt 0 = label -1)")
+		}
+		crv, ok := crvRaw.(int64)
+		if !ok {
+			return nil, fmt.Errorf("EC2 crv must be int")
+		}
+		xRaw, ok := neg[1]
+		if !ok {
+			return nil, fmt.Errorf("EC2 key missing x (NegInt 1 = label -2)")
+		}
+		x, ok := xRaw.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("EC2 x must be bytes")
+		}
+		yRaw, ok := neg[2]
+		if !ok {
+			return nil, fmt.Errorf("EC2 key missing y (NegInt 2 = label -3)")
+		}
+		y, ok := yRaw.([]byte)
+		if !ok {
+			return nil, fmt.Errorf("EC2 y must be bytes")
+		}
+		goCrv, err := coseCurveToElliptic(cose.Curve(crv))
+		if err != nil {
+			return nil, err
+		}
+		size := (goCrv.Params().BitSize + 7) / 8
+		point := make([]byte, 1+2*size)
+		point[0] = 0x04
+		copy(point[1:1+size], padLeftBytes(x, size))
+		copy(point[1+size:], padLeftBytes(y, size))
+		pub, err := ecdsa.ParseUncompressedPublicKey(goCrv, point)
+		if err != nil {
+			return nil, fmt.Errorf("EC2 parse public key: %w", err)
+		}
+		return cose.NewKeyFromPublic(pub)
+	default:
+		return nil, fmt.Errorf("unsupported key type %d", kty)
+	}
+}
+
+func coseCurveToElliptic(c cose.Curve) (elliptic.Curve, error) {
+	switch c {
+	case cose.CurveP256:
+		return elliptic.P256(), nil
+	case cose.CurveP384:
+		return elliptic.P384(), nil
+	case cose.CurveP521:
+		return elliptic.P521(), nil
+	default:
+		return nil, fmt.Errorf("unsupported COSE curve %d", c)
 	}
 }

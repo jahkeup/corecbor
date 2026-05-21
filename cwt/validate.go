@@ -2,15 +2,14 @@ package cwt
 
 import "time"
 
-// Validator checks temporal and audience claims on a ClaimsSet.
 type Validator struct {
-	Audience          string
-	Leeway            time.Duration
-	Now               func() time.Time
-	RequireExpiration bool
+	Audience            string
+	Leeway              time.Duration
+	Now                 func() time.Time
+	RequireExpiration   bool
+	RequireConfirmation bool
 }
 
-// Validate checks the claims against the validator's rules.
 func (v *Validator) Validate(claims *ClaimsSet) error {
 	now := time.Now()
 	if v.Now != nil {
@@ -19,6 +18,10 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 
 	if v.RequireExpiration && claims.Expiration.IsZero() {
 		return ErrMissingExpiration
+	}
+
+	if v.RequireConfirmation && claims.Confirmation == nil {
+		return ErrMissingConfirmation
 	}
 
 	if !claims.Expiration.IsZero() {

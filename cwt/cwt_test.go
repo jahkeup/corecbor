@@ -358,3 +358,106 @@ func TestPrivateClaims_RoundTrip(t *testing.T) {
 		t.Errorf("private[x-app]: got %v, want 42", v)
 	}
 }
+
+func TestConfirmation_Key_RoundTrip(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := cose.NewKeyFromPublic(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := &cwt.ClaimsSet{
+		Issuer: "cnf-test",
+		Confirmation: &cwt.Confirmation{
+			Key: key,
+		},
+	}
+
+	data, err := original.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoded, err := cwt.DecodeClaimsSet(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Confirmation == nil {
+		t.Fatal("expected confirmation, got nil")
+	}
+	if decoded.Confirmation.Key == nil {
+		t.Fatal("expected confirmation key, got nil")
+	}
+
+	gotPub, err := decoded.Confirmation.Key.PublicKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotEd, ok := gotPub.(ed25519.PublicKey)
+	if !ok {
+		t.Fatalf("expected ed25519.PublicKey, got %T", gotPub)
+	}
+	if !gotEd.Equal(pub) {
+		t.Error("decoded public key does not match original")
+	}
+}
+
+func TestConfirmation_KeyID_RoundTrip(t *testing.T) {
+	kid := []byte("my-key-id-123")
+
+	original := &cwt.ClaimsSet{
+		Issuer: "cnf-kid-test",
+		Confirmation: &cwt.Confirmation{
+			KeyID: kid,
+		},
+	}
+
+	data, err := original.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	decoded, err := cwt.DecodeClaimsSet(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if decoded.Confirmation == nil {
+		t.Fatal("expected confirmation, got nil")
+	}
+	if string(decoded.Confirmation.KeyID) != string(kid) {
+		t.Errorf("kid: got %q, want %q", decoded.Confirmation.KeyID, kid)
+	}
+}
+
+func TestValidate_RequireConfirmation_Missing(t *testing.T) {
+	claims := &cwt.ClaimsSet{Issuer: "test"}
+	v := &cwt.Validator{RequireConfirmation: true}
+	err := v.Validate(claims)
+	if !errors.Is(err, cwt.ErrMissingConfirmation) {
+		t.Errorf("expected ErrMissingConfirmation, got %v", err)
+	}
+}
+
+func TestValidate_RequireConfirmation_Present(t *testing.T) {
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := cose.NewKeyFromPublic(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := &cwt.ClaimsSet{
+		Issuer:       "test",
+		Confirmation: &cwt.Confirmation{Key: key},
+	}
+	v := &cwt.Validator{RequireConfirmation: true}
+	if err := v.Validate(claims); err != nil {
+		t.Errorf("expected nil, got %v", err)
+	}
+}

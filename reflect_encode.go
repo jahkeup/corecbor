@@ -234,6 +234,8 @@ type fieldInfo struct {
 	intKey int64
 	hasInt bool
 	omit   bool
+	tagID  uint64
+	hasTag bool
 }
 
 func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
@@ -250,6 +252,10 @@ func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error
 		val, err := reflectToValue(fv, opts)
 		if err != nil {
 			return nil, err
+		}
+
+		if fi.hasTag {
+			val = cbor.Tag{ID: fi.tagID, Inner: val}
 		}
 
 		var key cbor.Value
@@ -301,6 +307,11 @@ func getStructFields(rt reflect.Type) []fieldInfo {
 			for _, opt := range parts[1:] {
 				if opt == "omitempty" {
 					fi.omit = true
+				} else if strings.HasPrefix(opt, "tag=") {
+					if n, err := strconv.ParseUint(opt[4:], 10, 64); err == nil {
+						fi.tagID = n
+						fi.hasTag = true
+					}
 				}
 			}
 			if n, err := strconv.ParseInt(fi.name, 10, 64); err == nil {

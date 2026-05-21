@@ -299,7 +299,18 @@ func decodeMapToStruct(m cbor.Map, target reflect.Value) error {
 		}
 
 		fv := target.Field(fi.index)
-		if err := valueToGo(entry.Value, fv); err != nil {
+		val := entry.Value
+		if fi.hasTag {
+			tag, ok := val.(cbor.Tag)
+			if !ok {
+				return fmt.Errorf("cbor: field %q expects tag(%d) but got %T", fi.name, fi.tagID, val)
+			}
+			if tag.ID != fi.tagID {
+				return fmt.Errorf("cbor: field %q expects tag(%d) but got tag(%d)", fi.name, fi.tagID, tag.ID)
+			}
+			val = tag.Inner
+		}
+		if err := valueToGo(val, fv); err != nil {
 			return err
 		}
 	}

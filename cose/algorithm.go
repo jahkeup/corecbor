@@ -40,6 +40,9 @@ const (
 
 	// PBES2 (RFC 9053 §6.2.2)
 	AlgPBES2_HS256_A128KW Algorithm = -11
+
+	// HPKE base mode with DHKEM(P-256), HKDF-SHA256, AES-128-GCM (RFC 9180)
+	AlgHPKEBaseP256SHA256AES128GCM Algorithm = 35
 )
 
 func (a Algorithm) String() string {

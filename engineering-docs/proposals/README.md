@@ -11,9 +11,14 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [008](008-reflective-marshal-unmarshal.md) | 1 | Draft | Reflective Marshal/Unmarshal API | corecbor maintainers | 001 | 2026-05-21 |
+| [008](008-reflective-marshal-unmarshal.md) | 1 | Accepted | Reflective Marshal/Unmarshal API | corecbor maintainers | 001 | 2026-05-21 |
+| [009](009-diagnostic-notation.md) | 2 | Draft | CBOR Diagnostic Notation (RFC 8949 §8) | corecbor maintainers | 001 | 2026-05-21 |
+| [010](010-cbor-sequences.md) | 2 | Draft | CBOR Sequences (RFC 8742) | corecbor maintainers | 001 | 2026-05-21 |
+| [011](011-cose-multi-signer.md) | 3 | Draft | COSE_Sign + COSE_Mac (multi-signer) | corecbor maintainers | 002 | 2026-05-21 |
+| [012](012-cwt-proof-of-possession.md) | 3 | Draft | CWT Proof-of-Possession / cnf claim (RFC 8747) | corecbor maintainers | 003 | 2026-05-21 |
+| [013](013-diagnostic-cli.md) | 2 | Draft | Diagnostic CLI Tool (cmd/cbor-diag) | corecbor maintainers | 009 | 2026-05-21 |
 
-_(none — all proposals closed)_
+_(stale note removed)_
 
 ## Closed proposals
 
@@ -29,7 +34,7 @@ _(none — all proposals closed)_
 
 ## Numbering
 
-Next available proposal number: **009**
+Next available proposal number: **014**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than

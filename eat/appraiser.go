@@ -12,6 +12,8 @@ type Appraiser struct {
 	RequireSecurityLevel SecurityLevel
 	RequireSecureBoot    bool
 	RequireDebugDisabled bool
+	RequireProfile       string
+	SWComponentPolicy    func([]SWComponent) error
 	CWTValidator         *cwt.Validator
 	Custom               []func(*Claims) error
 }
@@ -39,6 +41,18 @@ func (a *Appraiser) Appraise(claims *Claims) error {
 	if a.RequireDebugDisabled {
 		if claims.Debug == DebugEnabled {
 			return ErrDebugEnabled
+		}
+	}
+
+	if a.RequireProfile != "" {
+		if claims.Profile != a.RequireProfile {
+			return ErrProfileMismatch
+		}
+	}
+
+	if a.SWComponentPolicy != nil && len(claims.SWComponents) > 0 {
+		if err := a.SWComponentPolicy(claims.SWComponents); err != nil {
+			return err
 		}
 	}
 

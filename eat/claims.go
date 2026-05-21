@@ -16,6 +16,14 @@ const (
 	claimSecureBoot    = 262
 	claimDebug         = 263
 	claimUptime        = 266
+	claimProfile       = 265
+	claimSWComponents  = 267
+
+	swCompType      = 1
+	swCompMeasValue = 2
+	swCompVersion   = 4
+	swCompSignerID  = 5
+	swCompMeasDesc  = 6
 )
 
 // SecurityLevel represents the EAT security level claim (RFC 9711 §4.3.1).
@@ -38,6 +46,15 @@ const (
 	DebugPermanentDisable DebugStatus = 3
 )
 
+// SWComponent represents a single software component measurement (EAT §4.4.1).
+type SWComponent struct {
+	Type                   string
+	MeasurementValue       []byte
+	Version                string
+	SignerID               []byte
+	MeasurementDescription string
+}
+
 // Claims represents an EAT claims set, extending CWT with attestation claims.
 type Claims struct {
 	cwt.ClaimsSet
@@ -49,6 +66,8 @@ type Claims struct {
 	SecureBoot    *bool
 	Debug         DebugStatus
 	Uptime        *uint64
+	Profile       string
+	SWComponents  []SWComponent
 }
 
 // Encode serializes the Claims as a CBOR map with integer keys.
@@ -105,6 +124,32 @@ func (c *Claims) Encode() ([]byte, error) {
 	}
 	if c.Uptime != nil {
 		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimUptime), Value: corecbor.Uint(*c.Uptime)})
+	}
+	if c.Profile != "" {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimProfile), Value: corecbor.Text(c.Profile)})
+	}
+	if len(c.SWComponents) > 0 {
+		arr := make(corecbor.Array, len(c.SWComponents))
+		for i, sw := range c.SWComponents {
+			cm := corecbor.Map{}
+			if sw.Type != "" {
+				cm = append(cm, corecbor.MapEntry{Key: corecbor.Uint(swCompType), Value: corecbor.Text(sw.Type)})
+			}
+			if len(sw.MeasurementValue) > 0 {
+				cm = append(cm, corecbor.MapEntry{Key: corecbor.Uint(swCompMeasValue), Value: corecbor.Bytes(sw.MeasurementValue)})
+			}
+			if sw.Version != "" {
+				cm = append(cm, corecbor.MapEntry{Key: corecbor.Uint(swCompVersion), Value: corecbor.Text(sw.Version)})
+			}
+			if len(sw.SignerID) > 0 {
+				cm = append(cm, corecbor.MapEntry{Key: corecbor.Uint(swCompSignerID), Value: corecbor.Bytes(sw.SignerID)})
+			}
+			if sw.MeasurementDescription != "" {
+				cm = append(cm, corecbor.MapEntry{Key: corecbor.Uint(swCompMeasDesc), Value: corecbor.Text(sw.MeasurementDescription)})
+			}
+			arr[i] = cm
+		}
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimSWComponents), Value: arr})
 	}
 
 	enc := corecbor.New(corecbor.ModeCoreDeterministic)
@@ -217,6 +262,55 @@ func DecodeClaims(data []byte) (*Claims, error) {
 				return nil, fmt.Errorf("%w: uptime: %v", ErrMalformedEAT, err)
 			}
 			c.Uptime = &n
+		case claimProfile:
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
+				return nil, fmt.Errorf("%w: profile must be text", ErrMalformedEAT)
+			}
+			c.Profile = string(t)
+		case claimSWComponents:
+			arr, ok := entry.Value.(corecbor.Array)
+			if !ok {
+				return nil, fmt.Errorf("%w: sw-components must be array", ErrMalformedEAT)
+			}
+			swcs := make([]SWComponent, len(arr))
+			for i, elem := range arr {
+				cm, ok := elem.(corecbor.Map)
+				if !ok {
+					return nil, fmt.Errorf("%w: sw-component[%d] must be map", ErrMalformedEAT, i)
+				}
+				var sw SWComponent
+				for _, e := range cm {
+					k, isInt := entryKeyInt(e.Key)
+					if !isInt {
+						continue
+					}
+					switch k {
+					case swCompType:
+						if t, ok := e.Value.(corecbor.Text); ok {
+							sw.Type = string(t)
+						}
+					case swCompMeasValue:
+						if b, ok := e.Value.(corecbor.Bytes); ok {
+							sw.MeasurementValue = []byte(b)
+						}
+					case swCompVersion:
+						if t, ok := e.Value.(corecbor.Text); ok {
+							sw.Version = string(t)
+						}
+					case swCompSignerID:
+						if b, ok := e.Value.(corecbor.Bytes); ok {
+							sw.SignerID = []byte(b)
+						}
+					case swCompMeasDesc:
+						if t, ok := e.Value.(corecbor.Text); ok {
+							sw.MeasurementDescription = string(t)
+						}
+					}
+				}
+				swcs[i] = sw
+			}
+			c.SWComponents = swcs
 		}
 	}
 

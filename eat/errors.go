@@ -17,4 +17,7 @@ var (
 
 	// ErrMalformedEAT indicates the token payload could not be decoded as an EAT.
 	ErrMalformedEAT = errors.New("eat: malformed token")
+
+	// ErrProfileMismatch indicates the token profile does not match the required profile.
+	ErrProfileMismatch = errors.New("eat: profile mismatch")
 )

@@ -202,3 +202,115 @@ func TestAppraiser_AllPass(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 }
+
+func TestSWComponents_RoundTrip(t *testing.T) {
+	original := testClaims()
+	original.SWComponents = []SWComponent{
+		{
+			Type:                   "firmware",
+			MeasurementValue:       []byte{0x01, 0x02, 0x03, 0x04},
+			Version:                "1.0.0",
+			SignerID:               []byte{0xAA, 0xBB},
+			MeasurementDescription: "bootloader",
+		},
+		{
+			Type:             "kernel",
+			MeasurementValue: []byte{0x05, 0x06, 0x07, 0x08},
+			Version:          "5.15.0",
+		},
+		{
+			Type:             "rootfs",
+			MeasurementValue: []byte{0x09, 0x0A, 0x0B, 0x0C},
+			SignerID:         []byte{0xCC, 0xDD},
+		},
+	}
+
+	encoded, err := original.Encode()
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := DecodeClaims(encoded)
+	if err != nil {
+		t.Fatalf("DecodeClaims failed: %v", err)
+	}
+
+	if len(decoded.SWComponents) != len(original.SWComponents) {
+		t.Fatalf("SWComponents count: got %d, want %d", len(decoded.SWComponents), len(original.SWComponents))
+	}
+
+	for i, want := range original.SWComponents {
+		got := decoded.SWComponents[i]
+		if got.Type != want.Type {
+			t.Errorf("[%d] Type: got %q, want %q", i, got.Type, want.Type)
+		}
+		if string(got.MeasurementValue) != string(want.MeasurementValue) {
+			t.Errorf("[%d] MeasurementValue mismatch", i)
+		}
+		if got.Version != want.Version {
+			t.Errorf("[%d] Version: got %q, want %q", i, got.Version, want.Version)
+		}
+		if string(got.SignerID) != string(want.SignerID) {
+			t.Errorf("[%d] SignerID mismatch", i)
+		}
+		if got.MeasurementDescription != want.MeasurementDescription {
+			t.Errorf("[%d] MeasurementDescription: got %q, want %q", i, got.MeasurementDescription, want.MeasurementDescription)
+		}
+	}
+}
+
+func TestAppraiser_SWPolicy(t *testing.T) {
+	badMeasurement := []byte{0xFF, 0xFF, 0xFF, 0xFF}
+	claims := testClaims()
+	claims.SWComponents = []SWComponent{
+		{
+			Type:             "firmware",
+			MeasurementValue: badMeasurement,
+		},
+	}
+
+	policyErr := errors.New("measurement value rejected")
+	appraiser := &Appraiser{
+		SWComponentPolicy: func(swcs []SWComponent) error {
+			for _, sw := range swcs {
+				if string(sw.MeasurementValue) == string(badMeasurement) {
+					return policyErr
+				}
+			}
+			return nil
+		},
+	}
+
+	err := appraiser.Appraise(claims)
+	if !errors.Is(err, policyErr) {
+		t.Errorf("expected policy error, got %v", err)
+	}
+}
+
+func TestAppraiser_ProfileMismatch(t *testing.T) {
+	claims := testClaims()
+	claims.Profile = "https://example.com/profile/v1"
+
+	appraiser := &Appraiser{
+		RequireProfile: "https://example.com/profile/v2",
+	}
+
+	err := appraiser.Appraise(claims)
+	if !errors.Is(err, ErrProfileMismatch) {
+		t.Errorf("expected ErrProfileMismatch, got %v", err)
+	}
+}
+
+func TestAppraiser_ProfileMatch(t *testing.T) {
+	claims := testClaims()
+	claims.Profile = "https://example.com/profile/v1"
+
+	appraiser := &Appraiser{
+		RequireProfile: "https://example.com/profile/v1",
+	}
+
+	err := appraiser.Appraise(claims)
+	if err != nil {
+		t.Errorf("expected no error, got %v", err)
+	}
+}

@@ -10,6 +10,7 @@ const (
 	tagSign1    uint64 = 18
 	tagEncrypt0 uint64 = 16
 	tagMac0     uint64 = 17
+	tagEncrypt  uint64 = 96
 )
 
 // MarshalSign1 encodes a Sign1 message as CBOR with tag 18.
@@ -301,5 +302,168 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 		Unprotected: *unprot,
 		Payload:     payload,
 		Tag:         []byte(tag),
+	}, nil
+}
+
+func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
+	protectedBytes, err := msg.Protected.encodeProtected()
+	if err != nil {
+		return nil, err
+	}
+	if protectedBytes == nil {
+		protectedBytes = []byte{}
+	}
+
+	unprotectedMap := msg.Unprotected.toCBORMap()
+	if unprotectedMap == nil {
+		unprotectedMap = corecbor.Map{}
+	}
+
+	var ciphertextVal corecbor.Value
+	if msg.Ciphertext == nil {
+		ciphertextVal = corecbor.Null{}
+	} else {
+		ciphertextVal = corecbor.Bytes(msg.Ciphertext)
+	}
+
+	recipientsArr := make(corecbor.Array, len(msg.Recipients))
+	for i, r := range msg.Recipients {
+		rProtBytes, err := r.Protected.encodeProtected()
+		if err != nil {
+			return nil, err
+		}
+		if rProtBytes == nil {
+			rProtBytes = []byte{}
+		}
+		rUnprotMap := r.Unprotected.toCBORMap()
+		if rUnprotMap == nil {
+			rUnprotMap = corecbor.Map{}
+		}
+		var rCipherVal corecbor.Value
+		if r.Ciphertext == nil {
+			rCipherVal = corecbor.Bytes(nil)
+		} else {
+			rCipherVal = corecbor.Bytes(r.Ciphertext)
+		}
+		recipientsArr[i] = corecbor.Array{
+			corecbor.Bytes(rProtBytes),
+			rUnprotMap,
+			rCipherVal,
+		}
+	}
+
+	arr := corecbor.Array{
+		corecbor.Bytes(protectedBytes),
+		unprotectedMap,
+		ciphertextVal,
+		recipientsArr,
+	}
+
+	tagged := corecbor.Tag{ID: tagEncrypt, Inner: arr}
+	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	return enc.Encode(nil, tagged)
+}
+
+func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
+	dec := corecbor.NewDecoder()
+	v, err := dec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	var arr corecbor.Array
+	switch x := v.(type) {
+	case corecbor.Tag:
+		if x.ID != tagEncrypt {
+			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, x.ID)
+		}
+		a, ok := x.Inner.(corecbor.Array)
+		if !ok {
+			return nil, fmt.Errorf("%w: tag 96 inner is not array", ErrMalformed)
+		}
+		arr = a
+	case corecbor.Array:
+		arr = x
+	default:
+		return nil, fmt.Errorf("%w: expected array or tag, got %T", ErrMalformed, v)
+	}
+
+	if len(arr) != 4 {
+		return nil, fmt.Errorf("%w: Encrypt array must have 4 elements, got %d", ErrMalformed, len(arr))
+	}
+
+	protectedBstr, ok := arr[0].(corecbor.Bytes)
+	if !ok {
+		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
+	}
+
+	prot, err := decodeProtected([]byte(protectedBstr))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	unprot, err := decodeUnprotected(arr[1])
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+	}
+
+	var ciphertext []byte
+	switch c := arr[2].(type) {
+	case corecbor.Bytes:
+		ciphertext = []byte(c)
+	case corecbor.Null:
+		ciphertext = nil
+	default:
+		return nil, fmt.Errorf("%w: ciphertext must be bstr or null", ErrMalformed)
+	}
+
+	recipientsArr, ok := arr[3].(corecbor.Array)
+	if !ok {
+		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
+	}
+
+	recipients := make([]Recipient, len(recipientsArr))
+	for i, rv := range recipientsArr {
+		rArr, ok := rv.(corecbor.Array)
+		if !ok || len(rArr) != 3 {
+			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
+		}
+
+		rProtBstr, ok := rArr[0].(corecbor.Bytes)
+		if !ok {
+			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
+		}
+		rProt, err := decodeProtected([]byte(rProtBstr))
+		if err != nil {
+			return nil, fmt.Errorf("%w: recipient %d: %v", ErrMalformed, i, err)
+		}
+
+		rUnprot, err := decodeUnprotected(rArr[1])
+		if err != nil {
+			return nil, fmt.Errorf("%w: recipient %d: %v", ErrMalformed, i, err)
+		}
+
+		var rCiphertext []byte
+		switch c := rArr[2].(type) {
+		case corecbor.Bytes:
+			rCiphertext = []byte(c)
+		case corecbor.Null:
+			rCiphertext = nil
+		default:
+			return nil, fmt.Errorf("%w: recipient %d ciphertext must be bstr or null", ErrMalformed, i)
+		}
+
+		recipients[i] = Recipient{
+			Protected:   *rProt,
+			Unprotected: *rUnprot,
+			Ciphertext:  rCiphertext,
+		}
+	}
+
+	return &Encrypt{
+		Protected:   *prot,
+		Unprotected: *unprot,
+		Ciphertext:  ciphertext,
+		Recipients:  recipients,
 	}, nil
 }

@@ -25,3 +25,18 @@ type Mac0 struct {
 	Payload     []byte
 	Tag         []byte
 }
+
+// Encrypt represents a COSE_Encrypt message (multi-recipient encryption).
+// CBOR structure: Tag(96, [protectedBstr, unprotectedMap, ciphertext, [+recipient]])
+type Encrypt struct {
+	Protected   Headers
+	Unprotected Headers
+	Ciphertext  []byte
+	Recipients  []Recipient
+}
+
+type Recipient struct {
+	Protected   Headers
+	Unprotected Headers
+	Ciphertext  []byte
+}

@@ -29,6 +29,17 @@ const (
 
 	// Key distribution algorithms (RFC 9052 §8.5)
 	AlgDirect Algorithm = -6
+
+	// AES Key Wrap (RFC 9053 §6.2.1)
+	AlgA128KW Algorithm = -3
+	AlgA192KW Algorithm = -4
+	AlgA256KW Algorithm = -5
+
+	// ECDH-ES + HKDF (RFC 9053 §6.3.1)
+	AlgECDH_ES_HKDF_256 Algorithm = -25
+
+	// PBES2 (RFC 9053 §6.2.2)
+	AlgPBES2_HS256_A128KW Algorithm = -11
 )
 
 func (a Algorithm) String() string {
@@ -57,6 +68,16 @@ func (a Algorithm) String() string {
 		return "HMAC512"
 	case AlgDirect:
 		return "direct"
+	case AlgA128KW:
+		return "A128KW"
+	case AlgA192KW:
+		return "A192KW"
+	case AlgA256KW:
+		return "A256KW"
+	case AlgECDH_ES_HKDF_256:
+		return "ECDH-ES+HKDF-256"
+	case AlgPBES2_HS256_A128KW:
+		return "PBES2-HS256+A128KW"
 	default:
 		return "unknown"
 	}

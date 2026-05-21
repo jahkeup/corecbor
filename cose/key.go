@@ -10,13 +10,13 @@ import (
 
 // COSE Key parameter labels (RFC 9052 / RFC 9053).
 const (
-	keyLabelKty    int64 = 1
-	keyLabelKid    int64 = 2
-	keyLabelAlg    int64 = 3
-	keyLabelCrv    int64 = -1
-	keyLabelX      int64 = -2
-	keyLabelY      int64 = -3
-	keyLabelD      int64 = -4
+	keyLabelKty int64 = 1
+	keyLabelKid int64 = 2
+	keyLabelAlg int64 = 3
+	keyLabelCrv int64 = -1
+	keyLabelX   int64 = -2
+	keyLabelY   int64 = -3
+	keyLabelD   int64 = -4
 )
 
 type KeyType int64

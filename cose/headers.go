@@ -6,10 +6,10 @@ import (
 
 // COSE header labels (integer keys per RFC 9052 §3.1).
 const (
-	headerLabelAlgorithm int64 = 1
-	headerLabelCritical  int64 = 2
+	headerLabelAlgorithm   int64 = 1
+	headerLabelCritical    int64 = 2
 	headerLabelContentType int64 = 3
-	headerLabelKeyID     int64 = 4
+	headerLabelKeyID       int64 = 4
 )
 
 // Headers represents COSE header parameters.

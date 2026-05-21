@@ -17,6 +17,7 @@ proposal lifecycle.
 | [004](004-edhoc-key-exchange.md) | 3 | Draft | EDHOC: Ephemeral DH Over COSE (RFC 9528) | corecbor maintainers | 001, 002 | 2026-05-20 |
 | [005](005-eat-entity-attestation.md) | 3 | Draft | EAT: Entity Attestation Tokens (RFC 9711) | corecbor maintainers | 001, 002, 003 | 2026-05-20 |
 | [006](006-iana-registry-sync-codegen.md) | 2 | Draft | IANA CBOR registry sync, codegen, and embedding | corecbor maintainers | 001 | 2026-05-20 |
+| [007](007-cross-library-compatibility-testing.md) | 2 | Draft | Cross-library compatibility testing | corecbor maintainers | 001 | 2026-05-20 |
 
 ## Closed proposals
 
@@ -26,7 +27,7 @@ proposal lifecycle.
 
 ## Numbering
 
-Next available proposal number: **007**
+Next available proposal number: **008**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than
@@ -38,6 +39,7 @@ sequence compactness.
   (Phase 1 — foundational primitives; gates everything downstream)
 - **Tier-2, depends on a tier-1:**
   - [006](006-iana-registry-sync-codegen.md) — IANA registry sync + codegen (depends on 001)
+  - [007](007-cross-library-compatibility-testing.md) — Cross-library compatibility testing (depends on 001)
 - **Tier-3, sibling-module:**
   - [002](002-cose-structures-and-signing.md) — COSE (RFC 9052/9053; depends on 001)
   - [003](003-cwt-cbor-web-tokens.md) — CWT (RFC 8392; depends on 001, 002)

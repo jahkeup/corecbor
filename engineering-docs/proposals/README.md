@@ -11,15 +11,8 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [008](008-reflective-marshal-unmarshal.md) | 1 | Accepted | Reflective Marshal/Unmarshal API | corecbor maintainers | 001 | 2026-05-21 |
-| [009](009-diagnostic-notation.md) | 2 | Accepted | CBOR Diagnostic Notation (RFC 8949 §8) | corecbor maintainers | 001 | 2026-05-21 |
-| [010](010-cbor-sequences.md) | 2 | Accepted | CBOR Sequences (RFC 8742) | corecbor maintainers | 001 | 2026-05-21 |
-| [011](011-cose-multi-signer.md) | 3 | Accepted | COSE_Sign + COSE_Mac (multi-signer) | corecbor maintainers | 002 | 2026-05-21 |
-| [012](012-cwt-proof-of-possession.md) | 3 | Accepted | CWT Proof-of-Possession / cnf claim (RFC 8747) | corecbor maintainers | 003 | 2026-05-21 |
-| [013](013-diagnostic-cli.md) | 2 | Accepted | Diagnostic CLI Tool (cmd/cbor-diag) | corecbor maintainers | 009 | 2026-05-21 |
-| [014](014-raw-message-and-tag-wrapping.md) | 1 | Accepted | RawMessage, RawTag, and declarative tag wrapping | corecbor maintainers | 008 | 2026-05-21 |
 
-_(stale note removed)_
+_(no active proposals)_
 
 ## Closed proposals
 
@@ -32,6 +25,13 @@ _(stale note removed)_
 | [005](005-eat-entity-attestation.md) | 3 | Closed | EAT: Entity Attestation Tokens | corecbor maintainers | 2026-05-21 | Phases A-C complete. Claims, SW measurements, profile, submodules. |
 | [006](006-iana-registry-sync-codegen.md) | 2 | Closed | IANA CBOR registry sync + codegen | corecbor maintainers | 2026-05-21 | Full IANA fetch (260 tags), codegen tool, go:embed registry. |
 | [007](007-cross-library-compatibility-testing.md) | 2 | Closed | Cross-library compatibility testing | corecbor maintainers | 2026-05-21 | 55 vectors (41 canonical + 14 quirky), 209 test cases. |
+| [008](008-reflective-marshal-unmarshal.md) | 1 | Closed | Reflective Marshal/Unmarshal API | corecbor maintainers | 2026-05-21 | Marshal/Unmarshal + struct tags + Marshaler/Unmarshaler interfaces. |
+| [009](009-diagnostic-notation.md) | 2 | Closed | CBOR Diagnostic Notation | corecbor maintainers | 2026-05-21 | Diagnostic() + DiagnosticValue() + DiagCompact option. |
+| [010](010-cbor-sequences.md) | 2 | Closed | CBOR Sequences (RFC 8742) | corecbor maintainers | 2026-05-21 | Sequence type + EncodeSequence/DecodeSequence/MarshalSequence. |
+| [011](011-cose-multi-signer.md) | 3 | Closed | COSE_Sign + COSE_Mac multi-signer | corecbor maintainers | 2026-05-21 | SignMulti/VerifyMulti/AddSignature + ComputeMACMulti/VerifyMACMulti. |
+| [012](012-cwt-proof-of-possession.md) | 3 | Closed | CWT cnf claim (RFC 8747) | corecbor maintainers | 2026-05-21 | Confirmation type + RequireConfirmation validator. |
+| [013](013-diagnostic-cli.md) | 2 | Closed | Diagnostic CLI | corecbor maintainers | 2026-05-21 | cmd/cbor-diag with -hex/-compact/-sequence flags. |
+| [014](014-raw-message-and-tag-wrapping.md) | 1 | Closed | RawMessage + RawTag + tag=N | corecbor maintainers | 2026-05-21 | RawMessage, RawTag types + cbor:\",tag=N\" struct tag option. |
 
 ## Numbering
 

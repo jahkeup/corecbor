@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 011 |
 | **Tier** | 3 |
-| **Status** | Accepted |
+| **Status** | Closed |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002 (closed) |

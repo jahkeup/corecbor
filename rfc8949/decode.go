@@ -119,10 +119,10 @@ func decodeBytes(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 		}
 		return decodeIndefiniteBytes(src, off+h.N, opts)
 	}
-	length := int(h.Arg)
 	if h.Arg > uint64(opts.maxBytes()) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
 	}
+	length := int(h.Arg)
 	start := off + h.N
 	end := start + length
 	if end > len(src) {
@@ -155,6 +155,9 @@ func decodeIndefiniteBytes(src []byte, off int, opts DecodeOpts) (cbor.Value, in
 		if opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
 			return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
 		}
+		if h.Arg > uint64(opts.maxBytes()) {
+			return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+		}
 		length := int(h.Arg)
 		if int64(len(buf))+int64(length) > int64(opts.maxBytes()) {
 			return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
@@ -176,10 +179,10 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 		}
 		return decodeIndefiniteText(src, off+h.N, opts)
 	}
-	length := int(h.Arg)
 	if h.Arg > uint64(opts.maxBytes()) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
 	}
+	length := int(h.Arg)
 	start := off + h.N
 	end := start + length
 	if end > len(src) {
@@ -218,6 +221,9 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 		if opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
 			return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
 		}
+		if h.Arg > uint64(opts.maxBytes()) {
+			return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+		}
 		length := int(h.Arg)
 		if int64(len(buf))+int64(length) > int64(opts.maxBytes()) {
 			return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
@@ -240,7 +246,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		return decodeIndefiniteArray(src, off+h.N, depth, opts)
 	}
 	count := int(h.Arg)
-	if count > opts.maxArray() {
+	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
 	arr := make(cbor.Array, 0, count)
@@ -286,7 +292,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		return decodeIndefiniteMap(src, off+h.N, depth, opts)
 	}
 	count := int(h.Arg)
-	if count > opts.maxArray() {
+	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
 	m := make(cbor.Map, 0, count)

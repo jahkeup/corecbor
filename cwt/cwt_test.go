@@ -210,6 +210,120 @@ func TestClaimsSet_Encode_Decode_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestEncrypt_Decrypt_RoundTrip(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	nonce := make([]byte, 12)
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+
+	claims := &cwt.ClaimsSet{
+		Issuer:  "enc-issuer",
+		Subject: "enc-subject",
+	}
+
+	token, err := cwt.Encrypt(claims, key, nonce, cose.AlgA256GCM)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := cwt.Decrypt(token, key, nonce, cose.AlgA256GCM)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Issuer != claims.Issuer {
+		t.Errorf("issuer: got %q, want %q", got.Issuer, claims.Issuer)
+	}
+	if got.Subject != claims.Subject {
+		t.Errorf("subject: got %q, want %q", got.Subject, claims.Subject)
+	}
+}
+
+func TestEncrypt_WrongKey(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	nonce := make([]byte, 12)
+	if _, err := rand.Read(nonce); err != nil {
+		t.Fatal(err)
+	}
+
+	claims := &cwt.ClaimsSet{Issuer: "enc-issuer"}
+
+	token, err := cwt.Encrypt(claims, key, nonce, cose.AlgA256GCM)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wrongKey := make([]byte, 32)
+	if _, err := rand.Read(wrongKey); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = cwt.Decrypt(token, wrongKey, nonce, cose.AlgA256GCM)
+	if err == nil {
+		t.Error("expected error decrypting with wrong key, got nil")
+	}
+}
+
+func TestMAC_VerifyMAC_RoundTrip(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+
+	claims := &cwt.ClaimsSet{
+		Issuer:  "mac-issuer",
+		Subject: "mac-subject",
+	}
+
+	token, err := cwt.MAC(claims, key, cose.AlgHMAC256)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := cwt.VerifyMAC(token, key, cose.AlgHMAC256)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Issuer != claims.Issuer {
+		t.Errorf("issuer: got %q, want %q", got.Issuer, claims.Issuer)
+	}
+	if got.Subject != claims.Subject {
+		t.Errorf("subject: got %q, want %q", got.Subject, claims.Subject)
+	}
+}
+
+func TestMAC_WrongKey(t *testing.T) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+
+	claims := &cwt.ClaimsSet{Issuer: "mac-issuer"}
+
+	token, err := cwt.MAC(claims, key, cose.AlgHMAC256)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wrongKey := make([]byte, 32)
+	if _, err := rand.Read(wrongKey); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = cwt.VerifyMAC(token, wrongKey, cose.AlgHMAC256)
+	if err == nil {
+		t.Error("expected error verifying MAC with wrong key, got nil")
+	}
+}
+
 func TestPrivateClaims_RoundTrip(t *testing.T) {
 	original := &cwt.ClaimsSet{
 		Issuer: "private-test",

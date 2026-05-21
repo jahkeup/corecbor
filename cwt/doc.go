@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package cwt implements CBOR Web Tokens (CWT) as defined in RFC 8392.
 //
 // A CWT is a compact means of representing claims to be transferred between

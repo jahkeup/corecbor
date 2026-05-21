@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 package rfc8949
 
 // PERFORMANCE PROFILE NOTES (M3 Max, go1.26, 2026-05-21):

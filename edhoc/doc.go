@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package edhoc implements the EDHOC authenticated key exchange protocol
 // (RFC 9528) for Suite 0 (X25519, EdDSA, AES-CCM-16-64-128, SHA-256).
 //

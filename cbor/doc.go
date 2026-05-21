@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package cbor defines the value model for CBOR data items and the
 // error sentinels for the corecbor library.
 //

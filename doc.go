@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package corecbor provides a strict RFC 8949 CBOR encoder and a
 // forgiving CBOR decoder with knobs to control strictness.
 //

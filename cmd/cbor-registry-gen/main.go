@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Command cbor-registry-gen fetches the IANA CBOR Tags registry and generates
 // Go source code containing tag constants and registry lookup data.
 //

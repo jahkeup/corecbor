@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package cose implements COSE_Sign1 signing and verification per RFC 9052.
 //
 // It supports Ed25519 and ECDSA (P-256, P-384, P-521) algorithms, with

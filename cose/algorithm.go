@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 package cose
 
 // Algorithm identifies a COSE algorithm from the IANA registry.

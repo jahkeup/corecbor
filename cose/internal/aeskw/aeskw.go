@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package aeskw implements AES Key Wrap per RFC 3394.
 package aeskw
 

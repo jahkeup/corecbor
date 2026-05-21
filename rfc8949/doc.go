@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package rfc8949 implements CBOR encoding per RFC 8949.
 //
 // It supports two modes:

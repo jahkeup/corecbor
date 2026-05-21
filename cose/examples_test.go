@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package cose_test demonstrates key escrow patterns using the KeyDeriver interface.
 // These examples show how the extensible KeyDeriver interface supports a variety of
 // key management strategies: network-bound (Tang-style), hardware-bound (TPM-style),

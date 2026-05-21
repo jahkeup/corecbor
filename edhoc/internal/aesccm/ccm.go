@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package aesccm implements AES-CCM (Counter with CBC-MAC) as specified in
 // RFC 3610, with parameters suitable for EDHOC Suite 0: 16-byte key,
 // 13-byte nonce, 8-byte authentication tag.

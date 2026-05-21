@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 // Package registry provides IANA CBOR tag constants and a lookup API
 // for well-known CBOR tags from the IANA "Concise Binary Object
 // Representation (CBOR) Tags" registry.

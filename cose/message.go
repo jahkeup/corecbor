@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 package cose
 
 // Sign1 represents a COSE_Sign1 message (single-signer signing).

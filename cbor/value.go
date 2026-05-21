@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
 package cbor
 
 // Value is the union of every CBOR data item type. All concrete

@@ -2,7 +2,9 @@ package eat
 
 import (
 	"bytes"
+	"fmt"
 
+	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
 )
 
@@ -16,6 +18,8 @@ type Appraiser struct {
 	SWComponentPolicy    func([]SWComponent) error
 	CWTValidator         *cwt.Validator
 	Custom               []func(*Claims) error
+	SubmodPolicy         func(name string, claims *Claims) error
+	SubmodVerifier       *cose.Verifier
 }
 
 // Appraise checks the claims against all configured policy requirements.
@@ -65,6 +69,34 @@ func (a *Appraiser) Appraise(claims *Claims) error {
 	for _, fn := range a.Custom {
 		if err := fn(claims); err != nil {
 			return err
+		}
+	}
+
+	if a.SubmodPolicy != nil {
+		for name, sub := range claims.Submods {
+			var subClaims *Claims
+			if sub.Token != nil {
+				var err error
+				if a.SubmodVerifier != nil {
+					subClaims, err = Verify(sub.Token, a.SubmodVerifier)
+				} else {
+					msg, err2 := cose.UnmarshalSign1(sub.Token)
+					if err2 != nil {
+						return fmt.Errorf("submods[%q]: %w: %v", name, ErrMalformedEAT, err2)
+					}
+					subClaims, err = DecodeClaims(msg.Payload)
+				}
+				if err != nil {
+					return fmt.Errorf("submods[%q]: %w", name, err)
+				}
+			} else if sub.Claims != nil {
+				subClaims = sub.Claims
+			}
+			if subClaims != nil {
+				if err := a.SubmodPolicy(name, subClaims); err != nil {
+					return fmt.Errorf("submods[%q]: %w", name, err)
+				}
+			}
 		}
 	}
 

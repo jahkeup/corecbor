@@ -18,6 +18,7 @@ const (
 	claimUptime        = 266
 	claimProfile       = 265
 	claimSWComponents  = 267
+	claimSubmods       = 268
 
 	swCompType      = 1
 	swCompMeasValue = 2
@@ -55,6 +56,15 @@ type SWComponent struct {
 	MeasurementDescription string
 }
 
+// Submod holds submodule attestation evidence. Values are either a nested EAT
+// token (signed CBOR bytes) or inline Claims. Token and Claims are mutually exclusive.
+type Submod struct {
+	// Token is a nested EAT (signed CBOR bytes). Mutually exclusive with Claims.
+	Token []byte
+	// Claims is an inline submodule claims set. Mutually exclusive with Token.
+	Claims *Claims
+}
+
 // Claims represents an EAT claims set, extending CWT with attestation claims.
 type Claims struct {
 	cwt.ClaimsSet
@@ -68,6 +78,8 @@ type Claims struct {
 	Uptime        *uint64
 	Profile       string
 	SWComponents  []SWComponent
+	// Submods holds submodule attestation evidence. Keys are submodule names.
+	Submods map[string]Submod
 }
 
 // Encode serializes the Claims as a CBOR map with integer keys.
@@ -150,6 +162,33 @@ func (c *Claims) Encode() ([]byte, error) {
 			arr[i] = cm
 		}
 		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimSWComponents), Value: arr})
+	}
+
+	if len(c.Submods) > 0 {
+		sm := corecbor.Map{}
+		for name, sub := range c.Submods {
+			var val corecbor.Value
+			if sub.Token != nil {
+				val = corecbor.Bytes(sub.Token)
+			} else if sub.Claims != nil {
+				encoded, err := sub.Claims.Encode()
+				if err != nil {
+					return nil, fmt.Errorf("submods[%q]: %w", name, err)
+				}
+				dec := corecbor.NewDecoder()
+				decoded, err := dec.Decode(encoded)
+				if err != nil {
+					return nil, fmt.Errorf("submods[%q] re-decode: %w", name, err)
+				}
+				val = decoded
+			} else {
+				continue
+			}
+			sm = append(sm, corecbor.MapEntry{Key: corecbor.Text(name), Value: val})
+		}
+		if len(sm) > 0 {
+			m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimSubmods), Value: sm})
+		}
 	}
 
 	enc := corecbor.New(corecbor.ModeCoreDeterministic)
@@ -311,6 +350,35 @@ func DecodeClaims(data []byte) (*Claims, error) {
 				swcs[i] = sw
 			}
 			c.SWComponents = swcs
+		case claimSubmods:
+			sm, ok := entry.Value.(corecbor.Map)
+			if !ok {
+				return nil, fmt.Errorf("%w: submods must be map", ErrMalformedEAT)
+			}
+			c.Submods = make(map[string]Submod, len(sm))
+			for _, e := range sm {
+				name, ok := e.Key.(corecbor.Text)
+				if !ok {
+					return nil, fmt.Errorf("%w: submod key must be text", ErrMalformedEAT)
+				}
+				switch val := e.Value.(type) {
+				case corecbor.Bytes:
+					c.Submods[string(name)] = Submod{Token: []byte(val)}
+				case corecbor.Map:
+					enc := corecbor.New(corecbor.ModeCoreDeterministic)
+					encoded, err := enc.Encode(nil, val)
+					if err != nil {
+						return nil, fmt.Errorf("%w: submods[%q] re-encode: %v", ErrMalformedEAT, string(name), err)
+					}
+					inlineClaims, err := DecodeClaims(encoded)
+					if err != nil {
+						return nil, fmt.Errorf("%w: submods[%q]: %v", ErrMalformedEAT, string(name), err)
+					}
+					c.Submods[string(name)] = Submod{Claims: inlineClaims}
+				default:
+					return nil, fmt.Errorf("%w: submod[%q] value must be bytes or map", ErrMalformedEAT, string(name))
+				}
+			}
 		}
 	}
 

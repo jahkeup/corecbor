@@ -314,3 +314,186 @@ func TestAppraiser_ProfileMatch(t *testing.T) {
 		t.Errorf("expected no error, got %v", err)
 	}
 }
+
+func TestSubmods_InlineClaims_RoundTrip(t *testing.T) {
+	sub1 := &Claims{
+		SecurityLevel: SecLevelHardware,
+		Debug:         DebugPermanentDisable,
+	}
+	sub2 := &Claims{
+		SecurityLevel: SecLevelSecureRestricted,
+	}
+
+	original := testClaims()
+	original.Submods = map[string]Submod{
+		"cpu":  {Claims: sub1},
+		"wifi": {Claims: sub2},
+	}
+
+	encoded, err := original.Encode()
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := DecodeClaims(encoded)
+	if err != nil {
+		t.Fatalf("DecodeClaims failed: %v", err)
+	}
+
+	if len(decoded.Submods) != 2 {
+		t.Fatalf("Submods count: got %d, want 2", len(decoded.Submods))
+	}
+
+	cpuSub, ok := decoded.Submods["cpu"]
+	if !ok {
+		t.Fatal("missing submod 'cpu'")
+	}
+	if cpuSub.Claims == nil {
+		t.Fatal("cpu submod: expected inline Claims, got nil")
+	}
+	if cpuSub.Claims.SecurityLevel != SecLevelHardware {
+		t.Errorf("cpu SecurityLevel: got %d, want %d", cpuSub.Claims.SecurityLevel, SecLevelHardware)
+	}
+	if cpuSub.Claims.Debug != DebugPermanentDisable {
+		t.Errorf("cpu Debug: got %d, want %d", cpuSub.Claims.Debug, DebugPermanentDisable)
+	}
+
+	wifiSub, ok := decoded.Submods["wifi"]
+	if !ok {
+		t.Fatal("missing submod 'wifi'")
+	}
+	if wifiSub.Claims == nil {
+		t.Fatal("wifi submod: expected inline Claims, got nil")
+	}
+	if wifiSub.Claims.SecurityLevel != SecLevelSecureRestricted {
+		t.Errorf("wifi SecurityLevel: got %d, want %d", wifiSub.Claims.SecurityLevel, SecLevelSecureRestricted)
+	}
+}
+
+func TestSubmods_NestedToken_RoundTrip(t *testing.T) {
+	pub, priv := testKeyPair(t)
+	signer, err := cose.NewSigner(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := cose.NewVerifier(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	subClaims := &Claims{
+		SecurityLevel: SecLevelHardware,
+		Debug:         DebugDisabled,
+	}
+	nestedToken, err := Sign(subClaims, signer)
+	if err != nil {
+		t.Fatalf("Sign nested token failed: %v", err)
+	}
+
+	original := testClaims()
+	original.Submods = map[string]Submod{
+		"tpm": {Token: nestedToken},
+	}
+
+	encoded, err := original.Encode()
+	if err != nil {
+		t.Fatalf("Encode failed: %v", err)
+	}
+
+	decoded, err := DecodeClaims(encoded)
+	if err != nil {
+		t.Fatalf("DecodeClaims failed: %v", err)
+	}
+
+	if len(decoded.Submods) != 1 {
+		t.Fatalf("Submods count: got %d, want 1", len(decoded.Submods))
+	}
+
+	tpmSub, ok := decoded.Submods["tpm"]
+	if !ok {
+		t.Fatal("missing submod 'tpm'")
+	}
+	if tpmSub.Token == nil {
+		t.Fatal("tpm submod: expected Token bytes, got nil")
+	}
+
+	verified, err := Verify(tpmSub.Token, verifier)
+	if err != nil {
+		t.Fatalf("Verify nested token failed: %v", err)
+	}
+	if verified.SecurityLevel != SecLevelHardware {
+		t.Errorf("nested SecurityLevel: got %d, want %d", verified.SecurityLevel, SecLevelHardware)
+	}
+}
+
+func TestAppraiser_SubmodPolicy(t *testing.T) {
+	sub := &Claims{
+		SecurityLevel: SecLevelUnrestricted,
+	}
+
+	claims := testClaims()
+	claims.Submods = map[string]Submod{
+		"peripheral": {Claims: sub},
+	}
+
+	policyErr := errors.New("submod security level too low")
+	appraiser := &Appraiser{
+		SubmodPolicy: func(name string, c *Claims) error {
+			if c.SecurityLevel < SecLevelSecureRestricted {
+				return policyErr
+			}
+			return nil
+		},
+	}
+
+	err := appraiser.Appraise(claims)
+	if !errors.Is(err, policyErr) {
+		t.Errorf("expected policyErr, got %v", err)
+	}
+}
+
+func TestAppraiser_NestedTokenVerification(t *testing.T) {
+	pub, priv := testKeyPair(t)
+	signer, err := cose.NewSigner(priv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	verifier, err := cose.NewVerifier(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	subClaims := &Claims{
+		SecurityLevel: SecLevelHardware,
+	}
+	nestedToken, err := Sign(subClaims, signer)
+	if err != nil {
+		t.Fatalf("Sign nested token failed: %v", err)
+	}
+
+	claims := testClaims()
+	claims.Submods = map[string]Submod{
+		"tpm": {Token: nestedToken},
+	}
+
+	var seenName string
+	var seenLevel SecurityLevel
+	appraiser := &Appraiser{
+		SubmodVerifier: verifier,
+		SubmodPolicy: func(name string, c *Claims) error {
+			seenName = name
+			seenLevel = c.SecurityLevel
+			return nil
+		},
+	}
+
+	if err := appraiser.Appraise(claims); err != nil {
+		t.Fatalf("Appraise failed: %v", err)
+	}
+	if seenName != "tpm" {
+		t.Errorf("SubmodPolicy name: got %q, want %q", seenName, "tpm")
+	}
+	if seenLevel != SecLevelHardware {
+		t.Errorf("SubmodPolicy SecurityLevel: got %d, want %d", seenLevel, SecLevelHardware)
+	}
+}

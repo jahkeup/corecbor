@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 012 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 003 (closed) |
@@ -81,11 +81,20 @@ type Validator struct {
 
 ## Open questions
 
-- Should the CWT module verify proof-of-possession (challenge-response),
-  or only parse/encode the cnf claim? PoP verification is protocol-
-  specific (the challenge mechanism varies by protocol).
-- Support for symmetric PoP keys (shared secret confirmation)?
-- Should `Confirmation.Key` support key-by-reference (resolve kid)?
+**All resolved:**
+
+- ~~PoP verification~~: **Parse/encode only.** The CWT module provides
+  the `Confirmation` claim structure. PoP challenge-response is
+  protocol-specific (DPoP, ACE, mTLS each have their own mechanism).
+  The protocol layer uses the parsed key; this module doesn't verify
+  possession.
+- ~~Symmetric PoP keys~~: **Yes.** The `Confirmation` type supports
+  symmetric COSE_Key (kty=Symmetric). Include in the type definition
+  alongside asymmetric keys.
+- ~~Key-by-reference~~: **Yes.** `Confirmation` has both `Key *cose.Key`
+  (by value) and `KeyID []byte` (by reference). Resolution of KeyID to
+  actual key material is the caller's responsibility — optionally via a
+  `KeyResolver func(kid []byte) (*cose.Key, error)` on the Validator.
 
 ---
 

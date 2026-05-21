@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 010 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (closed) |
@@ -74,12 +74,17 @@ const MediaTypeCBORSeq = "application/cbor-seq"
 
 ## Open questions
 
-- Should `Sequence` support the `Marshaler`/`Unmarshaler` interfaces
-  from proposal 008?
-- Should `EncodeSequence` accept `...any` (reflection-based) in
-  addition to `...Value`?
-- Is a separate `DecodeSequence` needed given that `Stream` already
-  exists for io.Reader-based consumption?
+**All resolved:**
+
+- ~~Marshaler/Unmarshaler~~: **Yes.** `Sequence` implements both
+  interfaces. Marshal emits concatenated CBOR items. Unmarshal
+  consumes all items from the byte slice.
+- ~~`...any` support~~: **Yes.** Provide both:
+  - `EncodeSequence(dst, ...Value)` — Value-tree API
+  - `MarshalSequence(...any)` — reflection API (uses proposal 008's Marshal per item)
+- ~~Separate DecodeSequence~~: **Yes.** Needed for `[]byte`-oriented
+  code. Complements Stream (which is `io.Reader`-oriented). Both exist;
+  users pick based on their input source.
 
 ---
 

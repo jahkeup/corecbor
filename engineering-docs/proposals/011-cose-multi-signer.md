@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 011 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002 (closed) |
@@ -67,11 +67,17 @@ own protected headers (algorithm, kid, etc).
 
 ## Open questions
 
-- Should `VerifyMulti` require ALL signers to verify, or return
-  partial success (indices of verified)?
-- Should the API support adding a signature to an existing `Sign`
-  message (append-only signing)?
-- Countersignature support (RFC 9338)?
+**All resolved:**
+
+- ~~Partial vs all~~: **Partial success.** `VerifyMulti` returns indices
+  of verified signatures. Requiring ALL would break algorithm-agility
+  use cases (consumer verifies whichever algorithms they support).
+- ~~Append-only signing~~: **Yes.** `(*Sign).AddSignature(signer)` adds
+  a signature to an existing message. Enables notarization workflows
+  where multiple parties sign sequentially.
+- ~~Countersignatures~~: **Deferred.** RFC 9338 is complex and the old
+  mechanism (RFC 8152) was deprecated. File as a separate proposal if
+  demand materializes.
 
 ---
 

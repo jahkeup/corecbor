@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 013 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 009 (diagnostic notation library) |
@@ -107,11 +107,17 @@ then the error to stderr:
 
 ## Open questions
 
-- Should the tool support converting diagnostic notation BACK to
-  binary CBOR? (diag→cbor direction, like `diag2cbor.rb`)
-- Should it support JSON output mode for piping to jq?
-- Should it validate (well-formed, valid, expected) and report the
-  validation level?
+**All resolved:**
+
+- ~~Reverse direction (diag→cbor)~~: **Deferred.** Parsing diagnostic
+  notation is significantly harder than printing (requires a full
+  text parser for the notation grammar). File as separate proposal if
+  demand materializes.
+- ~~JSON output~~: **No.** Same as proposal 009 — diagnostic notation
+  is CBOR-native inspection format. JSON is a different domain.
+- ~~Validation levels~~: **Yes.** Add `-validate` flag that reports
+  alongside diagnostic output: `[well-formed]`, `[valid]`, or
+  specific issues (non-shortest, duplicate keys, etc.).
 
 ---
 

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 009 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (closed) |
@@ -91,11 +91,18 @@ Enable via option or CLI flag.
 
 ## Open questions
 
-- Should `Diagnostic` accept options (compact, encoding indicators,
-  max depth for truncation)? Or separate functions?
-- Should the CLI support output to JSON (for piping to jq)?
-- Should indefinite-length items show their chunked form or the
-  reassembled form in diagnostic output?
+**All resolved:**
+
+- ~~Options vs separate functions~~: **Single function with variadic
+  `DiagnosticOption`** (compact, indicators, max depth). One function,
+  composable options — matches the Encoder/Decoder pattern.
+- ~~JSON output~~: **No.** Diagnostic notation is its own format per
+  RFC 8949 §8. JSON conversion is a separate concern (jq operates on
+  JSON; CBOR diagnostic notation is for CBOR-native inspection).
+- ~~Indefinite-length display~~: **Reassembled form by default** (shows
+  the logical value after chunk concatenation). Optionally show chunked
+  form when encoding-indicators option is enabled (suffix `_` marks
+  indefinite origin).
 
 ---
 

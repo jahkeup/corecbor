@@ -1,6 +1,8 @@
 package corecbor
 
 import (
+	"sync"
+
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/rfc8949"
 )
@@ -17,6 +19,7 @@ const (
 type encodeConfig struct {
 	allowNonFiniteFloats bool
 	allowInvalidUTF8     bool
+	bufferPool           *sync.Pool
 }
 
 type Option func(*encodeConfig)
@@ -27,6 +30,10 @@ func AllowNonFiniteFloats() Option {
 
 func AllowInvalidUTF8() Option {
 	return func(c *encodeConfig) { c.allowInvalidUTF8 = true }
+}
+
+func WithBufferPool(p *sync.Pool) Option {
+	return func(c *encodeConfig) { c.bufferPool = p }
 }
 
 type Encoder struct {
@@ -44,6 +51,20 @@ func New(mode Mode, opts ...Option) *Encoder {
 
 func (e *Encoder) Encode(dst []byte, v cbor.Value) ([]byte, error) {
 	opts := e.encodeOpts()
+	if e.cfg.bufferPool != nil {
+		bp := e.cfg.bufferPool.Get().(*[]byte)
+		buf := (*bp)[:0]
+		buf, err := rfc8949.Encode(buf, v, opts)
+		if err != nil {
+			*bp = buf
+			e.cfg.bufferPool.Put(bp)
+			return dst, err
+		}
+		dst = append(dst, buf...)
+		*bp = buf
+		e.cfg.bufferPool.Put(bp)
+		return dst, nil
+	}
 	return rfc8949.Encode(dst, v, opts)
 }
 

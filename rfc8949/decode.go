@@ -9,6 +9,22 @@ import (
 	"github.com/jahkeup/corecbor/wire"
 )
 
+const uintCacheSize = 1024
+
+var (
+	uintCache   [uintCacheSize]cbor.Value
+	negintCache [256]cbor.Value
+)
+
+func init() {
+	for i := range uintCacheSize {
+		uintCache[i] = cbor.Uint(i)
+	}
+	for i := range 256 {
+		negintCache[i] = cbor.NegInt(i)
+	}
+}
+
 // DecodeOpts controls decoder strictness. Zero value is maximally
 // forgiving (accepts all well-formed CBOR).
 type DecodeOpts struct {
@@ -92,8 +108,14 @@ func decodeValue(src []byte, off, depth int, opts DecodeOpts, stripSelfDescribe 
 
 	switch h.Major {
 	case wire.MajorUint:
+		if h.Arg < uintCacheSize {
+			return uintCache[h.Arg], off + h.N, nil
+		}
 		return cbor.Uint(h.Arg), off + h.N, nil
 	case wire.MajorNegInt:
+		if h.Arg < 256 {
+			return negintCache[h.Arg], off + h.N, nil
+		}
 		return cbor.NegInt(h.Arg), off + h.N, nil
 	case wire.MajorBytes:
 		return decodeBytes(src, off, h, opts)
@@ -249,14 +271,102 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
-	arr := make(cbor.Array, 0, count)
+	arr := make(cbor.Array, count)
 	pos := off + h.N
-	for range count {
-		v, next, err := decodeValue(src, pos, depth+1, opts, false)
+	childDepth := depth + 1
+	if childDepth > opts.maxNesting() {
+		return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, pos)
+	}
+	if count == 0 {
+		return arr, pos, nil
+	}
+	srcLen := len(src)
+	_ = arr[count-1]
+	for i := range count {
+		if pos >= srcLen {
+			return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+		}
+		ib := src[pos]
+
+		if ib < 0x40 {
+			var arg uint64
+			var n int
+			ai := ib & 0x1f
+			switch {
+			case ai < 24:
+				arg = uint64(ai)
+				n = 1
+			case ai == 24:
+				if pos+1 >= srcLen {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+				}
+				arg = uint64(src[pos+1])
+				n = 2
+				if opts.RejectNonShortest && arg < 24 {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+				}
+			case ai == 25:
+				if pos+2 >= srcLen {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+				}
+				arg = uint64(src[pos+1])<<8 | uint64(src[pos+2])
+				n = 3
+				if opts.RejectNonShortest && arg <= 0xff {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+				}
+			case ai == 26:
+				if pos+4 >= srcLen {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+				}
+				arg = uint64(src[pos+1])<<24 | uint64(src[pos+2])<<16 | uint64(src[pos+3])<<8 | uint64(src[pos+4])
+				n = 5
+				if opts.RejectNonShortest && arg <= 0xffff {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+				}
+			case ai == 27:
+				if pos+8 >= srcLen {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+				}
+				arg = uint64(src[pos+1])<<56 | uint64(src[pos+2])<<48 | uint64(src[pos+3])<<40 | uint64(src[pos+4])<<32 |
+					uint64(src[pos+5])<<24 | uint64(src[pos+6])<<16 | uint64(src[pos+7])<<8 | uint64(src[pos+8])
+				n = 9
+				if opts.RejectNonShortest && arg <= 0xffffffff {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+				}
+			default:
+				if ai >= 28 && ai <= 30 {
+					return nil, pos, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, pos)
+				}
+				v, next, err := decodeValue(src, pos, childDepth, opts, false)
+				if err != nil {
+					return nil, next, err
+				}
+				arr[i] = v
+				pos = next
+				continue
+			}
+			if ib < 0x20 {
+				if arg < uintCacheSize {
+					arr[i] = uintCache[arg]
+				} else {
+					arr[i] = cbor.Uint(arg)
+				}
+			} else {
+				if arg < 256 {
+					arr[i] = negintCache[arg]
+				} else {
+					arr[i] = cbor.NegInt(arg)
+				}
+			}
+			pos += n
+			continue
+		}
+
+		v, next, err := decodeValue(src, pos, childDepth, opts, false)
 		if err != nil {
 			return nil, next, err
 		}
-		arr = append(arr, v)
+		arr[i] = v
 		pos = next
 	}
 	return arr, pos, nil

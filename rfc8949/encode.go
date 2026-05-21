@@ -5,11 +5,29 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/wire"
 )
+
+// sortState holds reusable buffers for deterministic map key sorting.
+// Pooled to eliminate per-encode allocations.
+type sortState struct {
+	entries []sortEntry
+	keyBuf  []byte
+}
+
+type sortEntry struct {
+	keyStart int
+	keyEnd   int
+	index    int
+}
+
+var sortStatePool = sync.Pool{
+	New: func() any { return &sortState{} },
+}
 
 // SortMode controls how map keys are ordered in deterministic encoding.
 type SortMode int
@@ -184,9 +202,6 @@ func appendShortestFloat(dst []byte, f float64, _ EncodeOpts) []byte {
 	return wire.AppendFloat64(dst, f)
 }
 
-// encodeMap encodes a CBOR map. In deterministic mode, keys are sorted by
-// bytewise-lexicographic comparison of their encoded forms without mutating
-// the input slice.
 func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	if !opts.Deterministic || len(m) <= 1 {
@@ -204,21 +219,30 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 		return dst, nil
 	}
 
-	// Phase 4 optimization: pool these buffers to reduce allocations.
-	type sortEntry struct {
-		encodedKey []byte
-		index      int
+	ss := sortStatePool.Get().(*sortState)
+	ss.keyBuf = ss.keyBuf[:0]
+	if cap(ss.entries) >= len(m) {
+		ss.entries = ss.entries[:len(m)]
+	} else {
+		ss.entries = make([]sortEntry, len(m))
 	}
-	entries := make([]sortEntry, len(m))
+
 	for i, entry := range m {
-		enc, err := encode(nil, entry.Key, opts)
+		start := len(ss.keyBuf)
+		var err error
+		ss.keyBuf, err = encode(ss.keyBuf, entry.Key, opts)
 		if err != nil {
+			sortStatePool.Put(ss)
 			return dst, err
 		}
-		entries[i] = sortEntry{encodedKey: enc, index: i}
+		ss.entries[i] = sortEntry{keyStart: start, keyEnd: len(ss.keyBuf), index: i}
 	}
+
+	keyBuf := ss.keyBuf
+	entries := ss.entries
 	sort.Slice(entries, func(i, j int) bool {
-		ei, ej := entries[i].encodedKey, entries[j].encodedKey
+		ei := keyBuf[entries[i].keyStart:entries[i].keyEnd]
+		ej := keyBuf[entries[j].keyStart:entries[j].keyEnd]
 		if opts.SortMode == SortLengthFirst {
 			if len(ei) != len(ej) {
 				return len(ei) < len(ej)
@@ -229,11 +253,13 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 
 	var err error
 	for _, se := range entries {
-		dst = append(dst, se.encodedKey...)
+		dst = append(dst, keyBuf[se.keyStart:se.keyEnd]...)
 		dst, err = encode(dst, m[se.index].Value, opts)
 		if err != nil {
+			sortStatePool.Put(ss)
 			return dst, err
 		}
 	}
+	sortStatePool.Put(ss)
 	return dst, nil
 }

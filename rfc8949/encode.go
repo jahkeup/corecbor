@@ -11,11 +11,50 @@ import (
 	"github.com/jahkeup/corecbor/wire"
 )
 
+// SortMode controls how map keys are ordered in deterministic encoding.
+type SortMode int
+
+const (
+	// SortBytewiseLex sorts keys by bytewise-lexicographic comparison of
+	// their encoded forms (RFC 8949 §4.2.1 Core Deterministic).
+	SortBytewiseLex SortMode = iota
+
+	// SortLengthFirst sorts keys by encoded key length first, then
+	// bytewise-lexicographic within same length (RFC 7049 §3.9 /
+	// RFC 8949 §4.2.3 old canonical CBOR).
+	SortLengthFirst
+)
+
+// FloatMode controls how floats are encoded in deterministic mode.
+type FloatMode int
+
+const (
+	// FloatShortest encodes in the shortest lossless IEEE 754 width
+	// (try f16→f32→f64). This is the Core Deterministic behavior.
+	FloatShortest FloatMode = iota
+
+	// FloatPreserve keeps the input width (Float32→32bit, Float64→64bit).
+	// This is the Permissive mode behavior.
+	FloatPreserve
+
+	// FloatForce64 always encodes as float64 (8 bytes). This is the
+	// CTAP2 requirement.
+	FloatForce64
+)
+
 // EncodeOpts controls encoder behavior.
 type EncodeOpts struct {
-	// Deterministic enables Core Deterministic Encoding (RFC 8949 §4.2.1):
-	// shortest float encoding, map keys sorted by encoded bytes.
+	// Deterministic enables deterministic encoding: map keys are sorted
+	// according to SortMode.
 	Deterministic bool
+
+	// SortMode selects the key sort algorithm in deterministic mode.
+	// Zero value (SortBytewiseLex) is RFC 8949 §4.2.1.
+	SortMode SortMode
+
+	// FloatMode selects the float encoding strategy. Zero value
+	// (FloatShortest) uses shortest lossless width in deterministic mode.
+	FloatMode FloatMode
 
 	// AllowNonFiniteFloats permits NaN and ±Infinity. In deterministic mode,
 	// NaN is normalized to the canonical half-precision 0xf97e00.
@@ -103,10 +142,17 @@ func encodeFloat32(dst []byte, val cbor.Float32, opts EncodeOpts) ([]byte, error
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return dst, fmt.Errorf("encode float32: %w", cbor.ErrNonFiniteFloat)
 	}
-	if opts.Deterministic {
-		return appendShortestFloat(dst, f, opts), nil
+	switch opts.FloatMode {
+	case FloatForce64:
+		return wire.AppendFloat64(dst, f), nil
+	case FloatShortest:
+		if opts.Deterministic {
+			return appendShortestFloat(dst, f, opts), nil
+		}
+		return wire.AppendFloat32(dst, float32(val)), nil
+	default:
+		return wire.AppendFloat32(dst, float32(val)), nil
 	}
-	return wire.AppendFloat32(dst, float32(val)), nil
 }
 
 func encodeFloat64(dst []byte, val cbor.Float64, opts EncodeOpts) ([]byte, error) {
@@ -114,10 +160,17 @@ func encodeFloat64(dst []byte, val cbor.Float64, opts EncodeOpts) ([]byte, error
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return dst, fmt.Errorf("encode float64: %w", cbor.ErrNonFiniteFloat)
 	}
-	if opts.Deterministic {
-		return appendShortestFloat(dst, f, opts), nil
+	switch opts.FloatMode {
+	case FloatForce64:
+		return wire.AppendFloat64(dst, f), nil
+	case FloatShortest:
+		if opts.Deterministic {
+			return appendShortestFloat(dst, f, opts), nil
+		}
+		return wire.AppendFloat64(dst, f), nil
+	default:
+		return wire.AppendFloat64(dst, f), nil
 	}
-	return wire.AppendFloat64(dst, f), nil
 }
 
 // appendShortestFloat encodes f in the shortest lossless IEEE 754 width.
@@ -165,7 +218,13 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 		entries[i] = sortEntry{encodedKey: enc, index: i}
 	}
 	sort.Slice(entries, func(i, j int) bool {
-		return bytes.Compare(entries[i].encodedKey, entries[j].encodedKey) < 0
+		ei, ej := entries[i].encodedKey, entries[j].encodedKey
+		if opts.SortMode == SortLengthFirst {
+			if len(ei) != len(ej) {
+				return len(ei) < len(ej)
+			}
+		}
+		return bytes.Compare(ei, ej) < 0
 	})
 
 	var err error

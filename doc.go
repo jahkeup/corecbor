@@ -7,13 +7,24 @@
 //   - [ModePermissive] (default): round-trip-safe preferred serialization
 //     (shortest argument encoding, input-width floats). Not byte-deterministic.
 //   - [ModeCoreDeterministic]: RFC 8949 §4.2.1 Core Deterministic Encoding —
-//     shortest float encoding, map keys sorted by encoded bytes. Byte-identical
-//     output for byte-identical input.
-//
-// Phase 2 adds Canonical (RFC 7049) and CTAP2 (FIDO/WebAuthn) modes.
+//     shortest float encoding, map keys sorted by encoded bytes (bytewise-lex).
+//   - [ModeCanonical]: RFC 7049 §3.9 / RFC 8949 §4.2.3 — shortest float
+//     encoding, map keys sorted length-first then bytewise-lex.
+//   - [ModeCTAP2]: FIDO/WebAuthn CTAP2 canonical — map keys sorted
+//     length-first, all floats forced to float64.
 //
 // Options [AllowNonFiniteFloats] and [AllowInvalidUTF8] relax the default
 // strict validation on the encoder side.
+//
+// # Streaming
+//
+// [Encoder.EncodeTo] writes a value directly to an [io.Writer].
+// [Encoder.Stream] returns a [StreamEncoder] for imperative construction
+// of arrays and maps without building a full value tree in memory.
+//
+// [Decoder.DecodeFrom] reads one value from an [io.Reader].
+// [Decoder.Stream] returns a [Stream] iterator for reading sequences of
+// concatenated CBOR values.
 //
 // # Decoder
 //

@@ -1,8 +1,6 @@
 package corecbor
 
 import (
-	"fmt"
-
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/rfc8949"
 )
@@ -12,6 +10,8 @@ type Mode int
 const (
 	ModePermissive        Mode = iota
 	ModeCoreDeterministic Mode = iota
+	ModeCanonical         Mode = iota
+	ModeCTAP2             Mode = iota
 )
 
 type encodeConfig struct {
@@ -43,16 +43,30 @@ func New(mode Mode, opts ...Option) *Encoder {
 }
 
 func (e *Encoder) Encode(dst []byte, v cbor.Value) ([]byte, error) {
+	opts := e.encodeOpts()
+	return rfc8949.Encode(dst, v, opts)
+}
+
+func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 	opts := rfc8949.EncodeOpts{
 		AllowNonFiniteFloats: e.cfg.allowNonFiniteFloats,
 		AllowInvalidUTF8:     e.cfg.allowInvalidUTF8,
 	}
 	switch e.mode {
 	case ModePermissive:
-		return rfc8949.Encode(dst, v, opts)
+		opts.FloatMode = rfc8949.FloatPreserve
 	case ModeCoreDeterministic:
-		return rfc8949.EncodeDeterministic(dst, v, opts)
-	default:
-		return dst, fmt.Errorf("encode: %w", cbor.ErrInvalidMode)
+		opts.Deterministic = true
+		opts.SortMode = rfc8949.SortBytewiseLex
+		opts.FloatMode = rfc8949.FloatShortest
+	case ModeCanonical:
+		opts.Deterministic = true
+		opts.SortMode = rfc8949.SortLengthFirst
+		opts.FloatMode = rfc8949.FloatShortest
+	case ModeCTAP2:
+		opts.Deterministic = true
+		opts.SortMode = rfc8949.SortLengthFirst
+		opts.FloatMode = rfc8949.FloatForce64
 	}
+	return opts
 }

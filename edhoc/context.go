@@ -1,10 +1,37 @@
 package edhoc
 
+import "fmt"
+
 type OSCOREContext struct {
 	MasterSecret []byte
 	MasterSalt   []byte
 	SenderID     []byte
 	RecipientID  []byte
+}
+
+// Export derives application keying material using the EDHOC Exporter.
+func (i *Initiator) Export(label int, context []byte, length int) ([]byte, error) {
+	if i.state != initiatorStateComplete {
+		return nil, ErrStateViolation
+	}
+	return edhocExport(i.prk4e3m, i.th4, label, context, length)
+}
+
+// Export derives application keying material using the EDHOC Exporter.
+func (r *Responder) Export(label int, context []byte, length int) ([]byte, error) {
+	if r.state != responderStateComplete {
+		return nil, ErrStateViolation
+	}
+	return edhocExport(r.prk4e3m, r.th4, label, context, length)
+}
+
+func edhocExport(prk, th4 []byte, label int, context []byte, length int) ([]byte, error) {
+	exportLabel := fmt.Sprintf("EDHOC_Exporter_%d", label)
+	info, err := encodeExporterInfo(th4, exportLabel, context, length)
+	if err != nil {
+		return nil, err
+	}
+	return hkdfExpand(prk, info, length)
 }
 
 func (i *Initiator) ExportOSCORE() (*OSCOREContext, error) {

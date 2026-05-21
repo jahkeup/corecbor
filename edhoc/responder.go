@@ -23,6 +23,10 @@ type ResponderConfig struct {
 	PrivateKey   crypto.Signer
 	PeerPublic   crypto.PublicKey
 	ConnectionID []byte
+
+	Credential     *Credential
+	PeerCredential *Credential
+	CWTIssuerKey   crypto.PublicKey
 }
 
 type Responder struct {
@@ -153,7 +157,13 @@ func (r *Responder) negotiateSuite(proposed []CipherSuite) (CipherSuite, bool) {
 }
 
 func (r *Responder) encryptMessage2() ([]byte, error) {
-	idCredR, err := encodeIDCredFromSigner(r.cfg.PrivateKey)
+	var idCredR []byte
+	var err error
+	if r.cfg.Credential != nil && r.cfg.Credential.Type == CredentialCWT {
+		idCredR, err = encodeIDCredCWT(r.cfg.Credential.CWTBytes)
+	} else {
+		idCredR, err = encodeIDCredFromSigner(r.cfg.PrivateKey)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -245,6 +255,37 @@ func (r *Responder) ProcessMessage3(msg3Raw []byte) error {
 	return nil
 }
 
+// CreateMessage4 creates an optional message_4 for explicit key confirmation.
+// Only callable after ProcessMessage3 succeeds (responder is in complete state).
+func (r *Responder) CreateMessage4() ([]byte, error) {
+	if r.state != responderStateComplete {
+		return nil, ErrStateViolation
+	}
+
+	k4, err := edhocKDF(r.prk4e3m, r.th4, "K_4", r.sp.AEADKeySize)
+	if err != nil {
+		return nil, err
+	}
+	iv4, err := edhocKDF(r.prk4e3m, r.th4, "IV_4", r.sp.AEADNonceLen)
+	if err != nil {
+		return nil, err
+	}
+
+	aead, err := aesccm.New(k4, r.sp.AEADTagSize, r.sp.AEADNonceLen)
+	if err != nil {
+		return nil, err
+	}
+
+	aad, err := encodeCBORArray(cbor.Bytes(r.th4))
+	if err != nil {
+		return nil, err
+	}
+
+	ciphertext4 := aead.Seal(nil, iv4, []byte{}, aad)
+
+	return cborEncodeValue(nil, cbor.Bytes(ciphertext4))
+}
+
 func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 	idCred, rest, err := decodeOneValue(plaintext3)
 	if err != nil {
@@ -274,7 +315,23 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 		return err
 	}
 
-	if err := verifySignature(r.cfg.PeerPublic, signedData, []byte(sigBytes)); err != nil {
+	peerPub := r.cfg.PeerPublic
+	if r.cfg.PeerCredential != nil && r.cfg.PeerCredential.Type == CredentialCWT {
+		cwtBytes, ok := idCred.(cbor.Bytes)
+		if !ok {
+			return fmt.Errorf("%w: CWT credential ID_CRED must be bstr", ErrMessageFormat)
+		}
+		issuerKey := r.cfg.CWTIssuerKey
+		if issuerKey == nil {
+			issuerKey = r.cfg.PeerPublic
+		}
+		peerPub, err = extractPublicKeyFromCWT([]byte(cwtBytes), issuerKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := verifySignature(peerPub, signedData, []byte(sigBytes)); err != nil {
 		return ErrAuthentication
 	}
 	return nil

@@ -28,6 +28,10 @@ type InitiatorConfig struct {
 	PrivateKey   crypto.Signer
 	PeerPublic   crypto.PublicKey
 	ConnectionID []byte
+
+	Credential     *Credential
+	PeerCredential *Credential
+	CWTIssuerKey   crypto.PublicKey
 }
 
 type Initiator struct {
@@ -159,6 +163,48 @@ func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 	return encodeMessage3(&message3{Ciphertext: msg3Ct})
 }
 
+// ProcessMessage4 verifies optional message_4 key confirmation from the responder.
+// Only callable after ProcessMessage2 succeeds (initiator is in complete state).
+func (i *Initiator) ProcessMessage4(msg4 []byte) error {
+	if i.state != initiatorStateComplete {
+		return ErrStateViolation
+	}
+
+	ct, _, err := decodeOneValue(msg4)
+	if err != nil {
+		return fmt.Errorf("%w: decoding message_4: %v", ErrMessageFormat, err)
+	}
+	ctBytes, ok := ct.(cbor.Bytes)
+	if !ok {
+		return fmt.Errorf("%w: message_4 must be bstr", ErrMessageFormat)
+	}
+
+	k4, err := edhocKDF(i.prk4e3m, i.th4, "K_4", i.sp.AEADKeySize)
+	if err != nil {
+		return err
+	}
+	iv4, err := edhocKDF(i.prk4e3m, i.th4, "IV_4", i.sp.AEADNonceLen)
+	if err != nil {
+		return err
+	}
+
+	aead, err := aesccm.New(k4, i.sp.AEADTagSize, i.sp.AEADNonceLen)
+	if err != nil {
+		return err
+	}
+
+	aad, err := encodeCBORArray(cbor.Bytes(i.th4))
+	if err != nil {
+		return err
+	}
+
+	if _, err := aead.Open(nil, iv4, []byte(ctBytes), aad); err != nil {
+		return fmt.Errorf("%w: message_4 verification failed: %v", ErrAuthentication, err)
+	}
+
+	return nil
+}
+
 func (i *Initiator) decryptMessage2(ciphertext []byte) ([]byte, error) {
 	k2e, err := edhocKDF(i.prk2e, i.th2, "K_2e", i.sp.AEADKeySize)
 	if err != nil {
@@ -215,14 +261,36 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 		return err
 	}
 
-	if err := verifySignature(i.cfg.PeerPublic, signedData, []byte(sigBytes)); err != nil {
+	peerPub := i.cfg.PeerPublic
+	if i.cfg.PeerCredential != nil && i.cfg.PeerCredential.Type == CredentialCWT {
+		cwtBytes, ok := idCred.(cbor.Bytes)
+		if !ok {
+			return fmt.Errorf("%w: CWT credential ID_CRED must be bstr", ErrMessageFormat)
+		}
+		issuerKey := i.cfg.CWTIssuerKey
+		if issuerKey == nil {
+			issuerKey = i.cfg.PeerPublic
+		}
+		peerPub, err = extractPublicKeyFromCWT([]byte(cwtBytes), issuerKey)
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := verifySignature(peerPub, signedData, []byte(sigBytes)); err != nil {
 		return ErrAuthentication
 	}
 	return nil
 }
 
 func (i *Initiator) encryptMessage3() ([]byte, error) {
-	idCredI, err := encodeIDCredFromSigner(i.cfg.PrivateKey)
+	var idCredI []byte
+	var err error
+	if i.cfg.Credential != nil && i.cfg.Credential.Type == CredentialCWT {
+		idCredI, err = encodeIDCredCWT(i.cfg.Credential.CWTBytes)
+	} else {
+		idCredI, err = encodeIDCredFromSigner(i.cfg.PrivateKey)
+	}
 	if err != nil {
 		return nil, err
 	}

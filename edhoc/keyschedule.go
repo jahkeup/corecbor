@@ -71,3 +71,21 @@ func edhocKDF(prk, transcriptHash []byte, label string, length int) ([]byte, err
 	}
 	return out, nil
 }
+
+func encodeExporterInfo(th4 []byte, label string, context []byte, length int) ([]byte, error) {
+	return encodeCBORArray(
+		cbor.Bytes(th4),
+		cbor.Text(label),
+		cbor.Bytes(context),
+		cbor.Uint(length),
+	)
+}
+
+func hkdfExpand(prk, info []byte, length int) ([]byte, error) {
+	r := hkdf.Expand(sha256.New, prk, info)
+	out := make([]byte, length)
+	if _, err := io.ReadFull(r, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}

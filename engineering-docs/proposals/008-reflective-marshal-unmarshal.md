@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 008 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (closed) |
@@ -280,29 +280,40 @@ var (
 
 ## Open questions
 
-- **`toarray` encoding**: Should `cbor:",toarray"` be a struct-level tag
-  (all fields positional) or per-field? Lean: struct-level, matching
-  fxamacker/cbor's convention. This is used for COSE structures that
-  are CBOR arrays, not maps.
+**All resolved:**
 
-- **Nil slice vs empty slice**: Should `Marshal([]int(nil))` produce
-  `Null` or empty array (`0x80`)? Both are defensible. Lean: empty
-  array (matches encoding/json behavior where nil slices → `[]`).
-  Document explicitly.
+- ~~Package placement~~: **Root package.** Reflect import is negligible;
+  Value-tree-only consumers use `cbor/` + `wire/` + `rfc8949/` directly.
 
-- **Map key types**: Which Go types are allowed as map keys? Only
-  `string`, `int*`, `uint*`? Or anything `comparable`? Lean:
-  string + integer types. Others return `ErrUnsupportedType`.
+- ~~Nil slice vs empty slice~~: **Empty array (`0x80`).** Matches
+  encoding/json precedent. `nil` map → `Null` (distinct semantics: a
+  map that doesn't exist vs an empty collection).
 
-- **Field ordering**: For deterministic output, should struct fields
-  be emitted in declaration order or sorted by key? Declaration order
-  is simpler and matches encoding/json. Sorted matches CBOR
-  deterministic requirements. Lean: declaration order in Permissive,
-  sorted in CoreDeterministic/Canonical/CTAP2 (consistent with how
-  Map entries are handled).
+- ~~Field ordering~~: **Sorted (deterministic) by default.** In
+  CoreDeterministic/Canonical/CTAP2, struct field keys are sorted by
+  their encoded CBOR form (mandatory per §4.2.1). In Permissive mode,
+  the default is ALSO sorted (predictable output), but callers can opt
+  into declaration order via `WithFieldOrder(OrderDeclaration)`:
 
-- **`encoding.TextMarshaler`/`TextUnmarshaler`**: Support as fallback
-  (marshal as Text, unmarshal from Text)? Lean: yes, for JSON compat.
+  ```go
+  // Default: sorted in all modes (deterministic, predictable)
+  enc := corecbor.New(corecbor.ModePermissive)
+  data, _ := enc.Marshal(myStruct) // keys sorted
+
+  // Opt-in: declaration order (only allowed in Permissive mode)
+  enc := corecbor.New(corecbor.ModePermissive, WithFieldOrder(OrderDeclaration))
+  data, _ := enc.Marshal(myStruct) // keys in struct declaration order
+
+  // Error: cannot use declaration order in deterministic modes
+  enc := corecbor.New(corecbor.ModeCoreDeterministic, WithFieldOrder(OrderDeclaration))
+  // → returns ErrInvalidMode on Marshal (deterministic requires sorted)
+  ```
+
+- ~~Map key types~~: `string`, `int*`, `uint*`. Others →
+  `ErrUnsupportedType`.
+
+- ~~`encoding.TextMarshaler`/`TextUnmarshaler`~~: Yes, supported as
+  fallback (marshals as Text string).
 
 ---
 

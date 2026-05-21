@@ -11,12 +11,12 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [002](002-cose-structures-and-signing.md) | 3 | Draft | COSE structures and cryptographic operations (RFC 9052 + RFC 9053) | corecbor maintainers | 001 | 2026-05-20 |
-| [003](003-cwt-cbor-web-tokens.md) | 3 | Draft | CWT: CBOR Web Tokens (RFC 8392) | corecbor maintainers | 001, 002 | 2026-05-20 |
-| [004](004-edhoc-key-exchange.md) | 3 | Draft | EDHOC: Ephemeral DH Over COSE (RFC 9528) | corecbor maintainers | 001, 002 | 2026-05-20 |
-| [005](005-eat-entity-attestation.md) | 3 | Draft | EAT: Entity Attestation Tokens (RFC 9711) | corecbor maintainers | 001, 002, 003 | 2026-05-20 |
-| [006](006-iana-registry-sync-codegen.md) | 2 | Draft | IANA CBOR registry sync, codegen, and embedding | corecbor maintainers | 001 | 2026-05-20 |
-| [007](007-cross-library-compatibility-testing.md) | 2 | Draft | Cross-library compatibility testing | corecbor maintainers | 001 | 2026-05-20 |
+| [002](002-cose-structures-and-signing.md) | 3 | Accepted | COSE structures and cryptographic operations (RFC 9052 + RFC 9053) | corecbor maintainers | 001 | 2026-05-20 |
+| [003](003-cwt-cbor-web-tokens.md) | 3 | Accepted | CWT: CBOR Web Tokens (RFC 8392) | corecbor maintainers | 001, 002 | 2026-05-20 |
+| [004](004-edhoc-key-exchange.md) | 3 | Accepted | EDHOC: Ephemeral DH Over COSE (RFC 9528) | corecbor maintainers | 001, 002 | 2026-05-20 |
+| [005](005-eat-entity-attestation.md) | 3 | Accepted | EAT: Entity Attestation Tokens (RFC 9711) | corecbor maintainers | 001, 002, 003 | 2026-05-20 |
+| [006](006-iana-registry-sync-codegen.md) | 2 | Accepted | IANA CBOR registry sync, codegen, and embedding | corecbor maintainers | 001 | 2026-05-20 |
+| [007](007-cross-library-compatibility-testing.md) | 2 | Accepted | Cross-library compatibility testing | corecbor maintainers | 001 | 2026-05-20 |
 
 ## Closed proposals
 

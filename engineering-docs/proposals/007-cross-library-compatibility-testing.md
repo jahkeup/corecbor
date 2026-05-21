@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 007 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 |

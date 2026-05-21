@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 002 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | Accepted |
 | **Filed** | 2026-05-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (Phase 1 — foundational primitives) |

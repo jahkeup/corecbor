@@ -1,5 +1,10 @@
 # corecbor
 
+> **Note:** This project was developed with the assistance of AI/LLM tools,
+> with the relevant IETF RFCs as primary reference material throughout.
+> All design decisions, code, and tests were validated against the
+> specifications directly.
+
 A strict-RFC-conformant CBOR encoder plus a forgiving CBOR decoder, with
 the same primitives serving both storage / cryptographic-AAD use cases
 and wire-protocol implementation use cases.

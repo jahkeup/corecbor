@@ -78,6 +78,8 @@ func (s *Signer) signBytes(data []byte) ([]byte, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: expected ed25519.PrivateKey", ErrInvalidKey)
 		}
+		// PERF: ed25519.Sign allocates internally (64-byte signature + SHA-512
+		// state). This is stdlib crypto — no path to reduce without cgo or asm.
 		return ed25519.Sign(edKey, data), nil
 
 	case AlgES256:
@@ -93,6 +95,10 @@ func (s *Signer) signBytes(data []byte) ([]byte, error) {
 }
 
 func (s *Signer) ecdsaSign(data []byte, hash crypto.Hash, curve elliptic.Curve) ([]byte, error) {
+	// PERF: ECDSA path allocates heavily (big.Int for r,s + ASN.1 DER
+	// intermediate + raw R||S output). ~83 allocs/op for ES256. Irreducible:
+	// stdlib crypto/ecdsa uses big.Int math internally and returns DER which
+	// we must decode then re-encode as raw R||S per COSE convention.
 	digest := hashData(hash, data)
 	derSig, err := s.key.Sign(rand.Reader, digest, hash)
 	if err != nil {

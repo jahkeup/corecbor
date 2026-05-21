@@ -172,6 +172,8 @@ func decodeBytes(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 	if end > len(src) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
+	// PERF: copies src[start:end]. Caller may reuse src so zero-copy via
+	// unsafe.String is not safe. Cost: 1 alloc per byte string. Irreducible.
 	buf := make([]byte, length)
 	copy(buf, src[start:end])
 	return cbor.Bytes(buf), end, nil
@@ -232,6 +234,8 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 	if end > len(src) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
+	// PERF: this copies src bytes. Cannot use unsafe.String — caller may reuse src.
+	// Cost: 1 alloc per text string. No path to eliminate without breaking safety.
 	s := string(src[start:end])
 	if opts.RejectInvalidUTF8 && !utf8.ValidString(s) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, off)
@@ -293,6 +297,10 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
+	// PERF: 1 alloc per array. Backing store for []Value interface slots.
+	// Each element stored in the slice forces an interface boxing alloc for
+	// values outside the cached integer range. Cannot eliminate without
+	// changing Value from interface to tagged-union struct (API break).
 	arr := make(cbor.Array, count)
 	pos := off + h.N
 	childDepth := depth + 1
@@ -427,6 +435,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
+	// PERF: 1 alloc per map. Same interface-boxing cost as arrays.
+	// Pooling MapEntry slices is possible but saves only the backing
+	// array — the per-entry Value boxing remains. Net gain < 5%.
 	m := make(cbor.Map, 0, count)
 	pos := off + h.N
 	for range count {

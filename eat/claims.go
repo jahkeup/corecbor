@@ -1,0 +1,285 @@
+package eat
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/jahkeup/corecbor"
+	"github.com/jahkeup/corecbor/cwt"
+)
+
+const (
+	claimNonce         = 10
+	claimUEID          = 256
+	claimOEMId         = 258
+	claimSecurityLevel = 261
+	claimSecureBoot    = 262
+	claimDebug         = 263
+	claimUptime        = 266
+)
+
+// SecurityLevel represents the EAT security level claim (RFC 9711 §4.3.1).
+type SecurityLevel int64
+
+const (
+	SecLevelUnrestricted    SecurityLevel = 1
+	SecLevelRestrictedOS    SecurityLevel = 2
+	SecLevelSecureRestricted SecurityLevel = 3
+	SecLevelHardware        SecurityLevel = 4
+)
+
+// DebugStatus represents the EAT debug status claim (RFC 9711 §4.3.3).
+type DebugStatus int64
+
+const (
+	DebugEnabled          DebugStatus = 0
+	DebugDisabled         DebugStatus = 1
+	DebugDisabledSince    DebugStatus = 2
+	DebugPermanentDisable DebugStatus = 3
+)
+
+// Claims represents an EAT claims set, extending CWT with attestation claims.
+type Claims struct {
+	cwt.ClaimsSet
+
+	Nonce         [][]byte
+	UEID          []byte
+	OEMId         []byte
+	SecurityLevel SecurityLevel
+	SecureBoot    *bool
+	Debug         DebugStatus
+	Uptime        *uint64
+}
+
+// Encode serializes the Claims as a CBOR map with integer keys.
+func (c *Claims) Encode() ([]byte, error) {
+	m := corecbor.Map{}
+
+	if c.Issuer != "" {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(1), Value: corecbor.Text(c.Issuer)})
+	}
+	if c.Subject != "" {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(2), Value: corecbor.Text(c.Subject)})
+	}
+	if c.Audience != "" {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(3), Value: corecbor.Text(c.Audience)})
+	}
+	if !c.Expiration.IsZero() {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(4), Value: corecbor.Uint(c.Expiration.Unix())})
+	}
+	if !c.NotBefore.IsZero() {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(5), Value: corecbor.Uint(c.NotBefore.Unix())})
+	}
+	if !c.IssuedAt.IsZero() {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(6), Value: corecbor.Uint(c.IssuedAt.Unix())})
+	}
+	if len(c.CWTID) > 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(7), Value: corecbor.Bytes(c.CWTID)})
+	}
+
+	if len(c.Nonce) > 0 {
+		if len(c.Nonce) == 1 {
+			m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimNonce), Value: corecbor.Bytes(c.Nonce[0])})
+		} else {
+			arr := make(corecbor.Array, len(c.Nonce))
+			for i, n := range c.Nonce {
+				arr[i] = corecbor.Bytes(n)
+			}
+			m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimNonce), Value: arr})
+		}
+	}
+	if len(c.UEID) > 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimUEID), Value: corecbor.Bytes(c.UEID)})
+	}
+	if len(c.OEMId) > 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimOEMId), Value: corecbor.Bytes(c.OEMId)})
+	}
+	if c.SecurityLevel != 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimSecurityLevel), Value: corecbor.Uint(int64(c.SecurityLevel))})
+	}
+	if c.SecureBoot != nil {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimSecureBoot), Value: corecbor.Bool(*c.SecureBoot)})
+	}
+	if c.Debug != 0 {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimDebug), Value: corecbor.Uint(int64(c.Debug))})
+	}
+	if c.Uptime != nil {
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimUptime), Value: corecbor.Uint(*c.Uptime)})
+	}
+
+	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	return enc.Encode(nil, m)
+}
+
+// DecodeClaims deserializes a CBOR-encoded map into EAT Claims.
+func DecodeClaims(data []byte) (*Claims, error) {
+	dec := corecbor.NewDecoder()
+	v, err := dec.Decode(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformedEAT, err)
+	}
+
+	m, ok := v.(corecbor.Map)
+	if !ok {
+		return nil, fmt.Errorf("%w: expected map, got %T", ErrMalformedEAT, v)
+	}
+
+	c := &Claims{}
+	for _, entry := range m {
+		keyInt, isInt := entryKeyInt(entry.Key)
+		if !isInt {
+			continue
+		}
+
+		switch keyInt {
+		case 1:
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
+				return nil, fmt.Errorf("%w: iss must be text", ErrMalformedEAT)
+			}
+			c.Issuer = string(t)
+		case 2:
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
+				return nil, fmt.Errorf("%w: sub must be text", ErrMalformedEAT)
+			}
+			c.Subject = string(t)
+		case 3:
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
+				return nil, fmt.Errorf("%w: aud must be text", ErrMalformedEAT)
+			}
+			c.Audience = string(t)
+		case 4:
+			ts, err := parseNumericDate(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: exp: %v", ErrMalformedEAT, err)
+			}
+			c.Expiration = ts
+		case 5:
+			ts, err := parseNumericDate(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: nbf: %v", ErrMalformedEAT, err)
+			}
+			c.NotBefore = ts
+		case 6:
+			ts, err := parseNumericDate(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: iat: %v", ErrMalformedEAT, err)
+			}
+			c.IssuedAt = ts
+		case 7:
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
+				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedEAT)
+			}
+			c.CWTID = []byte(b)
+		case claimNonce:
+			nonces, err := parseNonce(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %v", ErrMalformedEAT, err)
+			}
+			c.Nonce = nonces
+		case claimUEID:
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
+				return nil, fmt.Errorf("%w: UEID must be bytes", ErrMalformedEAT)
+			}
+			c.UEID = []byte(b)
+		case claimOEMId:
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
+				return nil, fmt.Errorf("%w: OEMId must be bytes", ErrMalformedEAT)
+			}
+			c.OEMId = []byte(b)
+		case claimSecurityLevel:
+			n, err := parseIntClaim(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: security-level: %v", ErrMalformedEAT, err)
+			}
+			c.SecurityLevel = SecurityLevel(n)
+		case claimSecureBoot:
+			b, ok := entry.Value.(corecbor.Bool)
+			if !ok {
+				return nil, fmt.Errorf("%w: secure-boot must be bool", ErrMalformedEAT)
+			}
+			bv := bool(b)
+			c.SecureBoot = &bv
+		case claimDebug:
+			n, err := parseIntClaim(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: debug: %v", ErrMalformedEAT, err)
+			}
+			c.Debug = DebugStatus(n)
+		case claimUptime:
+			n, err := parseUintClaim(entry.Value)
+			if err != nil {
+				return nil, fmt.Errorf("%w: uptime: %v", ErrMalformedEAT, err)
+			}
+			c.Uptime = &n
+		}
+	}
+
+	return c, nil
+}
+
+func parseNonce(v corecbor.Value) ([][]byte, error) {
+	switch x := v.(type) {
+	case corecbor.Bytes:
+		return [][]byte{[]byte(x)}, nil
+	case corecbor.Array:
+		nonces := make([][]byte, len(x))
+		for i, elem := range x {
+			b, ok := elem.(corecbor.Bytes)
+			if !ok {
+				return nil, fmt.Errorf("nonce array element %d must be bytes", i)
+			}
+			nonces[i] = []byte(b)
+		}
+		return nonces, nil
+	default:
+		return nil, fmt.Errorf("nonce must be bytes or array, got %T", v)
+	}
+}
+
+func parseIntClaim(v corecbor.Value) (int64, error) {
+	switch x := v.(type) {
+	case corecbor.Uint:
+		return int64(x), nil
+	case corecbor.NegInt:
+		return int64(x), nil
+	default:
+		return 0, fmt.Errorf("expected integer, got %T", v)
+	}
+}
+
+func parseUintClaim(v corecbor.Value) (uint64, error) {
+	switch x := v.(type) {
+	case corecbor.Uint:
+		return uint64(x), nil
+	default:
+		return 0, fmt.Errorf("expected unsigned integer, got %T", v)
+	}
+}
+
+func parseNumericDate(v corecbor.Value) (time.Time, error) {
+	switch x := v.(type) {
+	case corecbor.Uint:
+		return time.Unix(int64(x), 0), nil
+	case corecbor.NegInt:
+		return time.Unix(int64(x), 0), nil
+	default:
+		return time.Time{}, fmt.Errorf("expected numeric, got %T", v)
+	}
+}
+
+func entryKeyInt(key corecbor.Value) (int64, bool) {
+	switch k := key.(type) {
+	case corecbor.Uint:
+		return int64(k), true
+	case corecbor.NegInt:
+		return int64(k), true
+	default:
+		return 0, false
+	}
+}

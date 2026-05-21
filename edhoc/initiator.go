@@ -1,10 +1,15 @@
 package edhoc
 
 import (
+	"crypto"
 	"crypto/ecdh"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
+	"math/big"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/edhoc/internal/aesccm"
@@ -19,14 +24,16 @@ const (
 )
 
 type InitiatorConfig struct {
-	Suite        CipherSuite
-	PrivateKey   ed25519.PrivateKey
-	PeerPublic   ed25519.PublicKey
+	Suites       []CipherSuite
+	PrivateKey   crypto.Signer
+	PeerPublic   crypto.PublicKey
 	ConnectionID []byte
 }
 
 type Initiator struct {
 	cfg   InitiatorConfig
+	suite CipherSuite
+	sp    suiteParams
 	state initiatorState
 
 	ephPriv *ecdh.PrivateKey
@@ -45,7 +52,11 @@ type Initiator struct {
 }
 
 func NewInitiator(cfg InitiatorConfig) (*Initiator, error) {
-	if cfg.Suite != Suite0 {
+	if len(cfg.Suites) == 0 {
+		return nil, fmt.Errorf("%w: no suites specified", ErrUnsupportedSuite)
+	}
+	selectedSuite := cfg.Suites[0]
+	if !isSuiteSupported(selectedSuite) {
 		return nil, ErrUnsupportedSuite
 	}
 	if cfg.PrivateKey == nil || cfg.PeerPublic == nil {
@@ -63,6 +74,8 @@ func NewInitiator(cfg InitiatorConfig) (*Initiator, error) {
 
 	return &Initiator{
 		cfg:          cfg,
+		suite:        selectedSuite,
+		sp:           getSuiteParams(selectedSuite),
 		state:        initiatorStateInit,
 		connectionID: cid,
 	}, nil
@@ -73,7 +86,7 @@ func (i *Initiator) CreateMessage1() ([]byte, error) {
 		return nil, ErrStateViolation
 	}
 
-	ephPriv, err := ecdh.X25519().GenerateKey(rand.Reader)
+	ephPriv, err := i.sp.DHCurve.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -81,10 +94,11 @@ func (i *Initiator) CreateMessage1() ([]byte, error) {
 	i.ephPub = ephPriv.PublicKey()
 
 	msg := &message1{
-		Method: 0,
-		Suites: int64(i.cfg.Suite),
-		GX:     i.ephPub.Bytes(),
-		CI:     i.connectionID,
+		Method:    0,
+		Suites:    i.cfg.Suites,
+		SuitesSel: i.suite,
+		GX:        i.ephPub.Bytes(),
+		CI:        i.connectionID,
 	}
 
 	raw, err := encodeMessage1(msg)
@@ -107,7 +121,7 @@ func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 	}
 	i.peerConnID = msg2.CR
 
-	peerEph, err := ecdh.X25519().NewPublicKey(msg2.GY)
+	peerEph, err := i.sp.DHCurve.NewPublicKey(msg2.GY)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid G_Y: %v", ErrMessageFormat, err)
 	}
@@ -118,7 +132,7 @@ func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 	}
 
 	i.prk2e = extractPRK2e(sharedSecret)
-	i.prk3e2m = i.prk2e // method 0: no static DH
+	i.prk3e2m = i.prk2e
 	i.prk4e3m = i.prk2e
 
 	i.th2 = computeTH2(i.message1Raw, msg2.GY, msg2.CR)
@@ -146,21 +160,20 @@ func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 }
 
 func (i *Initiator) decryptMessage2(ciphertext []byte) ([]byte, error) {
-	k2e, err := edhocKDF(i.prk2e, i.th2, "K_2e", suite0AEADKeySize)
+	k2e, err := edhocKDF(i.prk2e, i.th2, "K_2e", i.sp.AEADKeySize)
 	if err != nil {
 		return nil, err
 	}
-	iv2e, err := edhocKDF(i.prk2e, i.th2, "IV_2e", suite0AEADNonceLen)
-	if err != nil {
-		return nil, err
-	}
-
-	aead, err := aesccm.New(k2e, suite0AEADTagSize, suite0AEADNonceLen)
+	iv2e, err := edhocKDF(i.prk2e, i.th2, "IV_2e", i.sp.AEADNonceLen)
 	if err != nil {
 		return nil, err
 	}
 
-	// AAD for message 2: CBOR encoding of [TH_2]
+	aead, err := aesccm.New(k2e, i.sp.AEADTagSize, i.sp.AEADNonceLen)
+	if err != nil {
+		return nil, err
+	}
+
 	aad, err := encodeCBORArray(cbor.Bytes(i.th2))
 	if err != nil {
 		return nil, err
@@ -174,9 +187,6 @@ func (i *Initiator) decryptMessage2(ciphertext []byte) ([]byte, error) {
 }
 
 func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
-	// plaintext2 = ID_CRED_R || Signature_or_MAC_2
-	// For RPK with method 0: ID_CRED_R is a CBOR map, signature is Ed25519 sig
-	// Simplified: we expect the plaintext to be CBOR sequence: credential_identifier, signature
 	idCred, rest, err := decodeOneValue(plaintext2)
 	if err != nil {
 		return fmt.Errorf("%w: decoding ID_CRED_R: %v", ErrMessageFormat, err)
@@ -191,13 +201,11 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 		return fmt.Errorf("%w: signature must be bstr", ErrMessageFormat)
 	}
 
-	// MAC_2 = EDHOC-KDF(PRK_3e2m, TH_2, "MAC_2", mac_length)
-	mac2, err := edhocKDF(i.prk3e2m, i.th2, "MAC_2", suite0AEADTagSize)
+	mac2, err := edhocKDF(i.prk3e2m, i.th2, "MAC_2", i.sp.AEADTagSize)
 	if err != nil {
 		return err
 	}
 
-	// Construct signed data: ["Signature1", ID_CRED_R, TH_2, MAC_2]
 	idCredEnc, err := cborEncodeValue(nil, idCred)
 	if err != nil {
 		return err
@@ -207,33 +215,32 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 		return err
 	}
 
-	if !ed25519.Verify(i.cfg.PeerPublic, signedData, []byte(sigBytes)) {
+	if err := verifySignature(i.cfg.PeerPublic, signedData, []byte(sigBytes)); err != nil {
 		return ErrAuthentication
 	}
 	return nil
 }
 
 func (i *Initiator) encryptMessage3() ([]byte, error) {
-	// ID_CRED_I: simplified as map {4: kid} where kid = public key bytes
-	idCredI, err := encodeIDCred(i.cfg.PrivateKey.Public().(ed25519.PublicKey))
+	idCredI, err := encodeIDCredFromSigner(i.cfg.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// MAC_3 = EDHOC-KDF(PRK_4e3m, TH_3, "MAC_3", mac_length)
-	mac3, err := edhocKDF(i.prk4e3m, i.th3, "MAC_3", suite0AEADTagSize)
+	mac3, err := edhocKDF(i.prk4e3m, i.th3, "MAC_3", i.sp.AEADTagSize)
 	if err != nil {
 		return nil, err
 	}
 
-	// Sign: Signature_or_MAC_3
 	signedData, err := buildSignStruct("Signature1", idCredI, i.th3, mac3)
 	if err != nil {
 		return nil, err
 	}
-	signature := ed25519.Sign(i.cfg.PrivateKey, signedData)
+	signature, err := computeSignature(i.cfg.PrivateKey, signedData)
+	if err != nil {
+		return nil, err
+	}
 
-	// Plaintext_3 = ID_CRED_I || Signature_or_MAC_3
 	var plaintext3 []byte
 	plaintext3 = append(plaintext3, idCredI...)
 	sigEnc, err := cborEncodeValue(nil, cbor.Bytes(signature))
@@ -242,17 +249,16 @@ func (i *Initiator) encryptMessage3() ([]byte, error) {
 	}
 	plaintext3 = append(plaintext3, sigEnc...)
 
-	// Encrypt
-	k3e, err := edhocKDF(i.prk3e2m, i.th3, "K_3e", suite0AEADKeySize)
+	k3e, err := edhocKDF(i.prk3e2m, i.th3, "K_3e", i.sp.AEADKeySize)
 	if err != nil {
 		return nil, err
 	}
-	iv3e, err := edhocKDF(i.prk3e2m, i.th3, "IV_3e", suite0AEADNonceLen)
+	iv3e, err := edhocKDF(i.prk3e2m, i.th3, "IV_3e", i.sp.AEADNonceLen)
 	if err != nil {
 		return nil, err
 	}
 
-	aead, err := aesccm.New(k3e, suite0AEADTagSize, suite0AEADNonceLen)
+	aead, err := aesccm.New(k3e, i.sp.AEADTagSize, i.sp.AEADNonceLen)
 	if err != nil {
 		return nil, err
 	}
@@ -265,9 +271,6 @@ func (i *Initiator) encryptMessage3() ([]byte, error) {
 	return aead.Seal(nil, iv3e, plaintext3, aad), nil
 }
 
-// buildSignStruct creates the Sig_structure for signing per COSE:
-// Sig_structure = ["Signature1", external_aad, payload]
-// In EDHOC context: ["Signature1", << ID_CRED >>, TH, MAC]
 func buildSignStruct(context string, idCred, th, mac []byte) ([]byte, error) {
 	return encodeCBORArray(
 		cbor.Text(context),
@@ -277,10 +280,71 @@ func buildSignStruct(context string, idCred, th, mac []byte) ([]byte, error) {
 	)
 }
 
-// encodeIDCred encodes the credential identifier as CBOR map {4: h'<pubkey>'}
-// (kid = key identifier, label 4 per COSE Header Parameters)
-func encodeIDCred(pub ed25519.PublicKey) ([]byte, error) {
+func encodeIDCred(pub []byte) ([]byte, error) {
 	return cborEncodeValue(nil, cbor.Map{
 		{Key: cbor.Uint(4), Value: cbor.Bytes(pub)},
 	})
+}
+
+func encodeIDCredFromSigner(signer crypto.Signer) ([]byte, error) {
+	pubBytes := marshalPublicKeyRaw(signer.Public())
+	return encodeIDCred(pubBytes)
+}
+
+func marshalPublicKeyRaw(pub crypto.PublicKey) []byte {
+	switch k := pub.(type) {
+	case ed25519.PublicKey:
+		return []byte(k)
+	case *ecdsa.PublicKey:
+		return elliptic.MarshalCompressed(k.Curve, k.X, k.Y)
+	default:
+		return nil
+	}
+}
+
+func computeSignature(signer crypto.Signer, data []byte) ([]byte, error) {
+	switch k := signer.(type) {
+	case ed25519.PrivateKey:
+		return ed25519.Sign(k, data), nil
+	case *ecdsa.PrivateKey:
+		hash := sha256.Sum256(data)
+		r, s, err := ecdsa.Sign(rand.Reader, k, hash[:])
+		if err != nil {
+			return nil, err
+		}
+		// Raw R||S format, each component zero-padded to 32 bytes for P-256
+		byteLen := (k.Curve.Params().BitSize + 7) / 8
+		sig := make([]byte, 2*byteLen)
+		rBytes := r.Bytes()
+		sBytes := s.Bytes()
+		copy(sig[byteLen-len(rBytes):byteLen], rBytes)
+		copy(sig[2*byteLen-len(sBytes):], sBytes)
+		return sig, nil
+	default:
+		return nil, fmt.Errorf("%w: unsupported signer type", ErrUnsupportedSuite)
+	}
+}
+
+func verifySignature(pub crypto.PublicKey, data, sig []byte) error {
+	switch k := pub.(type) {
+	case ed25519.PublicKey:
+		if !ed25519.Verify(k, data, sig) {
+			return ErrAuthentication
+		}
+		return nil
+	case *ecdsa.PublicKey:
+		hash := sha256.Sum256(data)
+		byteLen := (k.Curve.Params().BitSize + 7) / 8
+		if len(sig) != 2*byteLen {
+			return ErrAuthentication
+		}
+		r := new(big.Int).SetBytes(sig[:byteLen])
+		s := new(big.Int).SetBytes(sig[byteLen:])
+		if !ecdsa.Verify(k, hash[:], r, s) {
+			return ErrAuthentication
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: unsupported public key type", ErrUnsupportedSuite)
+	}
 }

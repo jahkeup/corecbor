@@ -1,8 +1,8 @@
 package edhoc
 
 import (
+	"crypto"
 	"crypto/ecdh"
-	"crypto/ed25519"
 	"crypto/rand"
 	"fmt"
 
@@ -19,14 +19,16 @@ const (
 )
 
 type ResponderConfig struct {
-	Suite        CipherSuite
-	PrivateKey   ed25519.PrivateKey
-	PeerPublic   ed25519.PublicKey
+	Suites       []CipherSuite
+	PrivateKey   crypto.Signer
+	PeerPublic   crypto.PublicKey
 	ConnectionID []byte
 }
 
 type Responder struct {
 	cfg   ResponderConfig
+	suite CipherSuite
+	sp    suiteParams
 	state responderState
 
 	ephPriv *ecdh.PrivateKey
@@ -47,8 +49,13 @@ type Responder struct {
 }
 
 func NewResponder(cfg ResponderConfig) (*Responder, error) {
-	if cfg.Suite != Suite0 {
-		return nil, ErrUnsupportedSuite
+	if len(cfg.Suites) == 0 {
+		return nil, fmt.Errorf("%w: no suites specified", ErrUnsupportedSuite)
+	}
+	for _, s := range cfg.Suites {
+		if !isSuiteSupported(s) {
+			return nil, ErrUnsupportedSuite
+		}
 	}
 	if cfg.PrivateKey == nil || cfg.PeerPublic == nil {
 		return nil, fmt.Errorf("%w: missing keys", ErrStateViolation)
@@ -83,11 +90,16 @@ func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	if msg1.Method != 0 {
 		return nil, fmt.Errorf("%w: unsupported method %d", ErrUnsupportedSuite, msg1.Method)
 	}
-	if CipherSuite(msg1.Suites) != Suite0 {
+
+	// Suite negotiation: find the first initiator-proposed suite we support
+	negotiated, ok := r.negotiateSuite(msg1.Suites)
+	if !ok {
 		return nil, ErrUnsupportedSuite
 	}
+	r.suite = negotiated
+	r.sp = getSuiteParams(negotiated)
 
-	peerEph, err := ecdh.X25519().NewPublicKey(msg1.GX)
+	peerEph, err := r.sp.DHCurve.NewPublicKey(msg1.GX)
 	if err != nil {
 		return nil, fmt.Errorf("%w: invalid G_X: %v", ErrMessageFormat, err)
 	}
@@ -95,7 +107,7 @@ func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	r.peerConnID = msg1.CI
 	r.message1Raw = msg1Raw
 
-	ephPriv, err := ecdh.X25519().GenerateKey(rand.Reader)
+	ephPriv, err := r.sp.DHCurve.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
@@ -129,14 +141,24 @@ func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	})
 }
 
+func (r *Responder) negotiateSuite(proposed []CipherSuite) (CipherSuite, bool) {
+	for _, ps := range proposed {
+		for _, rs := range r.cfg.Suites {
+			if ps == rs {
+				return ps, true
+			}
+		}
+	}
+	return 0, false
+}
+
 func (r *Responder) encryptMessage2() ([]byte, error) {
-	idCredR, err := encodeIDCred(r.cfg.PrivateKey.Public().(ed25519.PublicKey))
+	idCredR, err := encodeIDCredFromSigner(r.cfg.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 
-	// MAC_2 = EDHOC-KDF(PRK_3e2m, TH_2, "MAC_2", mac_length)
-	mac2, err := edhocKDF(r.prk3e2m, r.th2, "MAC_2", suite0AEADTagSize)
+	mac2, err := edhocKDF(r.prk3e2m, r.th2, "MAC_2", r.sp.AEADTagSize)
 	if err != nil {
 		return nil, err
 	}
@@ -145,9 +167,11 @@ func (r *Responder) encryptMessage2() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	signature := ed25519.Sign(r.cfg.PrivateKey, signedData)
+	signature, err := computeSignature(r.cfg.PrivateKey, signedData)
+	if err != nil {
+		return nil, err
+	}
 
-	// Plaintext_2 = ID_CRED_R || Signature_or_MAC_2
 	var plaintext2 []byte
 	plaintext2 = append(plaintext2, idCredR...)
 	sigEnc, err := cborEncodeValue(nil, cbor.Bytes(signature))
@@ -156,16 +180,16 @@ func (r *Responder) encryptMessage2() ([]byte, error) {
 	}
 	plaintext2 = append(plaintext2, sigEnc...)
 
-	k2e, err := edhocKDF(r.prk2e, r.th2, "K_2e", suite0AEADKeySize)
+	k2e, err := edhocKDF(r.prk2e, r.th2, "K_2e", r.sp.AEADKeySize)
 	if err != nil {
 		return nil, err
 	}
-	iv2e, err := edhocKDF(r.prk2e, r.th2, "IV_2e", suite0AEADNonceLen)
+	iv2e, err := edhocKDF(r.prk2e, r.th2, "IV_2e", r.sp.AEADNonceLen)
 	if err != nil {
 		return nil, err
 	}
 
-	aead, err := aesccm.New(k2e, suite0AEADTagSize, suite0AEADNonceLen)
+	aead, err := aesccm.New(k2e, r.sp.AEADTagSize, r.sp.AEADNonceLen)
 	if err != nil {
 		return nil, err
 	}
@@ -188,16 +212,16 @@ func (r *Responder) ProcessMessage3(msg3Raw []byte) error {
 		return err
 	}
 
-	k3e, err := edhocKDF(r.prk3e2m, r.th3, "K_3e", suite0AEADKeySize)
+	k3e, err := edhocKDF(r.prk3e2m, r.th3, "K_3e", r.sp.AEADKeySize)
 	if err != nil {
 		return err
 	}
-	iv3e, err := edhocKDF(r.prk3e2m, r.th3, "IV_3e", suite0AEADNonceLen)
+	iv3e, err := edhocKDF(r.prk3e2m, r.th3, "IV_3e", r.sp.AEADNonceLen)
 	if err != nil {
 		return err
 	}
 
-	aead, err := aesccm.New(k3e, suite0AEADTagSize, suite0AEADNonceLen)
+	aead, err := aesccm.New(k3e, r.sp.AEADTagSize, r.sp.AEADNonceLen)
 	if err != nil {
 		return err
 	}
@@ -236,7 +260,7 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 		return fmt.Errorf("%w: signature must be bstr", ErrMessageFormat)
 	}
 
-	mac3, err := edhocKDF(r.prk4e3m, r.th3, "MAC_3", suite0AEADTagSize)
+	mac3, err := edhocKDF(r.prk4e3m, r.th3, "MAC_3", r.sp.AEADTagSize)
 	if err != nil {
 		return err
 	}
@@ -250,7 +274,7 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 		return err
 	}
 
-	if !ed25519.Verify(r.cfg.PeerPublic, signedData, []byte(sigBytes)) {
+	if err := verifySignature(r.cfg.PeerPublic, signedData, []byte(sigBytes)); err != nil {
 		return ErrAuthentication
 	}
 	return nil

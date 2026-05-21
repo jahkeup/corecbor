@@ -18,10 +18,11 @@ func cborEncodeValue(buf []byte, v cbor.Value) ([]byte, error) {
 }
 
 type message1 struct {
-	Method int64
-	Suites int64
-	GX     []byte
-	CI     []byte
+	Method    int64
+	Suites    []CipherSuite // ordered preference; single suite encoded as int, multiple as array
+	SuitesSel CipherSuite   // selected suite (first element) used for DH
+	GX        []byte
+	CI        []byte
 }
 
 type message2 struct {
@@ -42,10 +43,12 @@ func encodeMessage1(m *message1) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: encoding method: %v", ErrMessageFormat, err)
 	}
-	buf, err = cborEncodeValue(buf, cbor.Uint(m.Suites))
+
+	buf, err = encodeSuites(buf, m.Suites)
 	if err != nil {
 		return nil, fmt.Errorf("%w: encoding suites: %v", ErrMessageFormat, err)
 	}
+
 	buf, err = cborEncodeValue(buf, cbor.Bytes(m.GX))
 	if err != nil {
 		return nil, fmt.Errorf("%w: encoding G_X: %v", ErrMessageFormat, err)
@@ -55,6 +58,44 @@ func encodeMessage1(m *message1) ([]byte, error) {
 		return nil, err
 	}
 	return buf, nil
+}
+
+func encodeSuites(buf []byte, suites []CipherSuite) ([]byte, error) {
+	if len(suites) == 1 {
+		return cborEncodeValue(buf, cbor.Uint(uint64(suites[0])))
+	}
+	arr := make(cbor.Array, len(suites))
+	for i, s := range suites {
+		arr[i] = cbor.Uint(uint64(s))
+	}
+	return cborEncodeValue(buf, arr)
+}
+
+func decodeSuites(data []byte) ([]CipherSuite, CipherSuite, []byte, error) {
+	v, rest, err := decodeOneValue(data)
+	if err != nil {
+		return nil, 0, nil, fmt.Errorf("%w: decoding suites: %v", ErrMessageFormat, err)
+	}
+	switch val := v.(type) {
+	case cbor.Uint:
+		s := CipherSuite(val)
+		return []CipherSuite{s}, s, rest, nil
+	case cbor.Array:
+		if len(val) == 0 {
+			return nil, 0, nil, fmt.Errorf("%w: empty suites array", ErrMessageFormat)
+		}
+		suites := make([]CipherSuite, len(val))
+		for i, item := range val {
+			u, ok := item.(cbor.Uint)
+			if !ok {
+				return nil, 0, nil, fmt.Errorf("%w: suite element must be uint", ErrMessageFormat)
+			}
+			suites[i] = CipherSuite(u)
+		}
+		return suites, suites[0], rest, nil
+	default:
+		return nil, 0, nil, fmt.Errorf("%w: suites must be uint or array", ErrMessageFormat)
+	}
 }
 
 func decodeMessage1(data []byte) (*message1, error) {
@@ -70,15 +111,12 @@ func decodeMessage1(data []byte) (*message1, error) {
 	}
 	m.Method = int64(methodUint)
 
-	suites, rest, err := decodeOneValue(rest)
+	suites, selected, rest, err := decodeSuites(rest)
 	if err != nil {
-		return nil, fmt.Errorf("%w: decoding suites: %v", ErrMessageFormat, err)
+		return nil, err
 	}
-	suitesUint, ok := suites.(cbor.Uint)
-	if !ok {
-		return nil, fmt.Errorf("%w: suites must be uint", ErrMessageFormat)
-	}
-	m.Suites = int64(suitesUint)
+	m.Suites = suites
+	m.SuitesSel = selected
 
 	gx, rest, err := decodeOneValue(rest)
 	if err != nil {

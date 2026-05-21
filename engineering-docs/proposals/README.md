@@ -11,6 +11,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
+| [008](008-reflective-marshal-unmarshal.md) | 1 | Draft | Reflective Marshal/Unmarshal API | corecbor maintainers | 001 | 2026-05-21 |
 
 _(none — all proposals closed)_
 
@@ -28,7 +29,7 @@ _(none — all proposals closed)_
 
 ## Numbering
 
-Next available proposal number: **008**
+Next available proposal number: **009**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than

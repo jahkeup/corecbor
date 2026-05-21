@@ -1,29 +1,1566 @@
 {
-  "fetched_at": "2026-05-20T00:00:00Z",
-  "source": "https://www.iana.org/assignments/cbor-tags/cbor-tags.xml",
+  "fetched_at": "2026-05-21T16:18:11Z",
+  "source": "https://www.iana.org/assignments/cbor-tags/tags.csv",
   "tags": [
-    {"tag": 0, "data_item": "text string", "semantics": "Standard date/time string; see Section 3.4.1 of RFC 8949", "reference": "RFC 8949"},
-    {"tag": 1, "data_item": "integer or float", "semantics": "Epoch-based date/time; see Section 3.4.2 of RFC 8949", "reference": "RFC 8949"},
-    {"tag": 2, "data_item": "byte string", "semantics": "Unsigned bignum; see Section 3.4.3 of RFC 8949", "reference": "RFC 8949"},
-    {"tag": 3, "data_item": "byte string", "semantics": "Negative bignum; see Section 3.4.3 of RFC 8949", "reference": "RFC 8949"},
-    {"tag": 4, "data_item": "array", "semantics": "Decimal fraction", "reference": "RFC 8949"},
-    {"tag": 5, "data_item": "array", "semantics": "Bigfloat", "reference": "RFC 8949"},
-    {"tag": 16, "data_item": "COSE_Encrypt0", "semantics": "COSE Single Recipient Encrypted Data Object", "reference": "RFC 9052"},
-    {"tag": 17, "data_item": "COSE_Mac0", "semantics": "COSE Mac w/o Recipients Object", "reference": "RFC 9052"},
-    {"tag": 18, "data_item": "COSE_Sign1", "semantics": "COSE Single Signer Data Object", "reference": "RFC 9052"},
-    {"tag": 21, "data_item": "multiple", "semantics": "Expected conversion to base64url encoding", "reference": "RFC 8949"},
-    {"tag": 22, "data_item": "multiple", "semantics": "Expected conversion to base64 encoding", "reference": "RFC 8949"},
-    {"tag": 23, "data_item": "multiple", "semantics": "Expected conversion to base16 encoding", "reference": "RFC 8949"},
-    {"tag": 24, "data_item": "byte string", "semantics": "Encoded CBOR data item", "reference": "RFC 8949"},
-    {"tag": 32, "data_item": "text string", "semantics": "URI", "reference": "RFC 8949"},
-    {"tag": 33, "data_item": "text string", "semantics": "base64url", "reference": "RFC 8949"},
-    {"tag": 34, "data_item": "text string", "semantics": "base64", "reference": "RFC 8949"},
-    {"tag": 35, "data_item": "text string", "semantics": "Regular expression", "reference": "RFC 7049"},
-    {"tag": 36, "data_item": "text string", "semantics": "MIME message", "reference": "RFC 7049"},
-    {"tag": 55799, "data_item": "multiple", "semantics": "Self-Described CBOR", "reference": "RFC 8949"},
-    {"tag": 96, "data_item": "COSE_Encrypt", "semantics": "COSE Encrypted Data Object", "reference": "RFC 9052"},
-    {"tag": 97, "data_item": "COSE_Mac", "semantics": "COSE MACed Data Object", "reference": "RFC 9052"},
-    {"tag": 98, "data_item": "COSE_Sign", "semantics": "COSE Signed Data Object", "reference": "RFC 9052"},
-    {"tag": 258, "data_item": "array", "semantics": "Mathematical finite set", "reference": "RFC 9557"}
+    {
+      "tag": 0,
+      "data_item": "text string",
+      "semantics": "Standard date/time string; see Section 3.4.1",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 1,
+      "data_item": "integer or float",
+      "semantics": "Epoch-based date/time; see Section 3.4.2",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 2,
+      "data_item": "byte string",
+      "semantics": "Unsigned bignum; see Section 3.4.3",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 3,
+      "data_item": "byte string",
+      "semantics": "Negative bignum; see Section 3.4.3",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 4,
+      "data_item": "array",
+      "semantics": "Decimal fraction; see Section 3.4.4",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 5,
+      "data_item": "array",
+      "semantics": "Bigfloat; see Section 3.4.4",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 16,
+      "data_item": "COSE_Encrypt0",
+      "semantics": "COSE Single Recipient Encrypted Data Object",
+      "reference": "[RFC9052]"
+    },
+    {
+      "tag": 17,
+      "data_item": "COSE_Mac0",
+      "semantics": "COSE Mac w/o Recipients Object",
+      "reference": "[RFC9052]"
+    },
+    {
+      "tag": 18,
+      "data_item": "COSE_Sign1",
+      "semantics": "COSE Single Signer Data Object",
+      "reference": "[RFC9052]"
+    },
+    {
+      "tag": 19,
+      "data_item": "COSE_Countersignature",
+      "semantics": "COSE standalone V2 countersignature",
+      "reference": "[RFC9338]"
+    },
+    {
+      "tag": 21,
+      "data_item": "(any)",
+      "semantics": "Expected conversion to base64url encoding; see Section 3.4.5.2",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 22,
+      "data_item": "(any)",
+      "semantics": "Expected conversion to base64 encoding; see Section 3.4.5.2",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 23,
+      "data_item": "(any)",
+      "semantics": "Expected conversion to base16 encoding; see Section 3.4.5.2",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 24,
+      "data_item": "byte string",
+      "semantics": "Encoded CBOR data item; see Section 3.4.5.1",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 25,
+      "data_item": "unsigned integer",
+      "semantics": "reference the nth previously seen string",
+      "reference": "[http://cbor.schmorp.de/stringref][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 26,
+      "data_item": "array",
+      "semantics": "Serialised Perl object with classname and constructor arguments",
+      "reference": "[http://cbor.schmorp.de/perl-object][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 27,
+      "data_item": "array",
+      "semantics": "Serialised language-independent object with type name and constructor arguments",
+      "reference": "[http://cbor.schmorp.de/generic-object][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 28,
+      "data_item": "multiple",
+      "semantics": "mark value as (potentially) shared",
+      "reference": "[http://cbor.schmorp.de/value-sharing][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 29,
+      "data_item": "unsigned integer",
+      "semantics": "reference nth marked value",
+      "reference": "[http://cbor.schmorp.de/value-sharing][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 30,
+      "data_item": "array",
+      "semantics": "Rational number",
+      "reference": "[http://peteroupc.github.io/CBOR/rational.html][Peter_Occil]"
+    },
+    {
+      "tag": 31,
+      "data_item": "Undefined (0xf7)",
+      "semantics": "Absent value in a CBOR Array",
+      "reference": "[https://github.com/svaarala/cbor-specs/blob/master/cbor-absent-tag.rst][Sami_Vaarala]"
+    },
+    {
+      "tag": 32,
+      "data_item": "text string",
+      "semantics": "URI; see Section 3.4.5.3",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 33,
+      "data_item": "text string",
+      "semantics": "base64url; see Section 3.4.5.3",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 34,
+      "data_item": "text string",
+      "semantics": "base64; see Section 3.4.5.3",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 35,
+      "data_item": "UTF-8 string",
+      "semantics": "Regular expression; see Section 2.4.4.3",
+      "reference": "[RFC7049]"
+    },
+    {
+      "tag": 36,
+      "data_item": "text string",
+      "semantics": "MIME message; see Section 3.4.5.3",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 37,
+      "data_item": "byte string",
+      "semantics": "Binary UUID ([RFC9562, Section 4])",
+      "reference": "[https://github.com/lucas-clemente/cbor-specs/blob/master/uuid.md][Lucas_Clemente]"
+    },
+    {
+      "tag": 38,
+      "data_item": "array",
+      "semantics": "Language-tagged string",
+      "reference": "[RFC9290, Appendix A]"
+    },
+    {
+      "tag": 39,
+      "data_item": "multiple",
+      "semantics": "Identifier",
+      "reference": "[https://github.com/lucas-clemente/cbor-specs/blob/master/id.md][Lucas_Clemente]"
+    },
+    {
+      "tag": 40,
+      "data_item": "array of two arrays [1]",
+      "semantics": "Multi-dimensional Array, row-major order",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 41,
+      "data_item": "array",
+      "semantics": "Homogeneous Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 42,
+      "data_item": "byte string",
+      "semantics": "IPLD content identifier",
+      "reference": "[https://github.com/ipld/cid-cbor/][Volker_Mische]"
+    },
+    {
+      "tag": 43,
+      "data_item": "text string",
+      "semantics": "YANG bits datatype; see Section 6.7.",
+      "reference": "[RFC9254]"
+    },
+    {
+      "tag": 44,
+      "data_item": "text string",
+      "semantics": "YANG enumeration datatype; see Section 6.6.",
+      "reference": "[RFC9254]"
+    },
+    {
+      "tag": 45,
+      "data_item": "unsigned integer or text string",
+      "semantics": "YANG identityref datatype; see Section 6.10.",
+      "reference": "[RFC9254]"
+    },
+    {
+      "tag": 46,
+      "data_item": "unsigned integer or text string or array",
+      "semantics": "YANG instance-identifier datatype; see Section 6.13.",
+      "reference": "[RFC9254]"
+    },
+    {
+      "tag": 47,
+      "data_item": "unsigned integer",
+      "semantics": "YANG Schema Item iDentifier (sid); see Section 3.2.",
+      "reference": "[RFC9254]"
+    },
+    {
+      "tag": 48,
+      "data_item": "byte string",
+      "semantics": "IEEE MAC Address",
+      "reference": "[RFC9542]"
+    },
+    {
+      "tag": 52,
+      "data_item": "byte string or array",
+      "semantics": "IPv4, [prefixlen,IPv4], [IPv4,prefixpart]",
+      "reference": "[RFC9164]"
+    },
+    {
+      "tag": 54,
+      "data_item": "byte string or array",
+      "semantics": "IPv6, [prefixlen,IPv6], [IPv6,prefixpart]",
+      "reference": "[RFC9164]"
+    },
+    {
+      "tag": 58,
+      "data_item": "(any)",
+      "semantics": "An array claim element intended to be redacted, or a map key whose key and value are intended to be redacted. (TEMPORARY - registered 2025-12-09, expires 2026-12-09)",
+      "reference": "[draft-ietf-spice-sd-cwt-06, Section 11.1]"
+    },
+    {
+      "tag": 60,
+      "data_item": "byte string",
+      "semantics": "A selective disclosure redacted (array) claim element. (TEMPORARY - registered 2025-12-09, expires 2026-12-09)",
+      "reference": "[draft-ietf-spice-sd-cwt-06, Section 5.1]"
+    },
+    {
+      "tag": 61,
+      "data_item": "CBOR Web Token (CWT)",
+      "semantics": "CBOR Web Token (CWT)",
+      "reference": "[RFC8392][Michael_B._Jones]"
+    },
+    {
+      "tag": 62,
+      "data_item": "uint .gt 0",
+      "semantics": "A marker of a location in a map or an array where a decoy is intended to be inserted. (TEMPORARY - registered 2026-01-27, expires 2027-01-27)",
+      "reference": "[draft-ietf-spice-sd-cwt-06, Section 11.2]"
+    },
+    {
+      "tag": 63,
+      "data_item": "byte string",
+      "semantics": "Encoded CBOR Sequence [RFC8742]",
+      "reference": "[draft-bormann-cbor-notable-tags-02, Section 2.1]"
+    },
+    {
+      "tag": 64,
+      "data_item": "byte string",
+      "semantics": "uint8 Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 65,
+      "data_item": "byte string",
+      "semantics": "uint16, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 66,
+      "data_item": "byte string",
+      "semantics": "uint32, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 67,
+      "data_item": "byte string",
+      "semantics": "uint64, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 68,
+      "data_item": "byte string",
+      "semantics": "uint8 Typed Array, clamped arithmetic",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 69,
+      "data_item": "byte string",
+      "semantics": "uint16, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 70,
+      "data_item": "byte string",
+      "semantics": "uint32, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 71,
+      "data_item": "byte string",
+      "semantics": "uint64, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 72,
+      "data_item": "byte string",
+      "semantics": "sint8 Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 73,
+      "data_item": "byte string",
+      "semantics": "sint16, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 74,
+      "data_item": "byte string",
+      "semantics": "sint32, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 75,
+      "data_item": "byte string",
+      "semantics": "sint64, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 76,
+      "data_item": "byte string",
+      "semantics": "(reserved)",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 77,
+      "data_item": "byte string",
+      "semantics": "sint16, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 78,
+      "data_item": "byte string",
+      "semantics": "sint32, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 79,
+      "data_item": "byte string",
+      "semantics": "sint64, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 80,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary16, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 81,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary32, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 82,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary64, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 83,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary128, big endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 84,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary16, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 85,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary32, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 86,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary64, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 87,
+      "data_item": "byte string",
+      "semantics": "IEEE 754 binary128, little endian, Typed Array",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 96,
+      "data_item": "COSE_Encrypt",
+      "semantics": "COSE Encrypted Data Object",
+      "reference": "[RFC9052]"
+    },
+    {
+      "tag": 97,
+      "data_item": "COSE_Mac",
+      "semantics": "COSE MACed Data Object",
+      "reference": "[RFC9052]"
+    },
+    {
+      "tag": 98,
+      "data_item": "COSE_Sign",
+      "semantics": "COSE Signed Data Object",
+      "reference": "[RFC9052]"
+    },
+    {
+      "tag": 99,
+      "data_item": "array",
+      "semantics": "CRI Reference",
+      "reference": "[RFC-ietf-core-href-29]"
+    },
+    {
+      "tag": 100,
+      "data_item": "Unsigned or negative integer",
+      "semantics": "Number of days since the epoch date 1970-01-01",
+      "reference": "[RFC8943]"
+    },
+    {
+      "tag": 101,
+      "data_item": "array [uint, any]",
+      "semantics": "alternatives as given by the uint + 128; see Section 9.1",
+      "reference": "[draft-bormann-cbor-notable-tags-07]"
+    },
+    {
+      "tag": 103,
+      "data_item": "array",
+      "semantics": "Geographic Coordinates",
+      "reference": "[https://github.com/allthingstalk/cbor/blob/master/CBOR-Tag103-Geographic-Coordinates.md][Danilo_Vidovic]"
+    },
+    {
+      "tag": 104,
+      "data_item": "multiple",
+      "semantics": "Geographic Coordinate Reference System WKT or EPSG number",
+      "reference": "[draft-clarke-cbor-crs-01]"
+    },
+    {
+      "tag": 107,
+      "data_item": "map",
+      "semantics": "SUIT_Envelope as defined in Appendix A of [RFC-ietf-suit-manifest-34]",
+      "reference": "[RFC-ietf-suit-manifest-34]"
+    },
+    {
+      "tag": 108,
+      "data_item": "byte string",
+      "semantics": "Expected conversion to base16 encoding (lowercase)",
+      "reference": "[draft-bormann-cbor-notable-tags-12, Section 2.1, Paragraph 2, Item 2]"
+    },
+    {
+      "tag": 110,
+      "data_item": "byte string, array, or map",
+      "semantics": "relative object identifier (BER encoding); SDNV [RFC6256] sequence",
+      "reference": "[RFC9090]"
+    },
+    {
+      "tag": 111,
+      "data_item": "byte string, array, or map",
+      "semantics": "object identifier (BER encoding)",
+      "reference": "[RFC9090]"
+    },
+    {
+      "tag": 112,
+      "data_item": "byte string, array, or map",
+      "semantics": "object identifier (BER encoding), relative to 1.3.6.1.4.1",
+      "reference": "[RFC9090]"
+    },
+    {
+      "tag": 120,
+      "data_item": "multiple",
+      "semantics": "Internet of Things Data Point",
+      "reference": "[https://github.com/allthingstalk/cbor/blob/master/CBOR-Tag120-Internet-of-Things-Data-Points.md][Danilo_Vidovic]"
+    },
+    {
+      "tag": 200,
+      "data_item": "multiple",
+      "semantics": "Gordian Envelope",
+      "reference": "[draft-mcnally-envelope-05]"
+    },
+    {
+      "tag": 201,
+      "data_item": "any",
+      "semantics": "enclosed dCBOR",
+      "reference": "[draft-mcnally-deterministic-cbor-10]"
+    },
+    {
+      "tag": 256,
+      "data_item": "multiple",
+      "semantics": "mark value as having string references",
+      "reference": "[http://cbor.schmorp.de/stringref][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 257,
+      "data_item": "byte string",
+      "semantics": "Binary MIME message",
+      "reference": "[http://peteroupc.github.io/CBOR/binarymime.html][Peter_Occil]"
+    },
+    {
+      "tag": 258,
+      "data_item": "array",
+      "semantics": "Mathematical finite set",
+      "reference": "[https://github.com/input-output-hk/cbor-sets-spec/blob/master/CBOR_SETS.md][Alfredo_Di_Napoli]"
+    },
+    {
+      "tag": 259,
+      "data_item": "map",
+      "semantics": "Map datatype with key-value operations (e.g. `.get()/.set()/.delete()`)",
+      "reference": "[https://github.com/shanewholloway/js-cbor-codec/blob/master/docs/CBOR-259-spec--explicit-maps.md][Shane_Holloway]"
+    },
+    {
+      "tag": 260,
+      "data_item": "byte string",
+      "semantics": "Network Address (IPv4 or IPv6 or MAC Address) (DEPRECATED in favor of 52 and 54\n        for IP addresses)",
+      "reference": "[http://www.employees.org/~ravir/cbor-network.txt][Ravi_Raju][RFC9164]"
+    },
+    {
+      "tag": 261,
+      "data_item": "map (IPAddress + Mask Length)",
+      "semantics": "Network Address Prefix (IPv4 or IPv6 Address + Mask Length) (DEPRECATED in favor of 52 and 54\n        for IP addresses)",
+      "reference": "[https://github.com/toravir/CBOR-Tag-Specs/blob/master/networkPrefix.md][Ravi_Raju][RFC9164]"
+    },
+    {
+      "tag": 262,
+      "data_item": "byte string",
+      "semantics": "Embedded JSON Object",
+      "reference": "[https://github.com/toravir/CBOR-Tag-Specs/blob/master/embeddedJSON.md][Ravi_Raju]"
+    },
+    {
+      "tag": 263,
+      "data_item": "byte string",
+      "semantics": "Hexadecimal string",
+      "reference": "[https://github.com/toravir/CBOR-Tag-Specs/blob/master/hexString.md][Ravi_Raju]"
+    },
+    {
+      "tag": 264,
+      "data_item": "array",
+      "semantics": "Decimal fraction with arbitrary exponent",
+      "reference": "[http://peteroupc.github.io/CBOR/bigfrac.html][Peter_Occil]"
+    },
+    {
+      "tag": 265,
+      "data_item": "array",
+      "semantics": "Bigfloat with arbitrary exponent",
+      "reference": "[http://peteroupc.github.io/CBOR/bigfrac.html][Peter_Occil]"
+    },
+    {
+      "tag": 266,
+      "data_item": "text string",
+      "semantics": "Internationalized resource identifier (IRI)",
+      "reference": "[https://peteroupc.github.io/CBOR/iri.html][Peter_Occil]"
+    },
+    {
+      "tag": 267,
+      "data_item": "text string",
+      "semantics": "Internationalized resource identifier reference (IRI reference)",
+      "reference": "[https://peteroupc.github.io/CBOR/iri.html][Peter_Occil]"
+    },
+    {
+      "tag": 268,
+      "data_item": "array",
+      "semantics": "Extended decimal fraction",
+      "reference": "[https://peteroupc.github.io/CBOR/extended.html][Peter_Occil]"
+    },
+    {
+      "tag": 269,
+      "data_item": "array",
+      "semantics": "Extended bigfloat",
+      "reference": "[https://peteroupc.github.io/CBOR/extended.html][Peter_Occil]"
+    },
+    {
+      "tag": 270,
+      "data_item": "array",
+      "semantics": "Extended rational number",
+      "reference": "[https://peteroupc.github.io/CBOR/extended.html][Peter_Occil]"
+    },
+    {
+      "tag": 271,
+      "data_item": "DDoS Open Threat Signaling (DOTS) signal channel object",
+      "semantics": "DDoS Open Threat Signaling (DOTS) signal channel object, as defined in [RFC9132]",
+      "reference": "[RFC9132]"
+    },
+    {
+      "tag": 272,
+      "data_item": "byte string",
+      "semantics": "Non-UTF-8 CESU-8 string",
+      "reference": "[https://github.com/svaarala/cbor-specs/blob/master/cbor-nonutf8-string-tags.rst][Sami_Vaarala]"
+    },
+    {
+      "tag": 273,
+      "data_item": "byte string",
+      "semantics": "Non-UTF-8 WTF-8 string",
+      "reference": "[https://github.com/svaarala/cbor-specs/blob/master/cbor-nonutf8-string-tags.rst][Sami_Vaarala]"
+    },
+    {
+      "tag": 274,
+      "data_item": "byte string",
+      "semantics": "Non-UTF-8 MUTF-8 string",
+      "reference": "[https://github.com/svaarala/cbor-specs/blob/master/cbor-nonutf8-string-tags.rst][Sami_Vaarala]"
+    },
+    {
+      "tag": 275,
+      "data_item": "map (major type 5)",
+      "semantics": "Map contains only keys that are of type Text String (major type 3)",
+      "reference": "[https://github.com/ecorm/cbor-tag-text-key-map][Emile_Cormier]"
+    },
+    {
+      "tag": 276,
+      "data_item": "byte string",
+      "semantics": "ERIS binary read capability",
+      "reference": "[http://purl.org/eris]"
+    },
+    {
+      "tag": 277,
+      "data_item": "byte string",
+      "semantics": "Universal Geographical Area Description (GAD) shape; see Section 5",
+      "reference": "[TS 23.032][Mathew_Meins]"
+    },
+    {
+      "tag": 278,
+      "data_item": "byte string",
+      "semantics": "Universal Geographical Area Description (GAD) description of velocity; see Section 8",
+      "reference": "[TS 23.032][Mathew_Meins]"
+    },
+    {
+      "tag": 279,
+      "data_item": "array",
+      "semantics": "Coordinate Reference System Wrapper",
+      "reference": "[Fast and Readable Geographical Hashing (CTA-5009-A)][Consumer_Technology_Association]"
+    },
+    {
+      "tag": 280,
+      "data_item": "string or array",
+      "semantics": "Symbol",
+      "reference": "[https://github.com/mishoo/cbor.lisp/blob/e1428a5/clext-spec.txt][Mihai_Bazon]"
+    },
+    {
+      "tag": 281,
+      "data_item": "array",
+      "semantics": "Linked list",
+      "reference": "[https://github.com/mishoo/cbor.lisp/blob/e1428a5/clext-spec.txt][Mihai_Bazon]"
+    },
+    {
+      "tag": 282,
+      "data_item": "unsigned integer",
+      "semantics": "Character",
+      "reference": "[https://github.com/mishoo/cbor.lisp/blob/e1428a5/clext-spec.txt][Mihai_Bazon]"
+    },
+    {
+      "tag": 283,
+      "data_item": "array",
+      "semantics": "Object",
+      "reference": "[https://github.com/mishoo/cbor.lisp/blob/e1428a5/clext-spec.txt][Mihai_Bazon]"
+    },
+    {
+      "tag": 284,
+      "data_item": "text string or byte string",
+      "semantics": "JSON Numeric Value, Represented as its JSON Text",
+      "reference": "[https://gist.github.com/theory/ef667af1c725240e6e30d525786d58e6][David_Wheeler]"
+    },
+    {
+      "tag": 285,
+      "data_item": "array",
+      "semantics": "SUIT_Report_Protected",
+      "reference": "[RFC-ietf-suit-report-19]"
+    },
+    {
+      "tag": 286,
+      "data_item": "array",
+      "semantics": "SUIT_Reference",
+      "reference": "[RFC-ietf-suit-report-19]"
+    },
+    {
+      "tag": 287,
+      "data_item": "map",
+      "semantics": "SUIT_Capability_Report",
+      "reference": "[RFC-ietf-suit-report-19]"
+    },
+    {
+      "tag": 296,
+      "data_item": "any",
+      "semantics": "isolate shared values within this scope",
+      "reference": "[https://cbor.is4.site/sharedref-namespace][IS4]"
+    },
+    {
+      "tag": 301,
+      "data_item": "text string or array",
+      "semantics": "Geohash String",
+      "reference": "[Fast and Readable Geographical Hashing (CTA-5009-A)][Consumer_Technology_Association]"
+    },
+    {
+      "tag": 500,
+      "data_item": "any",
+      "semantics": "Earmarked for CoRIM",
+      "reference": "[draft-ietf-rats-corim-07]"
+    },
+    {
+      "tag": 501,
+      "data_item": "map",
+      "semantics": "A CBOR tag that contains a corim-map.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 505,
+      "data_item": "bytes",
+      "semantics": "A CBOR tag that contains a conciseswid-tag-map.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 506,
+      "data_item": "bytes",
+      "semantics": "A CBOR tag that contains a concisemid-tag-map.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 526,
+      "data_item": "map",
+      "semantics": "A CBOR tag that contains an xcorim-map.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 527,
+      "data_item": "tagged signature block",
+      "semantics": "A CBOR tag that contains either: xcorimmap, or signed-xcorim.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 550,
+      "data_item": "bytes",
+      "semantics": "A CBOR tag that contains a UEID between 7 and 33 bytes.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 551,
+      "data_item": "any",
+      "semantics": "Earmarked for CoRIM",
+      "reference": "[draft-ietf-rats-corim-07]"
+    },
+    {
+      "tag": 552,
+      "data_item": "unsigned integer",
+      "semantics": "A CBOR tag that contains a security version number that is evaluated with equivalence semantics.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 553,
+      "data_item": "unsigned integer",
+      "semantics": "A CBOR tag that contains min-svn that identifies a security version number that is evaluated with greater than or equals semantics",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 554,
+      "data_item": "string",
+      "semantics": "A CBOR tag that contains a PEM encoded SubjectPublicKeyInfo. See Section 13 of [RFC7468].",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 555,
+      "data_item": "string",
+      "semantics": "A CBOR tag that contains a PEM encoded SubjectPublicKeyInfo. See Section 13 of [RFC7468].",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 556,
+      "data_item": "string",
+      "semantics": "A CBOR tag that contains an X.509 certificate chain created by the concatenation of as many PEM encoded X.509 certificates as needed. The certificates MUST be concatenated in order that each directly certifies the one preceding.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 560,
+      "data_item": "bytes",
+      "semantics": "A CBOR tag that contains a byte string interpreted as an array of bits.",
+      "reference": "[TCG DICE Endorsement Architecture for Devices][TCG Errata for DICE Endorsement Architecture for Devices Version 1.1][TCG]"
+    },
+    {
+      "tag": 570,
+      "data_item": "map (spdm-toc-map, see CDDL)",
+      "semantics": "spdm-toc-map",
+      "reference": "[TCG DICE Concise Evidence Binding for SPDM][TCG]"
+    },
+    {
+      "tag": 571,
+      "data_item": "map (concise-evidence-map, see CDDL)",
+      "semantics": "concise-evidence-map",
+      "reference": "[TCG DICE Concise Evidence Binding for SPDM][TCG]"
+    },
+    {
+      "tag": 601,
+      "data_item": "map (Claims-Set as per Appendix A of [RFC9781])",
+      "semantics": "Unprotected CWT Claims Set [RFC9781]",
+      "reference": "[RFC9781]"
+    },
+    {
+      "tag": 602,
+      "data_item": "array",
+      "semantics": "Detached EAT Bundle",
+      "reference": "[RFC9711, Section 5]"
+    },
+    {
+      "tag": 1001,
+      "data_item": "map",
+      "semantics": "extended time",
+      "reference": "[RFC9581, Section 3]"
+    },
+    {
+      "tag": 1002,
+      "data_item": "map",
+      "semantics": "duration",
+      "reference": "[RFC9581, Section 4]"
+    },
+    {
+      "tag": 1003,
+      "data_item": "array",
+      "semantics": "period",
+      "reference": "[RFC9581, Section 5]"
+    },
+    {
+      "tag": 1004,
+      "data_item": "UTF-8 text string",
+      "semantics": "[RFC3339] full-date string",
+      "reference": "[RFC8943]"
+    },
+    {
+      "tag": 1010,
+      "data_item": "array: [id: text string, obj: any]",
+      "semantics": "Object type identifier",
+      "reference": "[draft-rundgren-cotx-04]"
+    },
+    {
+      "tag": 1040,
+      "data_item": "array of two arrays [1]",
+      "semantics": "Multi-dimensional Array, column-major order",
+      "reference": "[RFC8746]"
+    },
+    {
+      "tag": 1048,
+      "data_item": "byte string",
+      "semantics": "IEEE OUI/CID",
+      "reference": "[RFC9542]"
+    },
+    {
+      "tag": 1070,
+      "data_item": "map",
+      "semantics": "SUIT_Manifest as defined in Appendix A of [RFC-ietf-suit-manifest-34]",
+      "reference": "[RFC-ietf-suit-manifest-34]"
+    },
+    {
+      "tag": 18556,
+      "data_item": "array",
+      "semantics": "[COSE algorithm identifier, Base Hash value]",
+      "reference": "[draft-bormann-cbor-notable-tags-09, Section 3.1.1]"
+    },
+    {
+      "tag": 20853,
+      "data_item": "any",
+      "semantics": "description of the value instead of the value itself",
+      "reference": "[https://cbor.is4.site/quoted][IS4]"
+    },
+    {
+      "tag": 21065,
+      "data_item": "text string",
+      "semantics": "I-Regexp",
+      "reference": "[draft-bormann-cbor-notable-tags-11, Section 2.1][RFC9485]"
+    },
+    {
+      "tag": 21066,
+      "data_item": "Array[UTF8string, UTF8string?]",
+      "semantics": "ECMAScript RegExp [https://262.ecma-international.org/14.0/#sec-regexp-regular-expression-objects]",
+      "reference": "[https://github.com/hildjj/cbor-specs/blob/main/regexp.md][Joe_Hildebrand]"
+    },
+    {
+      "tag": 21334,
+      "data_item": "uint",
+      "semantics": "(always invalid in interchange) programming aid for simple values",
+      "reference": "[draft-bormann-cbor-notable-tags-12, Section 10.2 ]"
+    },
+    {
+      "tag": 21607,
+      "data_item": "unsigned integer",
+      "semantics": "a CBOR Tag identifier",
+      "reference": "[https://cbor.is4.site/cbor-tag][IS4]"
+    },
+    {
+      "tag": 22098,
+      "data_item": "multiple",
+      "semantics": "hint that indicates an additional level of indirection",
+      "reference": "[http://cbor.schmorp.de/indirection][Marc_A._Lehmann]"
+    },
+    {
+      "tag": 25441,
+      "data_item": "Array containing at most one array followed by at most one map",
+      "semantics": "Capture [3]",
+      "reference": "[https://github.com/japhb/cbor-specs/blob/main/capture.md][Geoffrey_Broadwell]"
+    },
+    {
+      "tag": 32768,
+      "data_item": "unsigned integer",
+      "semantics": "Identifier for a FHIR constant",
+      "reference": "[Stefan_Genchev]"
+    },
+    {
+      "tag": 32769,
+      "data_item": "multiple",
+      "semantics": "External reference",
+      "reference": "[https://gitlab.com/Hawk777/cbor-specs/-/blob/main/external-reference.md][Christopher_Head]"
+    },
+    {
+      "tag": 32870,
+      "data_item": "multiple",
+      "semantics": "Logical operator: NONE / NOT. Encodes the logical operation (!item1\u0026\u0026!item2\u0026\u0026!item3\u0026\u0026..., if array), otherwise (!item).",
+      "reference": "[Jon_Caruana]"
+    },
+    {
+      "tag": 32871,
+      "data_item": "array",
+      "semantics": "Logical operator: ANY. Encodes the logical operation (item1||item2||item3||...).",
+      "reference": "[Jon_Caruana]"
+    },
+    {
+      "tag": 32872,
+      "data_item": "array",
+      "semantics": "Logical operator: ALL. Encodes the logical operation (item1\u0026\u0026item2\u0026\u0026item3\u0026\u0026...).",
+      "reference": "[Jon_Caruana]"
+    },
+    {
+      "tag": 40000,
+      "data_item": "unsigned integer",
+      "semantics": "ur:known-value, Semantic signifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40001,
+      "data_item": "byte string",
+      "semantics": "ur:digest, 32-byte SHA-256 digest",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40002,
+      "data_item": "array",
+      "semantics": "ur:encrypted, IETF ChaCha20-Poly1305 ([RFC8439]) encrypted message",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40003,
+      "data_item": "array",
+      "semantics": "ur:compressed, [RFC1951] DEFLATE-compressed message",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40004,
+      "data_item": "multiple",
+      "semantics": "ur:request, Transaction Request identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40005,
+      "data_item": "multiple",
+      "semantics": "ur:response, Transaction response identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40006,
+      "data_item": "unsigned integer or text string",
+      "semantics": "ur:function, Envelope expression function identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40007,
+      "data_item": "unsigned integer or text string",
+      "semantics": "ur:parameter, Envelope expression parameter identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40008,
+      "data_item": "unsigned integer or text string",
+      "semantics": "ur:placeholder, Envelope expression placeholder identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40009,
+      "data_item": "unsigned integer or text string",
+      "semantics": "ur:replacement, Envelope expression replacement identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40010,
+      "data_item": "byte string",
+      "semantics": "ur:agreement-private-key, Curve25519 private key for X25519 key agreement",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40011,
+      "data_item": "byte string",
+      "semantics": "ur:agreement-public-key, Curve25519 public key for X25519 key agreement",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40012,
+      "data_item": "byte string",
+      "semantics": "ur:arid, Apparently Random Identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40013,
+      "data_item": "array",
+      "semantics": "ur:crypto-prvkeys, Private keys for cryptographic operations",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40014,
+      "data_item": "byte string",
+      "semantics": "ur:nonce, Cryptographic nonce",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40015,
+      "data_item": "array",
+      "semantics": "ur:password, Scrypt-hashed password",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40016,
+      "data_item": "byte string",
+      "semantics": "ur:crypto-prvkeys, Private key base (key material)",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40017,
+      "data_item": "array",
+      "semantics": "ur:crypto-pubkeys, Public key base (signing and agreement public key bundle)",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40018,
+      "data_item": "byte string",
+      "semantics": "ur:salt, Random salt used for hash tree decorrelation",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40019,
+      "data_item": "array",
+      "semantics": "ur:crypto-sealed, Encrypted message and ephemeral public key",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40020,
+      "data_item": "multiple",
+      "semantics": "ur:signature, Cryptographic signature",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40021,
+      "data_item": "byte string",
+      "semantics": "ur:signing-private-key, Cryptographic private key used for signing",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40022,
+      "data_item": "multiple",
+      "semantics": "ur:signing-public-key, Cryptographic public key used for signing",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40023,
+      "data_item": "byte string",
+      "semantics": "ur:crypto-key, Cryptographic key used for symmetric encryption",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40024,
+      "data_item": "multiple",
+      "semantics": "ur:xid, Extensible identifier or XID Document",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40025,
+      "data_item": "byte string",
+      "semantics": "ur:reference, Cryptographically secure reference to an object",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40026,
+      "data_item": "unsigned integer or text string",
+      "semantics": "ur:event, Event identifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40027,
+      "data_item": "tagged array",
+      "semantics": "ur:encrypted-key, Content key encrypted with a derivation function",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40100,
+      "data_item": "array",
+      "semantics": "ur:mlkem-private-key, Private key for MLKEM key encapsulation",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40101,
+      "data_item": "array",
+      "semantics": "ur:mlkem-public-key, Public key for MLKEM key encapsulation",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40102,
+      "data_item": "array",
+      "semantics": "ur:mlkem-ciphertext, Ciphertext for MLKEM key encapsulation",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40103,
+      "data_item": "array",
+      "semantics": "ur:mldsa-private-key, Private key for MLDSA signature generation",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40104,
+      "data_item": "array",
+      "semantics": "ur:mldsa-public-key, Public key for MLDSA signature verification",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40105,
+      "data_item": "array",
+      "semantics": "ur:mldsa-signature, MLDSA signature",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40300,
+      "data_item": "map",
+      "semantics": "ur:seed, Cryptographic seed",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40303,
+      "data_item": "map",
+      "semantics": "ur:hdkey, Bitcoin BIP-32 HD key",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40304,
+      "data_item": "map",
+      "semantics": "ur:keypath, Bitcoin BIP-32 key derivation path",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40305,
+      "data_item": "map",
+      "semantics": "ur:coin-info, Cryptographic asset and network specifier",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40306,
+      "data_item": "map",
+      "semantics": "ur:eckey, Bitcoin elliptic curve key (private or public)",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40307,
+      "data_item": "map",
+      "semantics": "ur:address, Cryptocurrency address",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40308,
+      "data_item": "map",
+      "semantics": "ur:output-descriptor, Bitcoin output descriptor",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40309,
+      "data_item": "byte string",
+      "semantics": "ur:sskr, Sharded Secret Key Reconstruction (SSKR) share",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40310,
+      "data_item": "byte string",
+      "semantics": "ur:psbt, Partially Signed Bitcoin Transaction",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40311,
+      "data_item": "map",
+      "semantics": "ur:account-descriptor, Bitcoin account descriptor",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40800,
+      "data_item": "text string",
+      "semantics": "ur:ssh-private, Text format SSH private key",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40801,
+      "data_item": "text string",
+      "semantics": "ur:ssh-public, Text format SSH public key",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40802,
+      "data_item": "text string",
+      "semantics": "ur:ssh-signature, Text format SSH signature",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40803,
+      "data_item": "text string",
+      "semantics": "ur:ssh-certificate, Text format SSH certificate",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 40919,
+      "data_item": "multiple (uint or array [uint, uint])",
+      "semantics": "Concordium smart contract address",
+      "reference": "[https://proposals.concordium.com/CIS/cis-7.html#smart-contract-address][Thomas_Dinsdale-Young]"
+    },
+    {
+      "tag": 41728,
+      "data_item": "array, unsigned integer or unsigned bignum",
+      "semantics": "Fraction",
+      "reference": "[https://medyro.eu/specification/IANA/CBOR%20Tags/Fraction/][Medyro]"
+    },
+    {
+      "tag": 41729,
+      "data_item": "array, unsigned integer or unsigned bignum",
+      "semantics": "Fraction (-NaN signals)",
+      "reference": "[https://medyro.eu/specification/IANA/CBOR%20Tags/Fraction/][Medyro]"
+    },
+    {
+      "tag": 41730,
+      "data_item": "array, unsigned integer or unsigned bignum",
+      "semantics": "Fraction (+NaN signals)",
+      "reference": "[https://medyro.eu/specification/IANA/CBOR%20Tags/Fraction/][Medyro]"
+    },
+    {
+      "tag": 41731,
+      "data_item": "array, unsigned integer or unsigned bignum",
+      "semantics": "Fraction (Both NaNs signal)",
+      "reference": "[https://medyro.eu/specification/IANA/CBOR%20Tags/Fraction/][Medyro]"
+    },
+    {
+      "tag": 42600,
+      "data_item": "map",
+      "semantics": "A confidentiality clearance. The key value pairs of the map are defined in ADatP-4774.8",
+      "reference": "[Aidan_Murdock]"
+    },
+    {
+      "tag": 42601,
+      "data_item": "array",
+      "semantics": "A metadata binding. The elements of the array are defined in AdatP-4778.8. The tag is also used as part of the magic number in on-disk detached and encapsulating bindings.",
+      "reference": "[Aidan_Murdock]"
+    },
+    {
+      "tag": 42602,
+      "data_item": "map",
+      "semantics": "A collection of NCMS metadata elements. The key value pairs of the map are defined in AdatP-5636.8",
+      "reference": "[Aidan_Murdock]"
+    },
+    {
+      "tag": 43000,
+      "data_item": "array",
+      "semantics": "Single complex number: array elements are real (I) and imaginary (Q) components",
+      "reference": "[Saajan_Chana]"
+    },
+    {
+      "tag": 43001,
+      "data_item": "array",
+      "semantics": "Array of complex numbers in interleaved form: complex value k is stored with real (I) part \nat array index 2k and imaginary (Q) part at index (2k + 1)",
+      "reference": "[Saajan_Chana]"
+    },
+    {
+      "tag": 50000,
+      "data_item": "integer",
+      "semantics": "PlatformV_IS_ID",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50001,
+      "data_item": "text string",
+      "semantics": "PlatformV_IS_NAME",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50002,
+      "data_item": "any",
+      "semantics": "PlatformV_IS_VALUE",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50003,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_COMPOSITE_VALUE",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50004,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_MAPPED_VALUE",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50005,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_OBJ_ID",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50006,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_OBJ_TAG",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50007,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_CHILD",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50008,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_PROPERTY",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50009,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_META",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50010,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_EVENT",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50011,
+      "data_item": "array",
+      "semantics": "PlatformV_HAS_ACTION",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 50012,
+      "data_item": "integer",
+      "semantics": "PlatformV_IS_TYPE",
+      "reference": "[https://github.com/arthurwangtz/platformv-cbor][Wang_Tongzhou]"
+    },
+    {
+      "tag": 51997,
+      "data_item": "array",
+      "semantics": "A tag value of 51997 indicates that the payload is CBOR-LD.",
+      "reference": "[https://json-ld.github.io/cbor-ld-spec/#cbor-tags-for-cbor-ld][Wesley_Smith]"
+    },
+    {
+      "tag": 55799,
+      "data_item": "(any)",
+      "semantics": "Self-described CBOR; see Section 3.4.6",
+      "reference": "[RFC8949]"
+    },
+    {
+      "tag": 55800,
+      "data_item": "tagged byte string",
+      "semantics": "indicates that the file contains CBOR Sequences",
+      "reference": "[RFC9277]"
+    },
+    {
+      "tag": 55801,
+      "data_item": "tagged byte string",
+      "semantics": "indicates that the file starts with a CBOR-Labeled Non-CBOR Data label.",
+      "reference": "[RFC9277]"
+    },
+    {
+      "tag": 56500,
+      "data_item": "array (major type 4)",
+      "semantics": "Compressed byte string",
+      "reference": "[https://github.com/dectris/documentation/blob/main/cbor/dectris-compression-tag.md][Dirk_Boye]"
+    },
+    {
+      "tag": 57342,
+      "data_item": "array",
+      "semantics": "Identify and define a set of record structures (each a sequence of property names) that can be referenced as tags in the included value (and the scope for the record tag definitions)",
+      "reference": "[https://github.com/kriszyp/cbor-records][Kris_Zyp]"
+    },
+    {
+      "tag": 57343,
+      "data_item": "array",
+      "semantics": "Identify and define a record structure (a sequence of property names), and use that record structure definition to interpret the included values.",
+      "reference": "[https://github.com/kriszyp/cbor-records][Kris_Zyp]"
+    },
+    {
+      "tag": 60000,
+      "data_item": "array",
+      "semantics": "The tagged CBOR array contains attestation evidence data with an Intel TEE quote.",
+      "reference": "[Shanwei_Cen]"
+    },
+    {
+      "tag": 60001,
+      "data_item": "array",
+      "semantics": "The tagged CBOR array contains attestation evidence data with an Intel TEE report.",
+      "reference": "[Shanwei_Cen]"
+    },
+    {
+      "tag": 60002,
+      "data_item": "array",
+      "semantics": "The tagged CBOR array contains attestation evidence data with an Intel SGX report.",
+      "reference": "[Shanwei_Cen]"
+    },
+    {
+      "tag": 60010,
+      "data_item": "array",
+      "semantics": "The tagged CBOR array containing a numeric expression.",
+      "reference": "[https://github.com/nedmsmith/draft-cds-rats-intel-corim-profile/blob/main/draft-cds-rats-intel-corim-profile.md][Ned_Smith]"
+    },
+    {
+      "tag": 60020,
+      "data_item": "array",
+      "semantics": "The tagged CBOR array containing a set of digests expression.",
+      "reference": "[https://github.com/nedmsmith/draft-cds-rats-intel-corim-profile/blob/main/draft-cds-rats-intel-corim-profile.md][Ned_Smith]"
+    },
+    {
+      "tag": 60021,
+      "data_item": "array",
+      "semantics": "The tagged CBOR array containing a set of strings expression.",
+      "reference": "[https://github.com/nedmsmith/draft-cds-rats-intel-corim-profile/blob/main/draft-cds-rats-intel-corim-profile.md][Ned_Smith]"
+    },
+    {
+      "tag": 65535,
+      "data_item": "(none valid)",
+      "semantics": "always invalid; see Section 10.1",
+      "reference": "[draft-bormann-cbor-notable-tags-02]"
+    },
+    {
+      "tag": 15309736,
+      "data_item": "map (major type 5)",
+      "semantics": "RAINS Message",
+      "reference": "[https://britram.github.io/rains-prototype][Brian_Trammell]"
+    },
+    {
+      "tag": 1146111423,
+      "data_item": "map",
+      "semantics": "TCG DICE Protection Environment profile descriptor",
+      "reference": "[TCG DICE Protection Environment][TCG]"
+    },
+    {
+      "tag": 1298360423,
+      "data_item": "map",
+      "semantics": "MoaT change-of-status marker",
+      "reference": "[https://github.com/M-o-a-T/moat/blob/main/doc/common/cbor.rst][Matthias_Urlichs]"
+    },
+    {
+      "tag": 1298493254,
+      "data_item": "map",
+      "semantics": "MoaT end-of-file marker",
+      "reference": "[https://github.com/M-o-a-T/moat-util/][Matthias_Urlichs]"
+    },
+    {
+      "tag": 1299145044,
+      "data_item": "array",
+      "semantics": "MoaT file identifier / details",
+      "reference": "[https://github.com/M-o-a-T/moat-util/][Matthias_Urlichs]"
+    },
+    {
+      "tag": 1330664270,
+      "data_item": "byte-string",
+      "semantics": "A CBOR encoded Openswan configuration file, as stored on disk for\nunit test cases.",
+      "reference": "[Michael_Richardson][Samir_Hussain]"
+    },
+    {
+      "tag": 1347571280,
+      "data_item": "Proof of Process Packet (PPPP)",
+      "semantics": "A cryptographically anchored data structure used for digital \nauthorship attestation, capturing the authorship process through entangled \nVerifiable Delay Functions (VDFs) and behavioral biometrics.",
+      "reference": "[witnessd Proof of Process Evidence Format, Version 1.3.0][David_Lee_Condrey]"
+    },
+    {
+      "tag": 1347571281,
+      "data_item": "Compact Evidence Reference",
+      "semantics": "A cryptographic pointer to a full Proof of Process Evidence \nPacket, used for embedding authorship claims in space-constrained contexts \n(e.g., metadata, QR codes).",
+      "reference": "[witnessd Proof of Process Evidence Format, Version 1.3.0][David_Lee_Condrey]"
+    },
+    {
+      "tag": 1347571542,
+      "data_item": "array",
+      "semantics": "ur:provenance, Provenance Mark",
+      "reference": "[https://github.com/BlockchainCommons/Research/blob/master/papers/bcr-2020-006-urtypes.md][Wolf_McNally]"
+    },
+    {
+      "tag": 1398229316,
+      "data_item": "map",
+      "semantics": "Concise Software Identifier (CoSWID)",
+      "reference": "[RFC9393]"
+    },
+    {
+      "tag": 1413829460,
+      "data_item": "any",
+      "semantics": "Explicitly none.",
+      "reference": "[draft-bormann-cbor-notable-tags-15, Section 10.3][Joe_Hildebrand]"
+    },
+    {
+      "tag": 1463894560,
+      "data_item": "Writers Authenticity Report (WAR)",
+      "semantics": "An Attestation Result structure produced by Verifiers \nappraising Proof of Process Evidence, conveying verification verdicts, \nconfidence scores, and forensic assessments per the IETF RATS architecture.",
+      "reference": "[witnessd Proof of Process Evidence Format, Version 1.3.0][David_Lee_Condrey]"
+    },
+    {
+      "tag": 1701996915,
+      "data_item": "array",
+      "semantics": "Array of content-addressed blocks and ERIS read capabilities",
+      "reference": "[Endo_Renberg]"
+    },
+    {
+      "tag": 1701996916,
+      "data_item": "array",
+      "semantics": "ERIS-FS image header",
+      "reference": "[Endo_Renberg]"
+    },
+    {
+      "tag": 4294967295,
+      "data_item": "(none valid)",
+      "semantics": "always invalid; see Section 10.1",
+      "reference": "[draft-bormann-cbor-notable-tags-02]"
+    },
+    {
+      "tag": 4294967296,
+      "data_item": "map",
+      "semantics": "Intel FPGA SPDM Manifest",
+      "reference": "[Andrew_Draper]"
+    },
+    {
+      "tag": 18446744073709551615,
+      "data_item": "(none valid)",
+      "semantics": "always invalid; Section 10.1",
+      "reference": "[draft-bormann-cbor-notable-tags-02]"
+    }
   ]
 }

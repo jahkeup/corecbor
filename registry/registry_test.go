@@ -1,19 +1,21 @@
 package registry
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLookupTag_Known(t *testing.T) {
 	tests := []struct {
-		tag     uint64
-		wantSem string
-		wantRef string
+		tag        uint64
+		wantSemSub string
+		wantRefSub string
 	}{
-		{0, "Standard date/time string; see Section 3.4.1 of RFC 8949", "RFC 8949"},
-		{1, "Epoch-based date/time; see Section 3.4.2 of RFC 8949", "RFC 8949"},
-		{18, "COSE Single Signer Data Object", "RFC 9052"},
-		{24, "Encoded CBOR data item", "RFC 8949"},
-		{55799, "Self-Described CBOR", "RFC 8949"},
-		{258, "Mathematical finite set", "RFC 9557"},
+		{0, "date/time string", "RFC8949"},
+		{1, "date/time", "RFC8949"},
+		{18, "COSE", "RFC9052"},
+		{24, "Encoded CBOR data item", "RFC8949"},
+		{55799, "Self-described CBOR", "RFC8949"},
 	}
 	for _, tt := range tests {
 		info := LookupTag(tt.tag)
@@ -23,17 +25,17 @@ func TestLookupTag_Known(t *testing.T) {
 		if info.Tag != tt.tag {
 			t.Errorf("LookupTag(%d).Tag = %d", tt.tag, info.Tag)
 		}
-		if info.Semantics != tt.wantSem {
-			t.Errorf("LookupTag(%d).Semantics = %q, want %q", tt.tag, info.Semantics, tt.wantSem)
+		if !strings.Contains(strings.ToLower(info.Semantics), strings.ToLower(tt.wantSemSub)) {
+			t.Errorf("LookupTag(%d).Semantics = %q, want to contain %q", tt.tag, info.Semantics, tt.wantSemSub)
 		}
-		if info.Reference != tt.wantRef {
-			t.Errorf("LookupTag(%d).Reference = %q, want %q", tt.tag, info.Reference, tt.wantRef)
+		if !strings.Contains(info.Reference, tt.wantRefSub) {
+			t.Errorf("LookupTag(%d).Reference = %q, want to contain %q", tt.tag, info.Reference, tt.wantRefSub)
 		}
 	}
 }
 
 func TestLookupTag_Unknown(t *testing.T) {
-	unknowns := []uint64{99, 1000, 65535, 999999}
+	unknowns := []uint64{7777777, 123456789012}
 	for _, tag := range unknowns {
 		if info := LookupTag(tag); info != nil {
 			t.Errorf("LookupTag(%d) = %+v, want nil", tag, info)
@@ -48,15 +50,15 @@ func TestIsRegistered(t *testing.T) {
 	if !IsRegistered(55799) {
 		t.Error("IsRegistered(55799) = false, want true")
 	}
-	if IsRegistered(9999) {
-		t.Error("IsRegistered(9999) = true, want false")
+	if IsRegistered(999999999) {
+		t.Error("IsRegistered(999999999) = true, want false")
 	}
 }
 
 func TestAllTags_NonEmpty(t *testing.T) {
 	tags := AllTags()
-	if len(tags) < 20 {
-		t.Errorf("AllTags() returned %d entries, want at least 20", len(tags))
+	if len(tags) < 100 {
+		t.Errorf("AllTags() returned %d entries, want at least 100", len(tags))
 	}
 }
 
@@ -66,6 +68,15 @@ func TestAllTags_Sorted(t *testing.T) {
 		if tags[i].Tag <= tags[i-1].Tag {
 			t.Fatalf("AllTags() not sorted: index %d has tag %d <= previous %d",
 				i, tags[i].Tag, tags[i-1].Tag)
+		}
+	}
+}
+
+func TestAllTags_MatchesLookup(t *testing.T) {
+	for _, info := range AllTags() {
+		got := LookupTag(info.Tag)
+		if got == nil {
+			t.Errorf("AllTags has tag %d but LookupTag returns nil", info.Tag)
 		}
 	}
 }

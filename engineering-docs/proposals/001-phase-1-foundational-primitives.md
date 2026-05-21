@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 001 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-05-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | none |
@@ -475,3 +475,4 @@ resolved before the proposal moves to Closed.
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-20 | Initial draft | corecbor maintainers |
+| 2026-05-20 | Status: Draft → Closed. All acceptance criteria met. Phases 1-4 implemented. Performance exceeds §9 targets. 7/7 fuzz targets pass 30s+. | corecbor maintainers |

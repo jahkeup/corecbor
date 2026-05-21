@@ -11,7 +11,6 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [001](001-phase-1-foundational-primitives.md) | 1 | Draft | Phase 1: Foundational primitives | corecbor maintainers | — | 2026-05-20 |
 | [002](002-cose-structures-and-signing.md) | 3 | Draft | COSE structures and cryptographic operations (RFC 9052 + RFC 9053) | corecbor maintainers | 001 | 2026-05-20 |
 | [003](003-cwt-cbor-web-tokens.md) | 3 | Draft | CWT: CBOR Web Tokens (RFC 8392) | corecbor maintainers | 001, 002 | 2026-05-20 |
 | [004](004-edhoc-key-exchange.md) | 3 | Draft | EDHOC: Ephemeral DH Over COSE (RFC 9528) | corecbor maintainers | 001, 002 | 2026-05-20 |
@@ -23,7 +22,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
-| — | — | — | _none yet_ | — | — | — |
+| [001](001-phase-1-foundational-primitives.md) | 1 | Closed | Phase 1: Foundational primitives | corecbor maintainers | 2026-05-20 | All acceptance criteria met. Phases 1-4 implemented. §9 perf targets exceeded. |
 
 ## Numbering
 

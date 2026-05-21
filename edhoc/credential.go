@@ -42,6 +42,10 @@ func extractPublicKeyFromCWT(cwtBytes []byte, issuerPub crypto.PublicKey) (crypt
 		return nil, fmt.Errorf("%w: CWT verification failed: %v", ErrAuthentication, err)
 	}
 
+	if claims.Confirmation != nil && claims.Confirmation.Key != nil {
+		return claims.Confirmation.Key.PublicKey()
+	}
+
 	cnfVal, ok := claims.Private[int64(claimCnf)]
 	if !ok {
 		return nil, fmt.Errorf("%w: CWT missing cnf claim", ErrMessageFormat)

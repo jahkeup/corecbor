@@ -7,7 +7,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
 )
@@ -308,21 +307,15 @@ func TestCWTCredential_RoundTrip(t *testing.T) {
 func createTestCWT(t *testing.T, signerKey ed25519.PrivateKey, subjectPub ed25519.PublicKey) []byte {
 	t.Helper()
 
-	coseKey := cbor.Map{
-		{Key: cbor.Uint(1), Value: cbor.Uint(uint64(cose.KeyTypeOKP))},
-		{Key: cbor.Uint(3), Value: cbor.NegInt(7)},
-		{Key: cbor.NegInt(0), Value: cbor.Uint(uint64(cose.CurveEd25519))},
-		{Key: cbor.NegInt(1), Value: cbor.Bytes(subjectPub)},
-	}
-
-	cnfMap := cbor.Map{
-		{Key: cbor.Uint(1), Value: coseKey},
+	coseKeyObj, err := cose.NewKeyFromPublic(ed25519.PublicKey(subjectPub))
+	if err != nil {
+		t.Fatalf("creating COSE key: %v", err)
 	}
 
 	claims := &cwt.ClaimsSet{
 		Subject: "edhoc-peer",
-		Private: map[any]any{
-			int64(claimCnf): cnfMap,
+		Confirmation: &cwt.Confirmation{
+			Key: coseKeyObj,
 		},
 	}
 

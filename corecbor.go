@@ -11,21 +11,44 @@ import (
 )
 
 type (
-	Value     = cbor.Value
+	Value    = cbor.Value
+	MapEntry = cbor.MapEntry
+	Kind     = cbor.Kind
+)
+
+// Kind constants re-exported from cbor package.
+const (
+	KindInvalid   = cbor.KindInvalid
+	KindUint      = cbor.KindUint
+	KindNegInt    = cbor.KindNegInt
+	KindBytes     = cbor.KindBytes
+	KindText      = cbor.KindText
+	KindArray     = cbor.KindArray
+	KindMap       = cbor.KindMap
+	KindTag       = cbor.KindTag
+	KindBool      = cbor.KindBool
+	KindNull      = cbor.KindNull
+	KindUndefined = cbor.KindUndefined
+	KindFloat32   = cbor.KindFloat32
+	KindFloat64   = cbor.KindFloat64
+	KindSimple    = cbor.KindSimple
+)
+
+// Constructor functions re-exported from cbor package.
+var (
 	Uint      = cbor.Uint
 	NegInt    = cbor.NegInt
 	Bytes     = cbor.Bytes
 	Text      = cbor.Text
-	Array     = cbor.Array
-	MapEntry  = cbor.MapEntry
-	Map       = cbor.Map
-	Tag       = cbor.Tag
+	MakeArray = cbor.MakeArray
+	MakeMap   = cbor.MakeMap
+	MakeTag   = cbor.MakeTag
 	Bool      = cbor.Bool
 	Null      = cbor.Null
 	Undefined = cbor.Undefined
-	Simple    = cbor.Simple
 	Float32   = cbor.Float32
 	Float64   = cbor.Float64
+	Simple    = cbor.Simple
 )
 
 // Tag constants re-exported from cbor package.
@@ -59,22 +82,25 @@ var (
 )
 
 // AsTime interprets a Tag with ID 0 or 1 as a time.Time.
-func AsTime(t Tag) (time.Time, error) { return cbor.AsTime(t) }
+func AsTime(t Value) (time.Time, error) { return cbor.AsTime(t) }
 
 // TimeTo creates a Tag(1, epoch) from a time.Time using integer seconds.
-func TimeTo(t time.Time) Tag { return cbor.TimeTo(t) }
+func TimeTo(t time.Time) Value { return cbor.TimeTo(t) }
 
 // TimeToFloat creates a Tag(1, float64) from a time.Time preserving sub-second precision.
-func TimeToFloat(t time.Time) Tag { return cbor.TimeToFloat(t) }
+func TimeToFloat(t time.Time) Value { return cbor.TimeToFloat(t) }
 
 // TimeToString creates a Tag(0, text) from a time.Time in RFC 3339 format.
-func TimeToString(t time.Time) Tag { return cbor.TimeToString(t) }
+func TimeToString(t time.Time) Value { return cbor.TimeToString(t) }
 
 // AsBigInt interprets a Tag with ID 2 or 3 as a *big.Int.
-func AsBigInt(t Tag) (*big.Int, error) { return cbor.AsBigInt(t) }
+func AsBigInt(t Value) (*big.Int, error) { return cbor.AsBigInt(t) }
 
 // BigIntTo creates a Tag(2 or 3, bytes) from a *big.Int.
-func BigIntTo(n *big.Int) Tag { return cbor.BigIntTo(n) }
+func BigIntTo(n *big.Int) Value { return cbor.BigIntTo(n) }
 
 // AsNestedCBOR interprets a Tag with ID 24 (encoded CBOR data item).
-func AsNestedCBOR(t Tag) ([]byte, error) { return cbor.AsNestedCBOR(t) }
+func AsNestedCBOR(t Value) ([]byte, error) { return cbor.AsNestedCBOR(t) }
+
+// AsStringMap converts a map ([]MapEntry) to map[string]Value.
+func AsStringMap(m []MapEntry) (map[string]Value, error) { return cbor.AsStringMap(m) }

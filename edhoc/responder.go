@@ -299,10 +299,10 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: decoding signature: %v", ErrMessageFormat, err)
 	}
-	sigBytes, ok := sig.(cbor.Bytes)
-	if !ok {
+	if sig.Kind() != cbor.KindBytes {
 		return fmt.Errorf("%w: signature must be bstr", ErrMessageFormat)
 	}
+	sigBytes := sig.Bytes()
 
 	mac3, err := edhocKDF(r.prk4e3m, r.th3, "MAC_3", r.sp.AEADTagSize)
 	if err != nil {
@@ -320,21 +320,20 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 
 	peerPub := r.cfg.PeerPublic
 	if r.cfg.PeerCredential != nil && r.cfg.PeerCredential.Type == CredentialCWT {
-		cwtBytes, ok := idCred.(cbor.Bytes)
-		if !ok {
+		if idCred.Kind() != cbor.KindBytes {
 			return fmt.Errorf("%w: CWT credential ID_CRED must be bstr", ErrMessageFormat)
 		}
 		issuerKey := r.cfg.CWTIssuerKey
 		if issuerKey == nil {
 			issuerKey = r.cfg.PeerPublic
 		}
-		peerPub, err = extractPublicKeyFromCWT([]byte(cwtBytes), issuerKey)
+		peerPub, err = extractPublicKeyFromCWT(idCred.Bytes(), issuerKey)
 		if err != nil {
 			return err
 		}
 	}
 
-	if err := verifySignature(peerPub, signedData, []byte(sigBytes)); err != nil {
+	if err := verifySignature(peerPub, signedData, sigBytes); err != nil {
 		return ErrAuthentication
 	}
 	return nil

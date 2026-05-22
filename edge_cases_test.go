@@ -14,7 +14,7 @@ func TestEdgeCase_EmptyMap(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	got, err := enc.Encode(nil, Map(nil))
+	got, err := enc.Encode(nil, MakeMap())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,8 @@ func TestEdgeCase_EmptyMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, ok := v.(Map)
+	ok := v.Kind() == KindMap
+	m := v.Map()
 	if !ok {
 		t.Fatalf("expected Map, got %T", v)
 	}
@@ -39,7 +40,7 @@ func TestEdgeCase_EmptyArray(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	got, err := enc.Encode(nil, Array(nil))
+	got, err := enc.Encode(nil, MakeArray())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +52,8 @@ func TestEdgeCase_EmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	arr, ok := v.(Array)
+	ok := v.Kind() == KindArray
+	arr := v.Array()
 	if !ok {
 		t.Fatalf("expected Array, got %T", v)
 	}
@@ -64,7 +66,7 @@ func TestEdgeCase_SingleElementContainer(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	arr := Array{Uint(42)}
+	arr := MakeArray(Uint(42))
 	got, err := enc.Encode(nil, arr)
 	if err != nil {
 		t.Fatal(err)
@@ -77,11 +79,11 @@ func TestEdgeCase_SingleElementContainer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded := v.(Array)
+	decoded := v.Array()
 	if len(decoded) != 1 {
 		t.Fatalf("expected 1 element, got %d", len(decoded))
 	}
-	if decoded[0].(Uint) != 42 {
+	if decoded[0].Uint() != 42 {
 		t.Fatalf("expected 42, got %v", decoded[0])
 	}
 }
@@ -90,12 +92,12 @@ func TestEdgeCase_TwentyFourElementContainer(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	arr := make(Array, 24)
+	arr := make([]Value, 24)
 	for i := range 24 {
 		arr[i] = Uint(uint64(i))
 	}
 
-	got, err := enc.Encode(nil, arr)
+	got, err := enc.Encode(nil, MakeArray(arr...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +110,7 @@ func TestEdgeCase_TwentyFourElementContainer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded := v.(Array)
+	decoded := v.Array()
 	if len(decoded) != 24 {
 		t.Fatalf("expected 24 elements, got %d", len(decoded))
 	}
@@ -118,12 +120,12 @@ func TestEdgeCase_MapWithMixedKeyTypes(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	m := Map{
-		{Key: Bytes([]byte{0x01}), Value: Uint(4)},
-		{Key: Text("z"), Value: Uint(3)},
-		{Key: Uint(10), Value: Uint(1)},
-		{Key: NegInt(0), Value: Uint(2)},
-	}
+	m := MakeMap(
+		MapEntry{Key: Bytes([]byte{0x01}), Value: Uint(4)},
+		MapEntry{Key: Text("z"), Value: Uint(3)},
+		MapEntry{Key: Uint(10), Value: Uint(1)},
+		MapEntry{Key: NegInt(0), Value: Uint(2)},
+	)
 
 	encoded, err := enc.Encode(nil, m)
 	if err != nil {
@@ -140,13 +142,13 @@ func TestEdgeCase_MapWithMixedKeyTypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded := v.(Map)
+	decoded := v.Map()
 	if len(decoded) != 4 {
 		t.Fatalf("expected 4 entries, got %d", len(decoded))
 	}
 
 	// Verify sort order by re-encoding and comparing.
-	reEncoded, err := enc.Encode(nil, decoded)
+	reEncoded, err := enc.Encode(nil, MakeMap(decoded...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +173,7 @@ func TestEdgeCase_NegIntZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, ok := v.(NegInt); !ok || n != 0 {
+	if v.Kind() != KindNegInt || v.NegInt() != 0 {
 		t.Fatalf("decode 0x20: got %T(%v), want NegInt(0)", v, v)
 	}
 }
@@ -180,7 +182,7 @@ func TestEdgeCase_NestedTags(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	nested := Tag{ID: 1, Inner: Tag{ID: 2, Inner: Tag{ID: 3, Inner: Uint(99)}}}
+	nested := MakeTag(1, MakeTag(2, MakeTag(3, Uint(99))))
 
 	encoded, err := enc.Encode(nil, nested)
 	if err != nil {
@@ -232,10 +234,10 @@ func TestEdgeCase_ZeroBytesVsZeroText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := vb.(Bytes); !ok {
+	if vb.Kind() != KindBytes {
 		t.Fatalf("0x40 decoded as %T, want Bytes", vb)
 	}
-	if _, ok := vt.(Text); !ok {
+	if vt.Kind() != KindText {
 		t.Fatalf("0x60 decoded as %T, want Text", vt)
 	}
 }
@@ -249,7 +251,7 @@ func TestEdgeCase_Tag24_EncodedCBOR(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tag24 := Tag{ID: 24, Inner: Bytes(innerEncoded)}
+	tag24 := MakeTag(24, Bytes(innerEncoded))
 	encoded, err := enc.Encode(nil, tag24)
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +277,7 @@ func TestEdgeCase_SelfDescribeTag(t *testing.T) {
 
 	// Tag 55799 wrapping Uint(42): d9d9f7 182a
 	// Decoder should strip the self-describe tag.
-	wrapped, err := enc.Encode(nil, Tag{ID: TagSelfDescribe, Inner: Uint(42)})
+	wrapped, err := enc.Encode(nil, MakeTag(TagSelfDescribe, Uint(42)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,8 +288,8 @@ func TestEdgeCase_SelfDescribeTag(t *testing.T) {
 	}
 
 	// Decoder strips 55799, so we should get Uint(42) directly.
-	u, ok := v.(Uint)
-	if !ok {
+	u := v.Uint()
+	if v.Kind() != KindUint {
 		t.Fatalf("expected Uint after stripping self-describe, got %T(%v)", v, v)
 	}
 	if u != 42 {
@@ -350,12 +352,12 @@ func TestEdgeCase_DuplicateMapKeysLastWins(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := v.(Map)
+	m := v.Map()
 	// Decoder deduplicates in-place: 1 entry remains with last value winning.
 	if len(m) != 1 {
 		t.Fatalf("expected 1 deduplicated entry, got %d", len(m))
 	}
-	if m[0].Value.(Uint) != 20 {
+	if m[0].Value.Uint() != 20 {
 		t.Fatalf("expected last-wins value 20, got %v", m[0].Value)
 	}
 }

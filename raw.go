@@ -18,7 +18,7 @@ type RawMessage []byte
 func (r RawMessage) MarshalCBOR() ([]byte, error) {
 	if r == nil {
 		enc := New(ModeCoreDeterministic)
-		return enc.Encode(nil, cbor.Null{})
+		return enc.Encode(nil, cbor.Null())
 	}
 	return []byte(r), nil
 }
@@ -41,7 +41,7 @@ type RawTag struct {
 func (t RawTag) MarshalCBOR() ([]byte, error) {
 	if t.Content == nil {
 		enc := New(ModeCoreDeterministic)
-		return enc.Encode(nil, cbor.Tag{ID: t.ID, Inner: cbor.Null{}})
+		return enc.Encode(nil, cbor.MakeTag(t.ID, cbor.Null()))
 	}
 	head := wire.AppendHead(nil, wire.MajorTag, t.ID)
 	return append(head, t.Content...), nil
@@ -56,13 +56,12 @@ func (t *RawTag) UnmarshalCBOR(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("cbor: RawTag decode: %w", err)
 	}
-	tag, ok := val.(cbor.Tag)
-	if !ok {
-		return fmt.Errorf("cbor: RawTag expected Tag, got %T", val)
+	if val.Kind() != cbor.KindTag {
+		return fmt.Errorf("cbor: RawTag expected Tag, got kind %d", val.Kind())
 	}
-	t.ID = tag.ID
+	t.ID = val.TagID()
 	enc := New(ModeCoreDeterministic)
-	inner, err := enc.Encode(nil, tag.Inner)
+	inner, err := enc.Encode(nil, val.TagInner())
 	if err != nil {
 		return fmt.Errorf("cbor: RawTag encode inner: %w", err)
 	}

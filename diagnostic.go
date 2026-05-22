@@ -58,28 +58,29 @@ func DiagnosticValue(v Value, opts ...DiagnosticOption) string {
 }
 
 func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
-	switch val := v.(type) {
-	case cbor.Uint:
-		b.WriteString(strconv.FormatUint(uint64(val), 10))
+	switch v.Kind() {
+	case cbor.KindUint:
+		b.WriteString(strconv.FormatUint(v.Uint(), 10))
 
-	case cbor.NegInt:
-		n := uint64(val)
+	case cbor.KindNegInt:
+		n := v.NegInt()
 		b.WriteByte('-')
 		b.WriteString(strconv.FormatUint(n+1, 10))
 
-	case cbor.Bytes:
+	case cbor.KindBytes:
 		b.WriteString("h'")
-		b.WriteString(hex.EncodeToString([]byte(val)))
+		b.WriteString(hex.EncodeToString(v.Bytes()))
 		b.WriteByte('\'')
 
-	case cbor.Text:
+	case cbor.KindText:
 		b.WriteByte('"')
-		diagWriteText(b, string(val))
+		diagWriteText(b, v.Text())
 		b.WriteByte('"')
 
-	case cbor.Array:
+	case cbor.KindArray:
+		arr := v.Array()
 		b.WriteByte('[')
-		for i, item := range val {
+		for i, item := range arr {
 			if i > 0 {
 				if o.compact {
 					b.WriteByte(',')
@@ -91,9 +92,10 @@ func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
 		}
 		b.WriteByte(']')
 
-	case cbor.Map:
+	case cbor.KindMap:
+		m := v.Map()
 		b.WriteByte('{')
-		for i, entry := range val {
+		for i, entry := range m {
 			if i > 0 {
 				if o.compact {
 					b.WriteByte(',')
@@ -111,33 +113,33 @@ func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
 		}
 		b.WriteByte('}')
 
-	case cbor.Tag:
-		b.WriteString(strconv.FormatUint(val.ID, 10))
+	case cbor.KindTag:
+		b.WriteString(strconv.FormatUint(v.TagID(), 10))
 		b.WriteByte('(')
-		diagWrite(b, val.Inner, o)
+		diagWrite(b, v.TagInner(), o)
 		b.WriteByte(')')
 
-	case cbor.Bool:
-		if bool(val) {
+	case cbor.KindBool:
+		if v.Bool() {
 			b.WriteString("true")
 		} else {
 			b.WriteString("false")
 		}
 
-	case cbor.Null:
+	case cbor.KindNull:
 		b.WriteString("null")
 
-	case cbor.Undefined:
+	case cbor.KindUndefined:
 		b.WriteString("undefined")
 
-	case cbor.Float32:
-		diagWriteFloat(b, float64(val), 32)
+	case cbor.KindFloat32:
+		diagWriteFloat(b, float64(v.Float32()), 32)
 
-	case cbor.Float64:
-		diagWriteFloat(b, float64(val), 64)
+	case cbor.KindFloat64:
+		diagWriteFloat(b, v.Float64(), 64)
 
-	case cbor.Simple:
-		fmt.Fprintf(b, "simple(%d)", uint8(val))
+	case cbor.KindSimple:
+		fmt.Fprintf(b, "simple(%d)", v.Simple())
 
 	default:
 		b.WriteString("?")

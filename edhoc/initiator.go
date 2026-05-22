@@ -177,10 +177,10 @@ func (i *Initiator) ProcessMessage4(msg4 []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: decoding message_4: %v", ErrMessageFormat, err)
 	}
-	ctBytes, ok := ct.(cbor.Bytes)
-	if !ok {
+	if ct.Kind() != cbor.KindBytes {
 		return fmt.Errorf("%w: message_4 must be bstr", ErrMessageFormat)
 	}
+	ctBytes := ct.Bytes()
 
 	k4, err := edhocKDF(i.prk4e3m, i.th4, "K_4", i.sp.AEADKeySize)
 	if err != nil {
@@ -201,7 +201,7 @@ func (i *Initiator) ProcessMessage4(msg4 []byte) error {
 		return err
 	}
 
-	if _, err := aead.Open(nil, iv4, []byte(ctBytes), aad); err != nil {
+	if _, err := aead.Open(nil, iv4, ctBytes, aad); err != nil {
 		return fmt.Errorf("%w: message_4 verification failed: %v", ErrAuthentication, err)
 	}
 
@@ -245,10 +245,10 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: decoding signature: %v", ErrMessageFormat, err)
 	}
-	sigBytes, ok := sig.(cbor.Bytes)
-	if !ok {
+	if sig.Kind() != cbor.KindBytes {
 		return fmt.Errorf("%w: signature must be bstr", ErrMessageFormat)
 	}
+	sigBytes := sig.Bytes()
 
 	mac2, err := edhocKDF(i.prk3e2m, i.th2, "MAC_2", i.sp.AEADTagSize)
 	if err != nil {
@@ -266,21 +266,20 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 
 	peerPub := i.cfg.PeerPublic
 	if i.cfg.PeerCredential != nil && i.cfg.PeerCredential.Type == CredentialCWT {
-		cwtBytes, ok := idCred.(cbor.Bytes)
-		if !ok {
+		if idCred.Kind() != cbor.KindBytes {
 			return fmt.Errorf("%w: CWT credential ID_CRED must be bstr", ErrMessageFormat)
 		}
 		issuerKey := i.cfg.CWTIssuerKey
 		if issuerKey == nil {
 			issuerKey = i.cfg.PeerPublic
 		}
-		peerPub, err = extractPublicKeyFromCWT([]byte(cwtBytes), issuerKey)
+		peerPub, err = extractPublicKeyFromCWT(idCred.Bytes(), issuerKey)
 		if err != nil {
 			return err
 		}
 	}
 
-	if err := verifySignature(peerPub, signedData, []byte(sigBytes)); err != nil {
+	if err := verifySignature(peerPub, signedData, sigBytes); err != nil {
 		return ErrAuthentication
 	}
 	return nil
@@ -352,9 +351,9 @@ func buildSignStruct(context string, idCred, th, mac []byte) ([]byte, error) {
 }
 
 func encodeIDCred(pub []byte) ([]byte, error) {
-	return cborEncodeValue(nil, cbor.Map{
-		{Key: cbor.Uint(4), Value: cbor.Bytes(pub)},
-	})
+	return cborEncodeValue(nil, cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Uint(4), Value: cbor.Bytes(pub)},
+	))
 }
 
 func encodeIDCredFromSigner(signer crypto.Signer) ([]byte, error) {

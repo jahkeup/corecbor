@@ -212,7 +212,7 @@ func encodeSigStructure(enc *corecbor.Encoder, protectedBytes, external, payload
 	elems[1] = corecbor.Bytes(protectedBytes)
 	elems[2] = corecbor.Bytes(external)
 	elems[3] = corecbor.Bytes(payload)
-	return enc.Encode(nil, corecbor.Array(elems[:]))
+	return enc.Encode(nil, corecbor.MakeArray(elems[:]...))
 }
 
 func algForKey(key crypto.Signer) (Algorithm, error) {

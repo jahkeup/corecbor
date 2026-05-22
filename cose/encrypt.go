@@ -101,11 +101,11 @@ func buildEncStructure(protectedBytes, externalAAD []byte) ([]byte, error) {
 	if externalAAD == nil {
 		externalAAD = []byte{}
 	}
-	arr := corecbor.Array{
+	arr := corecbor.MakeArray(
 		corecbor.Text("Encrypt0"),
 		corecbor.Bytes(protectedBytes),
 		corecbor.Bytes(externalAAD),
-	}
+	)
 	enc := corecbor.New(corecbor.ModeCoreDeterministic)
 	return enc.Encode(nil, arr)
 }

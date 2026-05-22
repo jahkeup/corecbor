@@ -62,7 +62,7 @@ func edhocKDF(prk, transcriptHash []byte, label string, length int) ([]byte, err
 	info, err := encodeCBORArray(
 		cbor.Bytes(transcriptHash),
 		cbor.Text(label),
-		cbor.Uint(length),
+		cbor.Uint(uint64(length)),
 	)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func encodeExporterInfo(th4 []byte, label string, context []byte, length int) ([
 		cbor.Bytes(th4),
 		cbor.Text(label),
 		cbor.Bytes(context),
-		cbor.Uint(length),
+		cbor.Uint(uint64(length)),
 	)
 }
 

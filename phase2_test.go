@@ -30,16 +30,16 @@ func TestEncodeCanonicalSort(t *testing.T) {
 	// 0x626161 (3 bytes) < 0x811864 (3 bytes)
 	enc := New(ModeCanonical)
 
-	m := cbor.Map{
-		{Key: cbor.Text("aa"), Value: cbor.Uint(7)},            // encoded key: 0x626161 (3 bytes)
-		{Key: cbor.Text("z"), Value: cbor.Uint(6)},             // encoded key: 0x617a (2 bytes)
-		{Key: cbor.Uint(100), Value: cbor.Uint(5)},             // encoded key: 0x1864 (2 bytes)
-		{Key: cbor.Bool(false), Value: cbor.Uint(4)},           // encoded key: 0xf4 (1 byte)
-		{Key: cbor.NegInt(0), Value: cbor.Uint(3)},             // encoded key: 0x20 (1 byte)
-		{Key: cbor.Uint(10), Value: cbor.Uint(2)},              // encoded key: 0x0a (1 byte)
-		{Key: cbor.Array{cbor.Uint(100)}, Value: cbor.Uint(9)}, // encoded key: 0x811864 (3 bytes)
-		{Key: cbor.Array{cbor.NegInt(0)}, Value: cbor.Uint(8)}, // encoded key: 0x8120 (2 bytes)
-	}
+	m := cbor.MakeMap(
+		MapEntry{Key: cbor.Text("aa"), Value: cbor.Uint(7)},                // encoded key: 0x626161 (3 bytes)
+		MapEntry{Key: cbor.Text("z"), Value: cbor.Uint(6)},                 // encoded key: 0x617a (2 bytes)
+		MapEntry{Key: cbor.Uint(100), Value: cbor.Uint(5)},                 // encoded key: 0x1864 (2 bytes)
+		MapEntry{Key: cbor.Bool(false), Value: cbor.Uint(4)},               // encoded key: 0xf4 (1 byte)
+		MapEntry{Key: cbor.NegInt(0), Value: cbor.Uint(3)},                 // encoded key: 0x20 (1 byte)
+		MapEntry{Key: cbor.Uint(10), Value: cbor.Uint(2)},                  // encoded key: 0x0a (1 byte)
+		MapEntry{Key: cbor.MakeArray(cbor.Uint(100)), Value: cbor.Uint(9)}, // encoded key: 0x811864 (3 bytes)
+		MapEntry{Key: cbor.MakeArray(cbor.NegInt(0)), Value: cbor.Uint(8)}, // encoded key: 0x8120 (2 bytes)
+	)
 
 	got, err := enc.Encode(nil, m)
 	if err != nil {
@@ -62,11 +62,11 @@ func TestEncodeCanonicalSort(t *testing.T) {
 	want = append(want, hexb("05")...)     // → 5
 	want = append(want, hexb("617a")...)   // Text("z")
 	want = append(want, hexb("06")...)     // → 6
-	want = append(want, hexb("8120")...)   // Array{NegInt(0)}
+	want = append(want, hexb("8120")...)   // MakeArray(NegInt(0))
 	want = append(want, hexb("08")...)     // → 8
 	want = append(want, hexb("626161")...) // Text("aa")
 	want = append(want, hexb("07")...)     // → 7
-	want = append(want, hexb("811864")...) // Array{Uint(100)}
+	want = append(want, hexb("811864")...) // MakeArray(Uint(100))
 	want = append(want, hexb("09")...)     // → 9
 
 	if !bytes.Equal(got, want) {
@@ -102,7 +102,7 @@ func TestEncodeCTAP2Float64Only(t *testing.T) {
 
 func TestEncodeTo(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
-	val := cbor.Array{cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)}
+	val := cbor.MakeArray(cbor.Uint(1), cbor.Uint(2), cbor.Uint(3))
 
 	batchOut, err := enc.Encode(nil, val)
 	if err != nil {
@@ -225,15 +225,15 @@ func TestDecodeFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	arr, ok := v.(cbor.Array)
-	if !ok {
-		t.Fatalf("expected Array, got %T", v)
+	if v.Kind() != cbor.KindArray {
+		t.Fatalf("expected Array, got kind %d", v.Kind())
 	}
+	arr := v.Array()
 	if len(arr) != 3 {
 		t.Fatalf("expected 3 elements, got %d", len(arr))
 	}
 	for i, expected := range []uint64{1, 2, 3} {
-		if uint64(arr[i].(cbor.Uint)) != expected {
+		if arr[i].Uint() != expected {
 			t.Errorf("arr[%d] = %v, want %d", i, arr[i], expected)
 		}
 	}
@@ -259,18 +259,18 @@ func TestStreamDecoder(t *testing.T) {
 	if len(values) != 4 {
 		t.Fatalf("expected 4 values, got %d", len(values))
 	}
-	if v := values[0].(cbor.Uint); v != 1 {
-		t.Errorf("values[0] = %v, want 1", v)
+	if values[0].Uint() != 1 {
+		t.Errorf("values[0] = %v, want 1", values[0])
 	}
-	if v := values[1].(cbor.Uint); v != 2 {
-		t.Errorf("values[1] = %v, want 2", v)
+	if values[1].Uint() != 2 {
+		t.Errorf("values[1] = %v, want 2", values[1])
 	}
-	arr := values[2].(cbor.Array)
-	if len(arr) != 3 {
-		t.Errorf("values[2] array length = %d, want 3", len(arr))
+	arr2 := values[2].Array()
+	if len(arr2) != 3 {
+		t.Errorf("values[2] array length = %d, want 3", len(arr2))
 	}
-	if v := values[3].(cbor.Text); v != "IETF" {
-		t.Errorf("values[3] = %v, want IETF", v)
+	if values[3].Text() != "IETF" {
+		t.Errorf("values[3] = %v, want IETF", values[3])
 	}
 }
 
@@ -295,8 +295,8 @@ func TestDecodeFrom_SingleByte(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u := v.(cbor.Uint); u != 1000 {
-		t.Errorf("got %v, want 1000", u)
+	if v.Uint() != 1000 {
+		t.Errorf("got %v, want 1000", v.Uint())
 	}
 }
 

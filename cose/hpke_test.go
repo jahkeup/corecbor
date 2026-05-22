@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright The corecbor Authors
 
-//go:build go1.26
-
 package cose
 
 import (

@@ -354,8 +354,13 @@ func cosePublicKeyToMap(pub interface{}, k *cose.Key) (corecbor.Map, error) {
 	case *ecdsa.PublicKey:
 		crv := k.Curve()
 		size := (p.Curve.Params().BitSize + 7) / 8
-		x := padLeftBytes(p.X.Bytes(), size)
-		y := padLeftBytes(p.Y.Bytes(), size)
+		raw, err := p.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("ecdsa public key bytes: %w", err)
+		}
+		// raw is uncompressed: 0x04 || X || Y
+		x := padLeftBytes(raw[1:1+size], size)
+		y := padLeftBytes(raw[1+size:], size)
 		return corecbor.Map{
 			{Key: corecbor.Uint(1), Value: corecbor.Uint(int64(cose.KeyTypeEC2))},
 			{Key: corecbor.NegInt(0), Value: corecbor.Uint(int64(crv))},

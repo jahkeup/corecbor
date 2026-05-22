@@ -234,7 +234,7 @@ func TestSuiteNegotiation_Mismatch(t *testing.T) {
 	initiator, err := NewInitiator(InitiatorConfig{
 		Suites:       []CipherSuite{Suite2},
 		PrivateKey:   iPriv,
-		PeerPublic:   &ecdsa.PublicKey{Curve: elliptic.P256(), X: iPub.X, Y: iPub.Y},
+		PeerPublic:   iPub,
 		ConnectionID: []byte{0x07},
 	})
 	if err != nil {

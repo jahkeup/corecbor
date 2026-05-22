@@ -8,7 +8,6 @@ import (
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
@@ -367,7 +366,20 @@ func marshalPublicKeyRaw(pub crypto.PublicKey) []byte {
 	case ed25519.PublicKey:
 		return []byte(k)
 	case *ecdsa.PublicKey:
-		return elliptic.MarshalCompressed(k.Curve, k.X, k.Y)
+		raw, err := k.Bytes()
+		if err != nil {
+			return nil
+		}
+		// Convert uncompressed (0x04||X||Y) to compressed form
+		size := (k.Curve.Params().BitSize + 7) / 8
+		compressed := make([]byte, 1+size)
+		if raw[len(raw)-1]&1 == 0 {
+			compressed[0] = 0x02
+		} else {
+			compressed[0] = 0x03
+		}
+		copy(compressed[1:], raw[1:1+size])
+		return compressed
 	default:
 		return nil
 	}

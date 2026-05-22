@@ -3,20 +3,6 @@
 
 package rfc8949
 
-// PERFORMANCE PROFILE NOTES (M3 Max, go1.26, 2026-05-21):
-//
-// EncodeScalars: 1007 MB/s, 0 allocs/op. Scalar encoding is
-// allocation-free and throughput-limited only by AppendHead's
-// branch-on-argument-size. No further optimization possible without
-// architecture-specific SIMD (out of scope).
-//
-// EncodeNestedMap: 226 MB/s, 0 allocs/op. Previous bottleneck was
-// sort.Slice using reflectlite.Swapper (67% of allocs). Replaced
-// with slices.SortFunc which operates directly on typed slice.
-// Combined with sync.Pool'd sort state, achieves zero allocations.
-//
-// Remaining CPU cost in encodeMap: bytes.Compare during sort (data-
-// dependent, irreducible) and the encode() calls per map value.
 
 import (
 	"bytes"
@@ -32,7 +18,6 @@ import (
 )
 
 // sortState holds reusable buffers for deterministic map key sorting.
-// Pooled to eliminate per-encode allocations.
 type sortState struct {
 	entries []sortEntry
 	keyBuf  []byte
@@ -46,6 +31,27 @@ type sortEntry struct {
 
 var sortStatePool = sync.Pool{
 	New: func() any { return &sortState{} },
+}
+
+// SortStateCache is an encoder-local sort state for single-goroutine hot paths.
+// When non-nil, avoids sync.Pool Get/Put overhead for the outermost map.
+// Not re-entrant: nested maps fall back to the pool.
+type SortStateCache struct {
+	ss   sortState
+	used bool
+}
+
+func (c *SortStateCache) get() *sortState {
+	if c.used {
+		return nil
+	}
+	c.used = true
+	c.ss.keyBuf = c.ss.keyBuf[:0]
+	return &c.ss
+}
+
+func (c *SortStateCache) put() {
+	c.used = false
 }
 
 // SortMode controls how map keys are ordered in deterministic encoding.
@@ -99,6 +105,14 @@ type EncodeOpts struct {
 
 	// AllowInvalidUTF8 permits Text values containing invalid UTF-8 sequences.
 	AllowInvalidUTF8 bool
+
+	// SkipUTF8Validation skips UTF-8 validation on Text values during encode.
+	// Use when the source is known-valid (e.g., values from a prior Decode pass).
+	SkipUTF8Validation bool
+
+	// SortCache is an optional encoder-local sort state cache.
+	// When set, deterministic map encoding avoids sync.Pool overhead.
+	SortCache *SortStateCache
 }
 
 // Encode appends the CBOR encoding of v to dst and returns the extended slice.
@@ -128,7 +142,7 @@ func encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
 		dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(val)))
 		return append(dst, val...), nil
 	case cbor.Text:
-		if !opts.AllowInvalidUTF8 && !utf8.ValidString(string(val)) {
+		if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(string(val)) {
 			return dst, fmt.Errorf("encode text: %w", cbor.ErrInvalidUTF8)
 		}
 		dst = wire.AppendHead(dst, wire.MajorText, uint64(len(val)))
@@ -238,8 +252,16 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 		return dst, nil
 	}
 
-	ss := sortStatePool.Get().(*sortState)
-	ss.keyBuf = ss.keyBuf[:0]
+	var ss *sortState
+	var pooled bool
+	if opts.SortCache != nil {
+		ss = opts.SortCache.get()
+	}
+	if ss == nil {
+		ss = sortStatePool.Get().(*sortState)
+		ss.keyBuf = ss.keyBuf[:0]
+		pooled = true
+	}
 	if cap(ss.entries) >= len(m) {
 		ss.entries = ss.entries[:len(m)]
 	} else {
@@ -251,7 +273,11 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 		var err error
 		ss.keyBuf, err = encode(ss.keyBuf, entry.Key, opts)
 		if err != nil {
-			sortStatePool.Put(ss)
+			if pooled {
+				sortStatePool.Put(ss)
+			} else {
+				opts.SortCache.put()
+			}
 			return dst, err
 		}
 		ss.entries[i] = sortEntry{keyStart: start, keyEnd: len(ss.keyBuf), index: i}
@@ -267,6 +293,9 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 				return c
 			}
 		}
+		if len(ea) > 0 && len(eb) > 0 && ea[0] != eb[0] {
+			return int(ea[0]) - int(eb[0])
+		}
 		return bytes.Compare(ea, eb)
 	})
 
@@ -275,10 +304,18 @@ func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 		dst = append(dst, keyBuf[se.keyStart:se.keyEnd]...)
 		dst, err = encode(dst, m[se.index].Value, opts)
 		if err != nil {
-			sortStatePool.Put(ss)
+			if pooled {
+				sortStatePool.Put(ss)
+			} else {
+				opts.SortCache.put()
+			}
 			return dst, err
 		}
 	}
-	sortStatePool.Put(ss)
+	if pooled {
+		sortStatePool.Put(ss)
+	} else {
+		opts.SortCache.put()
+	}
 	return dst, nil
 }

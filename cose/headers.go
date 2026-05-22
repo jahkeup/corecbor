@@ -18,7 +18,9 @@ const (
 // Headers represents COSE header parameters.
 // Keys are int64 (integer labels) or string (text labels).
 type Headers struct {
-	params map[any]any
+	params        map[any]any
+	encodedCache  []byte // cached CBOR encoding of protected headers
+	cacheValid    bool
 }
 
 // Get returns the value for the given label, or nil if not set.
@@ -35,6 +37,7 @@ func (h *Headers) Set(label any, value any) {
 		h.params = make(map[any]any)
 	}
 	h.params[label] = value
+	h.cacheValid = false
 }
 
 // Algorithm returns the algorithm header (label 1), or 0 if not set.
@@ -84,9 +87,18 @@ func (h *Headers) IsEmpty() bool {
 // Empty headers produce a zero-length byte string.
 func (h *Headers) encodeProtected() ([]byte, error) {
 	if h.IsEmpty() {
-		return nil, nil // zero-length bstr
+		return nil, nil
 	}
-	return encodeHeaderMap(h.params)
+	if h.cacheValid {
+		return h.encodedCache, nil
+	}
+	encoded, err := encodeHeaderMap(h.params)
+	if err != nil {
+		return nil, err
+	}
+	h.encodedCache = encoded
+	h.cacheValid = true
+	return encoded, nil
 }
 
 // toCBORMap converts headers to a corecbor Map value.

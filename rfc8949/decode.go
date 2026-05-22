@@ -3,27 +3,6 @@
 
 package rfc8949
 
-// PERFORMANCE PROFILE NOTES (M3 Max, go1.26, 2026-05-21):
-//
-// DecodeScalars: 913 MB/s, 2 allocs/op (array backing + capacity).
-// The dominant irreducible cost is interface boxing: each decoded
-// Value (Uint, NegInt, etc.) stored in a []Value slot forces a heap
-// allocation when the value exceeds the pre-cached range (>1023 for
-// Uint, >255 for NegInt). The integer cache eliminates this for
-// common values but cannot cover the full uint64 range.
-//
-// DecodeNestedMap: 104 MB/s, 46 allocs/op. Allocation sources:
-// - []MapEntry slice per map (irreducible: maps need backing storage)
-// - []Value slice per array (irreducible: arrays need backing storage)
-// - string(src[start:end]) for Text (irreducible: Go strings are
-//   immutable copies; unsafe.String would eliminate but violates policy)
-// - []byte copy for Bytes (irreducible: caller may reuse src buffer)
-//
-// Further optimization would require either:
-// - unsafe.String for zero-copy text (breaks safety contract)
-// - Arena allocator (runtime.Arena, experimental) for bulk Value alloc
-// - Changing Value from interface to tagged-union struct (breaks API)
-// None of these are in scope for the current contract.
 
 import (
 	"fmt"
@@ -111,9 +90,6 @@ var knownTags = map[uint64]bool{
 }
 
 func decodeValue(src []byte, off, depth int, opts DecodeOpts, stripSelfDescribe bool) (cbor.Value, int, error) {
-	if depth > opts.maxNesting() {
-		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
-	}
 	if off >= len(src) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
@@ -175,8 +151,6 @@ func decodeBytes(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 	if end > len(src) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
-	// PERF: copies src[start:end]. Caller may reuse src so zero-copy via
-	// unsafe.String is not safe. Cost: 1 alloc per byte string. Irreducible.
 	buf := make([]byte, length)
 	copy(buf, src[start:end])
 	return cbor.Bytes(buf), end, nil
@@ -237,12 +211,10 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 	if end > len(src) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
-	// PERF: this copies src bytes. Cannot use unsafe.String — caller may reuse src.
-	// Cost: 1 alloc per text string. No path to eliminate without breaking safety.
-	s := string(src[start:end])
-	if opts.RejectInvalidUTF8 && !utf8.ValidString(s) {
+	if opts.RejectInvalidUTF8 && !utf8.Valid(src[start:end]) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, off)
 	}
+	s := string(src[start:end])
 	return cbor.Text(s), end, nil
 }
 
@@ -300,10 +272,6 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
-	// PERF: 1 alloc per array. Backing store for []Value interface slots.
-	// Each element stored in the slice forces an interface boxing alloc for
-	// values outside the cached integer range. Cannot eliminate without
-	// changing Value from interface to tagged-union struct (API break).
 	arr := make(cbor.Array, count)
 	pos := off + h.N
 	childDepth := depth + 1
@@ -406,6 +374,9 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 }
 
 func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Value, int, error) {
+	if depth+1 > opts.maxNesting() {
+		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+	}
 	var arr cbor.Array
 	pos := off
 	for {
@@ -438,9 +409,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
-	// PERF: 1 alloc per map. Same interface-boxing cost as arrays.
-	// Pooling MapEntry slices is possible but saves only the backing
-	// array — the per-entry Value boxing remains. Net gain < 5%.
+	if depth+1 > opts.maxNesting() {
+		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+	}
 	m := make(cbor.Map, 0, count)
 	pos := off + h.N
 	for range count {
@@ -469,6 +440,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 }
 
 func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Value, int, error) {
+	if depth+1 > opts.maxNesting() {
+		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+	}
 	var m cbor.Map
 	pos := off
 	for {
@@ -505,11 +479,17 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 }
 
 func mapInsert(m cbor.Map, key, val cbor.Value, keyOff int, opts DecodeOpts) (cbor.Map, error) {
-	for i, entry := range m {
-		if valuesEqual(entry.Key, key) {
-			if opts.RejectDuplicateMapKeys {
+	if opts.RejectDuplicateMapKeys {
+		for _, entry := range m {
+			if valuesEqual(entry.Key, key) {
 				return m, fmt.Errorf("%w at offset %d", cbor.ErrDuplicateMapKey, keyOff)
 			}
+		}
+		m = append(m, cbor.MapEntry{Key: key, Value: val})
+		return m, nil
+	}
+	for i, entry := range m {
+		if valuesEqual(entry.Key, key) {
 			m[i].Value = val
 			return m, nil
 		}
@@ -575,6 +555,9 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		return decodeValue(src, pos, depth, opts, true)
 	}
 
+	if depth+1 > opts.maxNesting() {
+		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+	}
 	inner, next, err := decodeValue(src, pos, depth+1, opts, false)
 	if err != nil {
 		return nil, next, err

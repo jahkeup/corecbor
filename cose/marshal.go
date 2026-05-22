@@ -49,7 +49,8 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 
 	tagged := corecbor.Tag{ID: tagSign1, Inner: arr}
 	enc := corecbor.New(corecbor.ModeCoreDeterministic)
-	return enc.Encode(nil, tagged)
+	buf := make([]byte, 0, len(protectedBytes)+len(msg.Payload)+len(msg.Signature)+64)
+	return enc.Encode(buf, tagged)
 }
 
 // UnmarshalSign1 decodes a Sign1 message from CBOR (tagged or untagged).

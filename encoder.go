@@ -41,8 +41,9 @@ func WithBufferPool(p *sync.Pool) Option {
 }
 
 type Encoder struct {
-	mode Mode
-	cfg  encodeConfig
+	mode      Mode
+	cfg       encodeConfig
+	sortCache rfc8949.SortStateCache
 }
 
 func New(mode Mode, opts ...Option) *Encoder {
@@ -79,6 +80,7 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 	opts := rfc8949.EncodeOpts{
 		AllowNonFiniteFloats: e.cfg.allowNonFiniteFloats,
 		AllowInvalidUTF8:     e.cfg.allowInvalidUTF8,
+		SortCache:            &e.sortCache,
 	}
 	switch e.mode {
 	case ModePermissive:

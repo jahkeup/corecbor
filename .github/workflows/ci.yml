@@ -37,8 +37,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: latest
-          install-mode: binary
-          args: --version
+          install-only: true
 
       - name: make check
         run: make check

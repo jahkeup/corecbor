@@ -36,18 +36,18 @@ func getSuiteParams(suite CipherSuite) suiteParams {
 	switch suite {
 	case Suite2:
 		return suiteParams{
-			AEADKeySize:  16,
-			AEADTagSize:  8,
-			AEADNonceLen: 13,
-			HashSize:     32,
+			AEADKeySize:  suite0AEADKeySize,
+			AEADTagSize:  suite0AEADTagSize,
+			AEADNonceLen: suite0AEADNonceLen,
+			HashSize:     suite0HashSize,
 			DHCurve:      ecdh.P256(),
 		}
 	default: // Suite0
 		return suiteParams{
-			AEADKeySize:  16,
-			AEADTagSize:  8,
-			AEADNonceLen: 13,
-			HashSize:     32,
+			AEADKeySize:  suite0AEADKeySize,
+			AEADTagSize:  suite0AEADTagSize,
+			AEADNonceLen: suite0AEADNonceLen,
+			HashSize:     suite0HashSize,
 			DHCurve:      ecdh.X25519(),
 		}
 	}

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright The corecbor Authors
 
+//go:build go1.26
+
 package cose
 
 import (
@@ -84,8 +86,13 @@ func NewKeyFromPublic(pub crypto.PublicKey) (*Key, error) {
 		}
 		k.set(keyLabelCrv, int64(crv))
 		size := curveKeySize(p.Curve)
-		x := padLeft(p.X.Bytes(), size)
-		y := padLeft(p.Y.Bytes(), size)
+		raw, err := p.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		}
+		// raw is uncompressed: 0x04 || X || Y
+		x := padLeft(raw[1:1+size], size)
+		y := padLeft(raw[1+size:], size)
 		k.set(keyLabelX, x)
 		k.set(keyLabelY, y)
 	default:
@@ -104,7 +111,11 @@ func NewKeyFromSigner(s crypto.Signer) (*Key, error) {
 		k.set(keyLabelD, []byte(p.Seed()))
 	case *ecdsa.PrivateKey:
 		size := curveKeySize(p.Curve)
-		k.set(keyLabelD, padLeft(p.D.Bytes(), size))
+		d, err := p.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		}
+		k.set(keyLabelD, padLeft(d, size))
 	default:
 		return nil, fmt.Errorf("%w: unsupported signer type %T", ErrInvalidKey, s)
 	}

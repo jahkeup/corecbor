@@ -42,7 +42,7 @@ func encodeMessage1(m *message1) ([]byte, error) {
 	var buf []byte
 	var err error
 
-	buf, err = cborEncodeValue(buf, cbor.Uint(uint64(m.Method)))
+	buf, err = cborEncodeValue(buf, cbor.Uint(m.Method))
 	if err != nil {
 		return nil, fmt.Errorf("%w: encoding method: %v", ErrMessageFormat, err)
 	}
@@ -67,11 +67,11 @@ func encodeSuites(buf []byte, suites []CipherSuite) ([]byte, error) {
 	if len(suites) == 1 {
 		return cborEncodeValue(buf, cbor.Uint(uint64(suites[0])))
 	}
-	items := make([]cbor.Value, len(suites))
+	arr := make(cbor.Array, len(suites))
 	for i, s := range suites {
-		items[i] = cbor.Uint(uint64(s))
+		arr[i] = cbor.Uint(uint64(s))
 	}
-	return cborEncodeValue(buf, cbor.MakeArray(items...))
+	return cborEncodeValue(buf, arr)
 }
 
 func decodeSuites(data []byte) ([]CipherSuite, CipherSuite, []byte, error) {
@@ -79,21 +79,21 @@ func decodeSuites(data []byte) ([]CipherSuite, CipherSuite, []byte, error) {
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("%w: decoding suites: %v", ErrMessageFormat, err)
 	}
-	switch v.Kind() {
-	case cbor.KindUint:
-		s := CipherSuite(v.Uint())
+	switch val := v.(type) {
+	case cbor.Uint:
+		s := CipherSuite(val)
 		return []CipherSuite{s}, s, rest, nil
-	case cbor.KindArray:
-		arr := v.Array()
-		if len(arr) == 0 {
+	case cbor.Array:
+		if len(val) == 0 {
 			return nil, 0, nil, fmt.Errorf("%w: empty suites array", ErrMessageFormat)
 		}
-		suites := make([]CipherSuite, len(arr))
-		for i, item := range arr {
-			if item.Kind() != cbor.KindUint {
+		suites := make([]CipherSuite, len(val))
+		for i, item := range val {
+			u, ok := item.(cbor.Uint)
+			if !ok {
 				return nil, 0, nil, fmt.Errorf("%w: suite element must be uint", ErrMessageFormat)
 			}
-			suites[i] = CipherSuite(item.Uint())
+			suites[i] = CipherSuite(u)
 		}
 		return suites, suites[0], rest, nil
 	default:
@@ -108,10 +108,11 @@ func decodeMessage1(data []byte) (*message1, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding method: %v", ErrMessageFormat, err)
 	}
-	if method.Kind() != cbor.KindUint {
+	methodUint, ok := method.(cbor.Uint)
+	if !ok {
 		return nil, fmt.Errorf("%w: method must be uint", ErrMessageFormat)
 	}
-	m.Method = int64(method.Uint())
+	m.Method = int64(methodUint)
 
 	suites, selected, rest, err := decodeSuites(rest)
 	if err != nil {
@@ -124,10 +125,11 @@ func decodeMessage1(data []byte) (*message1, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding G_X: %v", ErrMessageFormat, err)
 	}
-	if gx.Kind() != cbor.KindBytes {
+	gxBytes, ok := gx.(cbor.Bytes)
+	if !ok {
 		return nil, fmt.Errorf("%w: G_X must be bstr", ErrMessageFormat)
 	}
-	m.GX = gx.Bytes()
+	m.GX = []byte(gxBytes)
 
 	ci, _, err := decodeConnectionID(rest)
 	if err != nil {
@@ -163,10 +165,11 @@ func decodeMessage2(data []byte) (*message2, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding G_Y: %v", ErrMessageFormat, err)
 	}
-	if gy.Kind() != cbor.KindBytes {
+	gyBytes, ok := gy.(cbor.Bytes)
+	if !ok {
 		return nil, fmt.Errorf("%w: G_Y must be bstr", ErrMessageFormat)
 	}
-	m.GY = gy.Bytes()
+	m.GY = []byte(gyBytes)
 
 	cr, rest, err := decodeConnectionID(rest)
 	if err != nil {
@@ -178,10 +181,11 @@ func decodeMessage2(data []byte) (*message2, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding ciphertext: %v", ErrMessageFormat, err)
 	}
-	if ct.Kind() != cbor.KindBytes {
+	ctBytes, ok := ct.(cbor.Bytes)
+	if !ok {
 		return nil, fmt.Errorf("%w: ciphertext must be bstr", ErrMessageFormat)
 	}
-	m.Ciphertext = ct.Bytes()
+	m.Ciphertext = []byte(ctBytes)
 	return m, nil
 }
 
@@ -200,17 +204,18 @@ func decodeMessage3(data []byte) (*message3, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding ciphertext: %v", ErrMessageFormat, err)
 	}
-	if ct.Kind() != cbor.KindBytes {
+	ctBytes, ok := ct.(cbor.Bytes)
+	if !ok {
 		return nil, fmt.Errorf("%w: ciphertext must be bstr", ErrMessageFormat)
 	}
-	return &message3{Ciphertext: ct.Bytes()}, nil
+	return &message3{Ciphertext: []byte(ctBytes)}, nil
 }
 
 // Connection IDs in EDHOC: integers -24..23 encode as the CBOR int directly,
 // otherwise as a bstr. We use a simplified model: if len==1 and val<24, encode as int.
 func encodeConnectionID(buf []byte, cid []byte) ([]byte, error) {
 	if len(cid) == 1 && cid[0] < 24 {
-		return cborEncodeValue(buf, cbor.Uint(uint64(cid[0])))
+		return cborEncodeValue(buf, cbor.Uint(cid[0]))
 	}
 	return cborEncodeValue(buf, cbor.Bytes(cid))
 }
@@ -220,11 +225,11 @@ func decodeConnectionID(data []byte) ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: decoding connection ID: %v", ErrMessageFormat, err)
 	}
-	switch v.Kind() {
-	case cbor.KindUint:
-		return []byte{byte(v.Uint())}, rest, nil
-	case cbor.KindBytes:
-		return v.Bytes(), rest, nil
+	switch val := v.(type) {
+	case cbor.Uint:
+		return []byte{byte(val)}, rest, nil
+	case cbor.Bytes:
+		return []byte(val), rest, nil
 	default:
 		return nil, nil, fmt.Errorf("%w: connection ID must be int or bstr", ErrMessageFormat)
 	}
@@ -232,15 +237,15 @@ func decodeConnectionID(data []byte) ([]byte, []byte, error) {
 
 func decodeOneValue(data []byte) (cbor.Value, []byte, error) {
 	if len(data) == 0 {
-		return cbor.Value{}, nil, fmt.Errorf("%w: unexpected end of data", ErrMessageFormat)
+		return nil, nil, fmt.Errorf("%w: unexpected end of data", ErrMessageFormat)
 	}
 	v, n, err := rfc8949.Decode(data, rfc8949.DecodeOpts{})
 	if err != nil {
-		return cbor.Value{}, nil, err
+		return nil, nil, err
 	}
 	return v, data[n:], nil
 }
 
 func encodeCBORArray(items ...cbor.Value) ([]byte, error) {
-	return cborEncodeValue(nil, cbor.MakeArray(items...))
+	return cborEncodeValue(nil, cbor.Array(items))
 }

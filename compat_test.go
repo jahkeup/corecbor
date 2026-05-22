@@ -185,19 +185,19 @@ var compatVectors = []compatVector{
 	// === Nested arrays ===
 	{
 		name:         "array/empty",
-		value:        MakeArray(),
+		value:        Array(nil),
 		canonicalHex: "80",
 		notes:        "fxamacker/cbor, cbor2: empty array",
 	},
 	{
 		name:         "array/nested",
-		value:        MakeArray(Uint(1), MakeArray(Uint(2), Uint(3)), MakeArray(Uint(4), Uint(5))),
+		value:        Array{Uint(1), Array{Uint(2), Uint(3)}, Array{Uint(4), Uint(5)}},
 		canonicalHex: "8301820203820405",
 		notes:        "fxamacker/cbor, cbor2: [1, [2, 3], [4, 5]]",
 	},
 	{
 		name:         "array/deeply-nested",
-		value:        MakeArray(MakeArray(MakeArray(Uint(42)))),
+		value:        Array{Array{Array{Uint(42)}}},
 		canonicalHex: "818181182a",
 		notes:        "fxamacker/cbor, cbor2: [[[42]]]",
 	},
@@ -206,21 +206,21 @@ var compatVectors = []compatVector{
 	// Core Deterministic: bytewise-lex of encoded keys
 	{
 		name:  "map/mixed-keys-sorted",
-		value: MakeMap(MapEntry{Key: Uint(1), Value: Text("one")}, MapEntry{Key: Uint(100), Value: Text("hundred")}, MapEntry{Key: NegInt(0), Value: Text("neg1")}, MapEntry{Key: Text("z"), Value: Uint(26)}),
+		value: Map{{Key: Uint(1), Value: Text("one")}, {Key: Uint(100), Value: Text("hundred")}, {Key: NegInt(0), Value: Text("neg1")}, {Key: Text("z"), Value: Uint(26)}},
 		// Sorted by encoded key bytes: 01 < 1864 < 20 < 617a
 		canonicalHex: "a401636f6e651864676875" + "6e6472656420646e65673161" + "7a181a",
 		notes:        "fxamacker/cbor CoreDet: uint(1) < uint(100) < negint(-1) < text(z)",
 	},
 	{
 		name:  "map/text-keys-length-order",
-		value: MakeMap(MapEntry{Key: Text("a"), Value: Uint(1)}, MapEntry{Key: Text("b"), Value: Uint(2)}, MapEntry{Key: Text("aa"), Value: Uint(3)}),
+		value: Map{{Key: Text("a"), Value: Uint(1)}, {Key: Text("b"), Value: Uint(2)}, {Key: Text("aa"), Value: Uint(3)}},
 		// Encoded keys: 6161(a) < 6162(b) < 626161(aa) — bytewise-lex
 		canonicalHex: "a3616101616202626161" + "03",
 		notes:        "fxamacker/cbor, cbor2: text keys sorted bytewise-lex",
 	},
 	{
 		name:  "map/bytes-key",
-		value: MakeMap(MapEntry{Key: Uint(0), Value: Bool(true)}, MapEntry{Key: Bytes([]byte{0x01}), Value: Bool(false)}),
+		value: Map{{Key: Uint(0), Value: Bool(true)}, {Key: Bytes([]byte{0x01}), Value: Bool(false)}},
 		// Encoded keys: 00 (uint 0) < 4101 (bytes [0x01])
 		canonicalHex: "a200f54101f4",
 		notes:        "fxamacker/cbor CoreDet: uint key before bytes key",
@@ -229,19 +229,19 @@ var compatVectors = []compatVector{
 	// === Tags ===
 	{
 		name:         "tag/epoch-datetime",
-		value:        MakeTag(TagEpochDateTime, Uint(1363896240)),
+		value:        Tag{ID: TagEpochDateTime, Inner: Uint(1363896240)},
 		canonicalHex: "c11a514b67b0",
 		notes:        "fxamacker/cbor, cbor2, RFC 8949 Appendix A",
 	},
 	{
 		name:         "tag/unsigned-bignum",
-		value:        MakeTag(TagUnsignedBignum, Bytes([]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})),
+		value:        Tag{ID: TagUnsignedBignum, Inner: Bytes([]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})},
 		canonicalHex: "c249010000000000000000",
 		notes:        "fxamacker/cbor, cbor2: bignum 2^64",
 	},
 	{
 		name:         "tag/negative-bignum",
-		value:        MakeTag(TagNegativeBignum, Bytes([]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})),
+		value:        Tag{ID: TagNegativeBignum, Inner: Bytes([]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})},
 		canonicalHex: "c349010000000000000000",
 		notes:        "fxamacker/cbor, cbor2: negative bignum -(2^64+1)",
 	},
@@ -281,13 +281,13 @@ var compatVectors = []compatVector{
 	},
 	{
 		name:         "simple/null",
-		value:        Null(),
+		value:        Null{},
 		canonicalHex: "f6",
 		notes:        "fxamacker/cbor, cbor2: simple value 22",
 	},
 	{
 		name:         "simple/undefined",
-		value:        Undefined(),
+		value:        Undefined{},
 		canonicalHex: "f7",
 		notes:        "fxamacker/cbor, cbor2: simple value 23",
 	},
@@ -374,13 +374,13 @@ var quirkyVectors = []quirkyVector{
 	{
 		name:      "quirky/indef-array",
 		inputHex:  "9f010203ff",
-		wantValue: MakeArray(Uint(1), Uint(2), Uint(3)),
+		wantValue: Array{Uint(1), Uint(2), Uint(3)},
 		notes:     "Streaming encoders: indefinite array [1, 2, 3]",
 	},
 	{
 		name:      "quirky/indef-map",
 		inputHex:  "bf616101616202616303616404616505616606ff",
-		wantValue: MakeMap(MapEntry{Key: Text("a"), Value: Uint(1)}, MapEntry{Key: Text("b"), Value: Uint(2)}, MapEntry{Key: Text("c"), Value: Uint(3)}, MapEntry{Key: Text("d"), Value: Uint(4)}, MapEntry{Key: Text("e"), Value: Uint(5)}, MapEntry{Key: Text("f"), Value: Uint(6)}),
+		wantValue: Map{{Key: Text("a"), Value: Uint(1)}, {Key: Text("b"), Value: Uint(2)}, {Key: Text("c"), Value: Uint(3)}, {Key: Text("d"), Value: Uint(4)}, {Key: Text("e"), Value: Uint(5)}, {Key: Text("f"), Value: Uint(6)}},
 		notes:     "Streaming encoders: indefinite-length map with text keys",
 	},
 
@@ -388,13 +388,13 @@ var quirkyVectors = []quirkyVector{
 	{
 		name:      "quirky/unsorted-map-text-keys",
 		inputHex:  "a26162026161" + "01",
-		wantValue: MakeMap(MapEntry{Key: Text("b"), Value: Uint(2)}, MapEntry{Key: Text("a"), Value: Uint(1)}),
+		wantValue: Map{{Key: Text("b"), Value: Uint(2)}, {Key: Text("a"), Value: Uint(1)}},
 		notes:     "Non-deterministic encoders: map {b:2, a:1} with keys in insertion order",
 	},
 	{
 		name:      "quirky/unsorted-map-int-keys",
 		inputHex:  "a2186401" + "0a02",
-		wantValue: MakeMap(MapEntry{Key: Uint(100), Value: Uint(1)}, MapEntry{Key: Uint(10), Value: Uint(2)}),
+		wantValue: Map{{Key: Uint(100), Value: Uint(1)}, {Key: Uint(10), Value: Uint(2)}},
 		notes:     "Non-deterministic encoders: map {100:1, 10:2} unsorted",
 	},
 }

@@ -26,7 +26,7 @@ var (
 
 func goToValue(v any, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	if v == nil {
-		return cbor.Null(), nil
+		return cbor.Null{}, nil
 	}
 	if val, ok := v.(cbor.Value); ok {
 		return val, nil
@@ -36,18 +36,21 @@ func goToValue(v any, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 
 func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	if !rv.IsValid() {
-		return cbor.Null(), nil
+		return cbor.Null{}, nil
 	}
 
 	for rv.Kind() == reflect.Pointer {
 		if rv.IsNil() {
-			return cbor.Null(), nil
+			return cbor.Null{}, nil
 		}
 		rv = rv.Elem()
 	}
 
-	if rv.Type() == valueType {
+	if rv.Type().Implements(valueType) {
 		return rv.Interface().(cbor.Value), nil
+	}
+	if rv.CanAddr() && reflect.PointerTo(rv.Type()).Implements(valueType) {
+		return rv.Addr().Interface().(cbor.Value), nil
 	}
 
 	if rv.CanInterface() {
@@ -71,7 +74,7 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 	case bigIntPtrType:
 		bi := rv.Interface().(*big.Int)
 		if bi == nil {
-			return cbor.Null(), nil
+			return cbor.Null{}, nil
 		}
 		return cbor.BigIntTo(bi), nil
 	}
@@ -80,7 +83,7 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 		if m, ok := rv.Interface().(encoding.BinaryMarshaler); ok {
 			data, err := m.MarshalBinary()
 			if err != nil {
-				return cbor.Value{}, fmt.Errorf("cbor: BinaryMarshaler: %w", err)
+				return nil, fmt.Errorf("cbor: BinaryMarshaler: %w", err)
 			}
 			return cbor.Bytes(data), nil
 		}
@@ -88,7 +91,7 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 			if m, ok := rv.Addr().Interface().(encoding.BinaryMarshaler); ok {
 				data, err := m.MarshalBinary()
 				if err != nil {
-					return cbor.Value{}, fmt.Errorf("cbor: BinaryMarshaler: %w", err)
+					return nil, fmt.Errorf("cbor: BinaryMarshaler: %w", err)
 				}
 				return cbor.Bytes(data), nil
 			}
@@ -96,17 +99,17 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 		if m, ok := rv.Interface().(encoding.TextMarshaler); ok {
 			data, err := m.MarshalText()
 			if err != nil {
-				return cbor.Value{}, fmt.Errorf("cbor: TextMarshaler: %w", err)
+				return nil, fmt.Errorf("cbor: TextMarshaler: %w", err)
 			}
-			return cbor.Text(string(data)), nil
+			return cbor.Text(data), nil
 		}
 		if rv.CanAddr() {
 			if m, ok := rv.Addr().Interface().(encoding.TextMarshaler); ok {
 				data, err := m.MarshalText()
 				if err != nil {
-					return cbor.Value{}, fmt.Errorf("cbor: TextMarshaler: %w", err)
+					return nil, fmt.Errorf("cbor: TextMarshaler: %w", err)
 				}
-				return cbor.Text(string(data)), nil
+				return cbor.Text(data), nil
 			}
 		}
 	}
@@ -126,7 +129,7 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 		return cbor.Uint(rv.Uint()), nil
 
 	case reflect.Float32:
-		return cbor.Float32(float32(rv.Float())), nil
+		return cbor.Float32(rv.Float()), nil
 
 	case reflect.Float64:
 		return cbor.Float64(rv.Float()), nil
@@ -137,12 +140,12 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 	case reflect.Slice:
 		if rv.Type().Elem().Kind() == reflect.Uint8 {
 			if rv.IsNil() {
-				return cbor.Null(), nil
+				return cbor.Null{}, nil
 			}
 			return cbor.Bytes(rv.Bytes()), nil
 		}
 		if rv.IsNil() {
-			return cbor.MakeArray(), nil
+			return cbor.Array{}, nil
 		}
 		return sliceToValue(rv, opts)
 
@@ -156,7 +159,7 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 
 	case reflect.Map:
 		if rv.IsNil() {
-			return cbor.Null(), nil
+			return cbor.Null{}, nil
 		}
 		return mapToValue(rv, opts)
 
@@ -165,24 +168,24 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 
 	case reflect.Interface:
 		if rv.IsNil() {
-			return cbor.Null(), nil
+			return cbor.Null{}, nil
 		}
 		return reflectToValue(rv.Elem(), opts)
 
 	default:
-		return cbor.Value{}, fmt.Errorf("%w: %s", ErrUnsupportedType, rv.Type())
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedType, rv.Type())
 	}
 }
 
 func marshalerToValue(m Marshaler) (cbor.Value, error) {
 	data, err := m.MarshalCBOR()
 	if err != nil {
-		return cbor.Value{}, fmt.Errorf("cbor: Marshaler: %w", err)
+		return nil, fmt.Errorf("cbor: Marshaler: %w", err)
 	}
 	dec := NewDecoder()
 	val, decErr := dec.Decode(data)
 	if decErr != nil {
-		return cbor.Value{}, fmt.Errorf("cbor: Marshaler produced invalid CBOR: %w", decErr)
+		return nil, fmt.Errorf("cbor: Marshaler produced invalid CBOR: %w", decErr)
 	}
 	return val, nil
 }
@@ -193,39 +196,39 @@ func timeToValue(t time.Time) cbor.Value {
 	}
 	sec := t.Unix()
 	if sec >= 0 {
-		return cbor.MakeTag(cbor.TagEpochDateTime, cbor.Uint(uint64(sec)))
+		return cbor.Tag{ID: cbor.TagEpochDateTime, Inner: cbor.Uint(uint64(sec))}
 	}
-	return cbor.MakeTag(cbor.TagEpochDateTime, cbor.NegInt(uint64(-1-sec)))
+	return cbor.Tag{ID: cbor.TagEpochDateTime, Inner: cbor.NegInt(uint64(-1 - sec))}
 }
 
 func sliceToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	n := rv.Len()
-	arr := make([]cbor.Value, n)
+	arr := make(cbor.Array, n)
 	for i := range n {
 		val, err := reflectToValue(rv.Index(i), opts)
 		if err != nil {
-			return cbor.Value{}, err
+			return nil, err
 		}
 		arr[i] = val
 	}
-	return cbor.MakeArray(arr...), nil
+	return arr, nil
 }
 
 func mapToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
-	entries := make([]cbor.MapEntry, 0, rv.Len())
+	entries := make(cbor.Map, 0, rv.Len())
 	iter := rv.MapRange()
 	for iter.Next() {
 		k, err := reflectToValue(iter.Key(), opts)
 		if err != nil {
-			return cbor.Value{}, err
+			return nil, err
 		}
 		v, err := reflectToValue(iter.Value(), opts)
 		if err != nil {
-			return cbor.Value{}, err
+			return nil, err
 		}
 		entries = append(entries, cbor.MapEntry{Key: k, Value: v})
 	}
-	return cbor.MakeMap(entries...), nil
+	return entries, nil
 }
 
 type fieldInfo struct {
@@ -241,7 +244,7 @@ type fieldInfo struct {
 func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	rt := rv.Type()
 	fields := getStructFields(rt)
-	entries := make([]cbor.MapEntry, 0, len(fields))
+	entries := make(cbor.Map, 0, len(fields))
 
 	for _, fi := range fields {
 		fv := rv.Field(fi.index)
@@ -251,11 +254,11 @@ func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error
 
 		val, err := reflectToValue(fv, opts)
 		if err != nil {
-			return cbor.Value{}, err
+			return nil, err
 		}
 
 		if fi.hasTag {
-			val = cbor.MakeTag(fi.tagID, val)
+			val = cbor.Tag{ID: fi.tagID, Inner: val}
 		}
 
 		var key cbor.Value
@@ -272,7 +275,7 @@ func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error
 		entries = append(entries, cbor.MapEntry{Key: key, Value: val})
 	}
 
-	return cbor.MakeMap(entries...), nil
+	return entries, nil
 }
 
 func getStructFields(rt reflect.Type) []fieldInfo {

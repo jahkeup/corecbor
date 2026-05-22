@@ -3,6 +3,7 @@
 
 package rfc8949
 
+
 import (
 	"bytes"
 	"cmp"
@@ -129,27 +130,24 @@ func EncodeDeterministic(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, err
 }
 
 func encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
-	if v.IsZero() {
+	if v == nil {
 		return dst, fmt.Errorf("encode: %w", cbor.ErrNilValue)
 	}
-	switch v.Kind() {
-	case cbor.KindUint:
-		return wire.AppendHead(dst, wire.MajorUint, v.Uint()), nil
-	case cbor.KindNegInt:
-		return wire.AppendHead(dst, wire.MajorNegInt, v.NegInt()), nil
-	case cbor.KindBytes:
-		val := v.Bytes()
+	switch val := v.(type) {
+	case cbor.Uint:
+		return wire.AppendHead(dst, wire.MajorUint, uint64(val)), nil
+	case cbor.NegInt:
+		return wire.AppendHead(dst, wire.MajorNegInt, uint64(val)), nil
+	case cbor.Bytes:
 		dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(val)))
 		return append(dst, val...), nil
-	case cbor.KindText:
-		val := v.Text()
-		if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(val) {
+	case cbor.Text:
+		if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(string(val)) {
 			return dst, fmt.Errorf("encode text: %w", cbor.ErrInvalidUTF8)
 		}
 		dst = wire.AppendHead(dst, wire.MajorText, uint64(len(val)))
 		return append(dst, val...), nil
-	case cbor.KindArray:
-		val := v.Array()
+	case cbor.Array:
 		dst = wire.AppendHead(dst, wire.MajorArray, uint64(len(val)))
 		var err error
 		for _, elem := range val {
@@ -159,40 +157,38 @@ func encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
 			}
 		}
 		return dst, nil
-	case cbor.KindMap:
-		return encodeMap(dst, v.Map(), opts)
-	case cbor.KindTag:
-		inner := v.TagInner()
-		if inner.IsZero() {
-			return dst, fmt.Errorf("encode tag %d: inner is %w", v.TagID(), cbor.ErrNilValue)
+	case cbor.Map:
+		return encodeMap(dst, val, opts)
+	case cbor.Tag:
+		if val.Inner == nil {
+			return dst, fmt.Errorf("encode tag %d: inner is %w", val.ID, cbor.ErrNilValue)
 		}
-		dst = wire.AppendHead(dst, wire.MajorTag, v.TagID())
-		return encode(dst, inner, opts)
-	case cbor.KindBool:
-		if v.Bool() {
+		dst = wire.AppendHead(dst, wire.MajorTag, val.ID)
+		return encode(dst, val.Inner, opts)
+	case cbor.Bool:
+		if val {
 			return append(dst, wire.SimpleTrue), nil
 		}
 		return append(dst, wire.SimpleFalse), nil
-	case cbor.KindNull:
+	case cbor.Null:
 		return append(dst, wire.SimpleNull), nil
-	case cbor.KindUndefined:
+	case cbor.Undefined:
 		return append(dst, wire.SimpleUndefined), nil
-	case cbor.KindSimple:
-		sv := v.Simple()
-		if sv < 24 {
-			return append(dst, wire.MajorOther|sv), nil
+	case cbor.Simple:
+		if uint8(val) < 24 {
+			return append(dst, wire.MajorOther|uint8(val)), nil
 		}
-		return append(dst, wire.SimpleOneByte, sv), nil
-	case cbor.KindFloat32:
-		return encodeFloat32(dst, v.Float32(), opts)
-	case cbor.KindFloat64:
-		return encodeFloat64(dst, v.Float64(), opts)
+		return append(dst, wire.SimpleOneByte, uint8(val)), nil
+	case cbor.Float32:
+		return encodeFloat32(dst, val, opts)
+	case cbor.Float64:
+		return encodeFloat64(dst, val, opts)
 	default:
-		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind())
+		return dst, fmt.Errorf("encode: unsupported Value type %T", v)
 	}
 }
 
-func encodeFloat32(dst []byte, val float32, opts EncodeOpts) ([]byte, error) {
+func encodeFloat32(dst []byte, val cbor.Float32, opts EncodeOpts) ([]byte, error) {
 	f := float64(val)
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return dst, fmt.Errorf("encode float32: %w", cbor.ErrNonFiniteFloat)
@@ -204,14 +200,14 @@ func encodeFloat32(dst []byte, val float32, opts EncodeOpts) ([]byte, error) {
 		if opts.Deterministic {
 			return appendShortestFloat(dst, f, opts), nil
 		}
-		return wire.AppendFloat32(dst, val), nil
+		return wire.AppendFloat32(dst, float32(val)), nil
 	default:
-		return wire.AppendFloat32(dst, val), nil
+		return wire.AppendFloat32(dst, float32(val)), nil
 	}
 }
 
-func encodeFloat64(dst []byte, val float64, opts EncodeOpts) ([]byte, error) {
-	f := val
+func encodeFloat64(dst []byte, val cbor.Float64, opts EncodeOpts) ([]byte, error) {
+	f := float64(val)
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return dst, fmt.Errorf("encode float64: %w", cbor.ErrNonFiniteFloat)
 	}
@@ -239,7 +235,7 @@ func appendShortestFloat(dst []byte, f float64, _ EncodeOpts) []byte {
 	return wire.AppendFloat64(dst, f)
 }
 
-func encodeMap(dst []byte, m []cbor.MapEntry, opts EncodeOpts) ([]byte, error) {
+func encodeMap(dst []byte, m cbor.Map, opts EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	if !opts.Deterministic || len(m) <= 1 {
 		var err error

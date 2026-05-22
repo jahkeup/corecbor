@@ -74,13 +74,9 @@ func extractPublicKeyFromCWT(cwtBytes []byte, issuerPub crypto.PublicKey) (crypt
 
 func valueToMap(v any) (map[int64]any, error) {
 	switch m := v.(type) {
-	case cbor.Value:
-		if m.Kind() != cbor.KindMap {
-			return nil, fmt.Errorf("expected map, got %v", m.Kind())
-		}
-		entries := m.Map()
-		result := make(map[int64]any, len(entries))
-		for _, entry := range entries {
+	case cbor.Map:
+		result := make(map[int64]any, len(m))
+		for _, entry := range m {
 			key := cborToInt64(entry.Key)
 			result[key] = cborToNative(entry.Value)
 		}
@@ -104,30 +100,29 @@ func valueToMap(v any) (map[int64]any, error) {
 }
 
 func cborToInt64(v cbor.Value) int64 {
-	switch v.Kind() {
-	case cbor.KindUint:
-		return int64(v.Uint())
-	case cbor.KindNegInt:
-		return -1 - int64(v.NegInt())
+	switch x := v.(type) {
+	case cbor.Uint:
+		return int64(x)
+	case cbor.NegInt:
+		return -1 - int64(x)
 	default:
 		return 0
 	}
 }
 
 func cborToNative(v cbor.Value) any {
-	switch v.Kind() {
-	case cbor.KindUint:
-		return int64(v.Uint())
-	case cbor.KindNegInt:
-		return -1 - int64(v.NegInt())
-	case cbor.KindBytes:
-		return v.Bytes()
-	case cbor.KindText:
-		return v.Text()
-	case cbor.KindMap:
-		entries := v.Map()
-		result := make(map[int64]any, len(entries))
-		for _, entry := range entries {
+	switch x := v.(type) {
+	case cbor.Uint:
+		return int64(x)
+	case cbor.NegInt:
+		return -1 - int64(x)
+	case cbor.Bytes:
+		return []byte(x)
+	case cbor.Text:
+		return string(x)
+	case cbor.Map:
+		result := make(map[int64]any, len(x))
+		for _, entry := range x {
 			key := cborToInt64(entry.Key)
 			result[key] = cborToNative(entry.Value)
 		}

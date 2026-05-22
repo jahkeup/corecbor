@@ -18,9 +18,9 @@ const (
 // Headers represents COSE header parameters.
 // Keys are int64 (integer labels) or string (text labels).
 type Headers struct {
-	params       map[any]any
-	encodedCache []byte // cached CBOR encoding of protected headers
-	cacheValid   bool
+	params        map[any]any
+	encodedCache  []byte // cached CBOR encoding of protected headers
+	cacheValid    bool
 }
 
 // Get returns the value for the given label, or nil if not set.
@@ -101,27 +101,27 @@ func (h *Headers) encodeProtected() ([]byte, error) {
 	return encoded, nil
 }
 
-// toCBORMap converts headers to a corecbor Value (map kind).
-func (h *Headers) toCBORMap() corecbor.Value {
+// toCBORMap converts headers to a corecbor Map value.
+func (h *Headers) toCBORMap() corecbor.Map {
 	if h.IsEmpty() {
-		return corecbor.Value{}
+		return nil
 	}
 	return headerParamsToMap(h.params)
 }
 
-// headerParamsToMap converts a Go map to a corecbor Map Value.
-func headerParamsToMap(params map[any]any) corecbor.Value {
+// headerParamsToMap converts a Go map to a corecbor Map.
+func headerParamsToMap(params map[any]any) corecbor.Map {
 	if len(params) == 0 {
-		return corecbor.Value{}
+		return nil
 	}
-	entries := make([]corecbor.MapEntry, 0, len(params))
+	m := make(corecbor.Map, 0, len(params))
 	for k, v := range params {
-		entries = append(entries, corecbor.MapEntry{
+		m = append(m, corecbor.MapEntry{
 			Key:   goToCBOR(k),
 			Value: goToCBOR(v),
 		})
 	}
-	return corecbor.MakeMap(entries...)
+	return m
 }
 
 // encodeHeaderMap encodes a header map to CBOR bytes using CoreDeterministic.
@@ -141,10 +141,10 @@ func decodeProtected(data []byte) (*Headers, error) {
 	if err != nil {
 		return nil, err
 	}
-	if v.Kind() != corecbor.KindMap {
+	m, ok := v.(corecbor.Map)
+	if !ok {
 		return nil, ErrMalformed
 	}
-	m := v.Map()
 	h := &Headers{params: make(map[any]any, len(m))}
 	for _, entry := range m {
 		key := cborToGo(entry.Key)
@@ -156,13 +156,13 @@ func decodeProtected(data []byte) (*Headers, error) {
 
 // decodeUnprotected decodes an unprotected header CBOR map value.
 func decodeUnprotected(v corecbor.Value) (*Headers, error) {
-	if v.IsZero() {
+	if v == nil {
 		return &Headers{}, nil
 	}
-	if v.Kind() != corecbor.KindMap {
+	m, ok := v.(corecbor.Map)
+	if !ok {
 		return nil, ErrMalformed
 	}
-	m := v.Map()
 	if len(m) == 0 {
 		return &Headers{}, nil
 	}
@@ -180,14 +180,14 @@ func goToCBOR(v any) corecbor.Value {
 	switch x := v.(type) {
 	case int64:
 		if x >= 0 {
-			return corecbor.Uint(uint64(x))
+			return corecbor.Uint(x)
 		}
 		return corecbor.NegInt(uint64(-1 - x))
 	case uint64:
 		return corecbor.Uint(x)
 	case int:
 		if x >= 0 {
-			return corecbor.Uint(uint64(x))
+			return corecbor.Uint(x)
 		}
 		return corecbor.NegInt(uint64(-1 - x))
 	case string:
@@ -197,30 +197,30 @@ func goToCBOR(v any) corecbor.Value {
 	case bool:
 		return corecbor.Bool(x)
 	case nil:
-		return corecbor.Null()
+		return corecbor.Null{}
 	default:
 		// Fallback: try to use as-is if it's already a cbor.Value
 		if cv, ok := v.(corecbor.Value); ok {
 			return cv
 		}
-		return corecbor.Null()
+		return corecbor.Null{}
 	}
 }
 
 // cborToGo converts a corecbor Value to a Go value.
 func cborToGo(v corecbor.Value) any {
-	switch v.Kind() {
-	case corecbor.KindUint:
-		return int64(v.Uint())
-	case corecbor.KindNegInt:
-		return int64(-1 - int64(v.NegInt()))
-	case corecbor.KindText:
-		return v.Text()
-	case corecbor.KindBytes:
-		return v.Bytes()
-	case corecbor.KindBool:
-		return v.Bool()
-	case corecbor.KindNull:
+	switch x := v.(type) {
+	case corecbor.Uint:
+		return int64(x)
+	case corecbor.NegInt:
+		return int64(-1 - int64(x))
+	case corecbor.Text:
+		return string(x)
+	case corecbor.Bytes:
+		return []byte(x)
+	case corecbor.Bool:
+		return bool(x)
+	case corecbor.Null:
 		return nil
 	default:
 		return v

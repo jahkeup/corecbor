@@ -92,10 +92,10 @@ func TestDiagnostic_Array(t *testing.T) {
 		val  Value
 		want string
 	}{
-		{MakeArray(), "[]"},
-		{MakeArray(Uint(1), Uint(2), Uint(3)), "[1, 2, 3]"},
-		{MakeArray(MakeArray(Uint(1)), MakeArray(Uint(2))), "[[1], [2]]"},
-		{MakeArray(Text("a"), Uint(1), Bool(true)), `["a", 1, true]`},
+		{Array(nil), "[]"},
+		{Array{Uint(1), Uint(2), Uint(3)}, "[1, 2, 3]"},
+		{Array{Array{Uint(1)}, Array{Uint(2)}}, "[[1], [2]]"},
+		{Array{Text("a"), Uint(1), Bool(true)}, `["a", 1, true]`},
 	}
 	for _, tc := range tests {
 		got := DiagnosticValue(tc.val)
@@ -110,13 +110,13 @@ func TestDiagnostic_Map(t *testing.T) {
 		val  Value
 		want string
 	}{
-		{MakeMap(), "{}"},
-		{MakeMap(MapEntry{Key: Text("a"), Value: Uint(1)}), `{"a": 1}`},
-		{MakeMap(MapEntry{Key: Uint(1), Value: Text("x")}), `{1: "x"}`},
-		{MakeMap(
-			MapEntry{Key: Text("a"), Value: Uint(1)},
-			MapEntry{Key: Uint(2), Value: Text("b")},
-		), `{"a": 1, 2: "b"}`},
+		{Map(nil), "{}"},
+		{Map{{Key: Text("a"), Value: Uint(1)}}, `{"a": 1}`},
+		{Map{{Key: Uint(1), Value: Text("x")}}, `{1: "x"}`},
+		{Map{
+			{Key: Text("a"), Value: Uint(1)},
+			{Key: Uint(2), Value: Text("b")},
+		}, `{"a": 1, 2: "b"}`},
 	}
 	for _, tc := range tests {
 		got := DiagnosticValue(tc.val)
@@ -131,9 +131,9 @@ func TestDiagnostic_Tag(t *testing.T) {
 		val  Value
 		want string
 	}{
-		{MakeTag(1, Uint(1363896240)), "1(1363896240)"},
-		{MakeTag(0, Text("2013-03-21T20:04:00Z")), `0("2013-03-21T20:04:00Z")`},
-		{MakeTag(24, Bytes([]byte{0x01})), "24(h'01')"},
+		{Tag{ID: 1, Inner: Uint(1363896240)}, "1(1363896240)"},
+		{Tag{ID: 0, Inner: Text("2013-03-21T20:04:00Z")}, `0("2013-03-21T20:04:00Z")`},
+		{Tag{ID: 24, Inner: Bytes([]byte{0x01})}, "24(h'01')"},
 	}
 	for _, tc := range tests {
 		got := DiagnosticValue(tc.val)
@@ -175,8 +175,8 @@ func TestDiagnostic_Bool_Null_Undefined(t *testing.T) {
 	}{
 		{Bool(true), "true"},
 		{Bool(false), "false"},
-		{Null(), "null"},
-		{Undefined(), "undefined"},
+		{Null{}, "null"},
+		{Undefined{}, "undefined"},
 	}
 	for _, tc := range tests {
 		got := DiagnosticValue(tc.val)
@@ -209,8 +209,8 @@ func TestDiagnostic_Compact(t *testing.T) {
 		val  Value
 		want string
 	}{
-		{MakeArray(Uint(1), Uint(2), Uint(3)), "[1,2,3]"},
-		{MakeMap(MapEntry{Key: Text("a"), Value: Uint(1)}, MapEntry{Key: Text("b"), Value: Uint(2)}), `{"a":1,"b":2}`},
+		{Array{Uint(1), Uint(2), Uint(3)}, "[1,2,3]"},
+		{Map{{Key: Text("a"), Value: Uint(1)}, {Key: Text("b"), Value: Uint(2)}}, `{"a":1,"b":2}`},
 	}
 	for _, tc := range tests {
 		got := DiagnosticValue(tc.val, DiagCompact())
@@ -273,19 +273,19 @@ func TestDiagnosticValue_RFC8949Examples(t *testing.T) {
 		{"text_a", Text("a"), `"a"`},
 		{"text_IETF", Text("IETF"), `"IETF"`},
 		{"text_escape", Text("\"\\"), `"\"\\"`},
-		{"empty_array", MakeArray(), "[]"},
-		{"array_123", MakeArray(Uint(1), Uint(2), Uint(3)), "[1, 2, 3]"},
+		{"empty_array", Array{}, "[]"},
+		{"array_123", Array{Uint(1), Uint(2), Uint(3)}, "[1, 2, 3]"},
 		{
 			"nested_array",
-			MakeArray(Uint(1), MakeArray(Uint(2), Uint(3)), MakeArray(Uint(4), Uint(5))),
+			Array{Uint(1), Array{Uint(2), Uint(3)}, Array{Uint(4), Uint(5)}},
 			"[1, [2, 3], [4, 5]]",
 		},
 		{"false", Bool(false), "false"},
 		{"true", Bool(true), "true"},
-		{"null", Null(), "null"},
-		{"undefined", Undefined(), "undefined"},
+		{"null", Null{}, "null"},
+		{"undefined", Undefined{}, "undefined"},
 		{"float_1.5", Float64(1.5), "1.5"},
-		{"tag_epoch", MakeTag(1, Uint(1363896240)), "1(1363896240)"},
+		{"tag_epoch", Tag{ID: 1, Inner: Uint(1363896240)}, "1(1363896240)"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

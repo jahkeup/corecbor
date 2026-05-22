@@ -28,9 +28,9 @@ func DecodeFrom(r io.Reader, opts DecodeOpts) (cbor.Value, error) {
 		}
 		if err != nil {
 			if len(buf) == 0 {
-				return cbor.Value{}, err
+				return nil, err
 			}
-			return cbor.Value{}, decErr
+			return nil, decErr
 		}
 	}
 }
@@ -74,9 +74,9 @@ func DecodeFromBuffered(br *BufferedReader, opts DecodeOpts) (cbor.Value, error)
 		}
 		if err != nil {
 			if len(buf) == 0 {
-				return cbor.Value{}, err
+				return nil, err
 			}
-			return cbor.Value{}, decErr
+			return nil, decErr
 		}
 	}
 }

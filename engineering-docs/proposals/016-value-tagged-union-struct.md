@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 016 |
 | **Tier** | 1 |
-| **Status** | Rejected |
+| **Status** | Draft |
 | **Filed** | 2026-05-22 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (foundational primitives) |
@@ -412,94 +412,8 @@ Use generics to monomorphize per-type. Rejected because:
 
 ---
 
-## Experimental results (2026-05-22)
-
-A full implementation was completed and benchmarked on AMD EPYC 7R13
-(32 cores, linux/amd64). All tests passed across all modules.
-The implementation was then reverted due to severe throughput
-regressions.
-
-### Measured results vs. predictions
-
-| Benchmark | Baseline (interface) | Predicted (struct) | **Actual (struct)** | Verdict |
-|---|---|---|---|---|
-| EncodeScalars | 615 MB/s, 0 alloc | ≥ 610 MB/s, 0 alloc | **149 MB/s, 0 alloc** | **-76% REGRESSION** |
-| EncodeNestedMap | 688 MB/s, 0 alloc | ~160 MB/s, 0 alloc | **96 MB/s, 0 alloc** | **-86% REGRESSION** |
-| DecodeScalars | 460 MB/s, 2 alloc | ~500 MB/s, 1 alloc | **132 MB/s, 1 alloc** | **-71% REGRESSION** |
-| DecodeNestedMapStrict | 58 MB/s, 46 alloc | ~120 MB/s, ~6 alloc | **31 MB/s, 19 alloc** | **-47% REGRESSION** |
-| MarshalSign1 | 400ns, 10 alloc | — | **505ns, 5 alloc** | -21% throughput, -50% allocs |
-
-### Analysis: why allocations improved but throughput collapsed
-
-**Allocation reduction confirmed:** The interface boxing elimination
-worked exactly as predicted. Decode allocs dropped from 46→19 (strict)
-and 2→1 (scalars). Marshal allocs dropped from 10→5.
-
-**Throughput regression root cause:** The Value struct is ~104 bytes
-(1 byte kind + 7 padding + 8 num + 16 str + 24 bytes + 24 items +
-24 pairs). Every pass-by-value copies 104 bytes onto the stack.
-
-The encode hot path calls `encode(dst []byte, v cbor.Value, opts EncodeOpts)`
-recursively — with the interface this copied 16 bytes (type+data pointer);
-with the struct it copies 104 bytes. For a 1000-element scalar array,
-this means 104 KB of stack copies vs 16 KB — a 6.5x increase in memory
-bandwidth per encode call.
-
-The decode path returns `(cbor.Value, int, error)` — returning a 104-byte
-struct by value on every recursive call similarly saturates the memory
-bus. The allocation savings from eliminating boxing are overwhelmed by
-the copy overhead.
-
-**Why the risk assessment was wrong:** The proposal stated "Low
-likelihood" for struct-copy overhead, reasoning that "encode already
-0-alloc, struct fits in 2 cache lines." The error was assuming that
-fitting in 2 cache lines makes copying cheap in absolute terms. In
-practice, the recursive encode/decode hot loops call these functions
-millions of times per second — the aggregate copy bandwidth dominates.
-
-### Struct size breakdown
-
-```
-kind   [1]   uint8
-_pad   [7]   alignment padding
-num    [8]   uint64
-str    [16]  string (ptr + len)
-bytes  [24]  []byte (ptr + len + cap)
-items  [24]  []Value (ptr + len + cap)
-pairs  [24]  []MapEntry (ptr + len + cap)
-Total: 104 bytes
-```
-
-Only one of {str, bytes, items, pairs} is populated per value,
-but all 88 bytes of them are copied on every pass-by-value.
-
-### Paths forward (for a future proposal)
-
-1. **Compact struct via unsafe union** — overlay str/bytes/items/pairs
-   into a single 24-byte field using `unsafe.Pointer`. Reduces struct
-   to ~40 bytes. Trade-off: unsafe, non-portable, breaks TinyGo.
-
-2. **Pointer-based tree with arena** — use `*Value` for recursion
-   (16-byte pointer copy) but allocate from a per-decode arena to
-   amortize allocation cost. Trade-off: arena lifecycle complexity.
-
-3. **Hybrid: interface for recursive paths, struct for leaf values** —
-   keep the interface for Array/Map/Tag (which recurse) but use inline
-   structs for scalars (Uint, Text, Bytes). Trade-off: half-measure,
-   complex type system.
-
-4. **Pass `[]Value` by index** — restructure encode/decode to operate
-   on slice indices rather than passing individual Values. Trade-off:
-   API redesign, less idiomatic.
-
-None of these are ready for implementation without further profiling
-and design work.
-
----
-
 ## Changelog
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-22 | Initial draft | corecbor maintainers |
-| 2026-05-22 | Status: Draft → Rejected. Full implementation benchmarked; severe throughput regression (-47% to -86%) despite allocation reduction. Struct copy overhead dominates. | corecbor maintainers |

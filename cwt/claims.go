@@ -56,35 +56,35 @@ type ClaimsSet struct {
 
 // Encode serializes the ClaimsSet as a CBOR map using CoreDeterministic mode.
 func (c *ClaimsSet) Encode() ([]byte, error) {
-	var entries []corecbor.MapEntry
+	m := corecbor.Map{}
 
 	if c.Issuer != "" {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimIss), Value: corecbor.Text(c.Issuer)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimIss), Value: corecbor.Text(c.Issuer)})
 	}
 	if c.Subject != "" {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimSub), Value: corecbor.Text(c.Subject)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimSub), Value: corecbor.Text(c.Subject)})
 	}
 	if c.Audience != "" {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimAud), Value: corecbor.Text(c.Audience)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimAud), Value: corecbor.Text(c.Audience)})
 	}
 	if !c.Expiration.IsZero() {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimExp), Value: numericDate(c.Expiration)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimExp), Value: numericDate(c.Expiration)})
 	}
 	if !c.NotBefore.IsZero() {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimNbf), Value: numericDate(c.NotBefore)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimNbf), Value: numericDate(c.NotBefore)})
 	}
 	if !c.IssuedAt.IsZero() {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimIat), Value: numericDate(c.IssuedAt)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimIat), Value: numericDate(c.IssuedAt)})
 	}
 	if len(c.CWTID) > 0 {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimCti), Value: corecbor.Bytes(c.CWTID)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimCti), Value: corecbor.Bytes(c.CWTID)})
 	}
 	if c.Confirmation != nil {
 		cnfMap, err := encodeCnf(c.Confirmation)
 		if err != nil {
 			return nil, fmt.Errorf("%w: cnf: %v", ErrMalformedClaims, err)
 		}
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(claimCnf), Value: cnfMap})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(claimCnf), Value: cnfMap})
 	}
 
 	for k, v := range c.Private {
@@ -96,10 +96,9 @@ func (c *ClaimsSet) Encode() ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("%w: private claim value: %v", ErrMalformedClaims, err)
 		}
-		entries = append(entries, corecbor.MapEntry{Key: key, Value: val})
+		m = append(m, corecbor.MapEntry{Key: key, Value: val})
 	}
 
-	m := corecbor.MakeMap(entries...)
 	enc := corecbor.New(corecbor.ModeCoreDeterministic)
 	return enc.Encode(nil, m)
 }
@@ -112,11 +111,11 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedClaims, err)
 	}
 
-	if v.Kind() != corecbor.KindMap {
-		return nil, fmt.Errorf("%w: expected map, got %v", ErrMalformedClaims, v.Kind())
+	m, ok := v.(corecbor.Map)
+	if !ok {
+		return nil, fmt.Errorf("%w: expected map, got %T", ErrMalformedClaims, v)
 	}
 
-	m := v.Map()
 	cs := &ClaimsSet{}
 	for _, entry := range m {
 		keyInt, isInt := entryKeyInt(entry.Key)
@@ -130,20 +129,23 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 
 		switch keyInt {
 		case claimIss:
-			if entry.Value.Kind() != corecbor.KindText {
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
 				return nil, fmt.Errorf("%w: iss must be text", ErrMalformedClaims)
 			}
-			cs.Issuer = entry.Value.Text()
+			cs.Issuer = string(t)
 		case claimSub:
-			if entry.Value.Kind() != corecbor.KindText {
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
 				return nil, fmt.Errorf("%w: sub must be text", ErrMalformedClaims)
 			}
-			cs.Subject = entry.Value.Text()
+			cs.Subject = string(t)
 		case claimAud:
-			if entry.Value.Kind() != corecbor.KindText {
+			t, ok := entry.Value.(corecbor.Text)
+			if !ok {
 				return nil, fmt.Errorf("%w: aud must be text", ErrMalformedClaims)
 			}
-			cs.Audience = entry.Value.Text()
+			cs.Audience = string(t)
 		case claimExp:
 			ts, err := parseNumericDate(entry.Value)
 			if err != nil {
@@ -163,10 +165,11 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 			}
 			cs.IssuedAt = ts
 		case claimCti:
-			if entry.Value.Kind() != corecbor.KindBytes {
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
 				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedClaims)
 			}
-			cs.CWTID = entry.Value.Bytes()
+			cs.CWTID = []byte(b)
 		case claimCnf:
 			cnf, err := decodeCnf(entry.Value)
 			if err != nil {
@@ -189,37 +192,37 @@ func numericDate(t time.Time) corecbor.Value {
 	nsec := t.Nanosecond()
 	if nsec == 0 {
 		if sec >= 0 {
-			return corecbor.Uint(uint64(sec))
+			return corecbor.Uint(sec)
 		}
-		return corecbor.NegInt(uint64(-1 - sec))
+		return corecbor.NegInt(sec)
 	}
 	return corecbor.Float64(float64(sec) + float64(nsec)/1e9)
 }
 
 func parseNumericDate(v corecbor.Value) (time.Time, error) {
-	switch v.Kind() {
-	case corecbor.KindUint:
-		return time.Unix(int64(v.Uint()), 0), nil
-	case corecbor.KindNegInt:
-		return time.Unix(-1-int64(v.NegInt()), 0), nil
-	case corecbor.KindFloat64:
-		sec, frac := math.Modf(v.Float64())
+	switch x := v.(type) {
+	case corecbor.Uint:
+		return time.Unix(int64(x), 0), nil
+	case corecbor.NegInt:
+		return time.Unix(int64(x), 0), nil
+	case corecbor.Float64:
+		sec, frac := math.Modf(float64(x))
 		return time.Unix(int64(sec), int64(frac*1e9)), nil
-	case corecbor.KindFloat32:
-		f := float64(v.Float32())
+	case corecbor.Float32:
+		f := float64(x)
 		sec, frac := math.Modf(f)
 		return time.Unix(int64(sec), int64(frac*1e9)), nil
 	default:
-		return time.Time{}, fmt.Errorf("expected numeric, got %v", v.Kind())
+		return time.Time{}, fmt.Errorf("expected numeric, got %T", v)
 	}
 }
 
 func entryKeyInt(key corecbor.Value) (int64, bool) {
-	switch key.Kind() {
-	case corecbor.KindUint:
-		return int64(key.Uint()), true
-	case corecbor.KindNegInt:
-		return -1 - int64(key.NegInt()), true
+	switch k := key.(type) {
+	case corecbor.Uint:
+		return int64(k), true
+	case corecbor.NegInt:
+		return int64(k), true
 	default:
 		return 0, false
 	}
@@ -233,14 +236,14 @@ func toValue(v any) (corecbor.Value, error) {
 		return corecbor.Text(x), nil
 	case int:
 		if x >= 0 {
-			return corecbor.Uint(uint64(x)), nil
+			return corecbor.Uint(x), nil
 		}
-		return corecbor.NegInt(uint64(-1 - x)), nil
+		return corecbor.NegInt(int64(x)), nil
 	case int64:
 		if x >= 0 {
-			return corecbor.Uint(uint64(x)), nil
+			return corecbor.Uint(x), nil
 		}
-		return corecbor.NegInt(uint64(-1 - x)), nil
+		return corecbor.NegInt(x), nil
 	case uint64:
 		return corecbor.Uint(x), nil
 	case float64:
@@ -250,54 +253,54 @@ func toValue(v any) (corecbor.Value, error) {
 	case bool:
 		return corecbor.Bool(x), nil
 	default:
-		return corecbor.Value{}, fmt.Errorf("unsupported type %T", v)
+		return nil, fmt.Errorf("unsupported type %T", v)
 	}
 }
 
 func fromValue(v corecbor.Value) any {
-	switch v.Kind() {
-	case corecbor.KindUint:
-		return int64(v.Uint())
-	case corecbor.KindNegInt:
-		return -1 - int64(v.NegInt())
-	case corecbor.KindText:
-		return v.Text()
-	case corecbor.KindBytes:
-		return v.Bytes()
-	case corecbor.KindFloat64:
-		return v.Float64()
-	case corecbor.KindFloat32:
-		return float64(v.Float32())
-	case corecbor.KindBool:
-		return v.Bool()
+	switch x := v.(type) {
+	case corecbor.Uint:
+		return int64(x)
+	case corecbor.NegInt:
+		return int64(x)
+	case corecbor.Text:
+		return string(x)
+	case corecbor.Bytes:
+		return []byte(x)
+	case corecbor.Float64:
+		return float64(x)
+	case corecbor.Float32:
+		return float64(x)
+	case corecbor.Bool:
+		return bool(x)
 	default:
 		return v
 	}
 }
 
-func encodeCnf(cnf *Confirmation) (corecbor.Value, error) {
-	var entries []corecbor.MapEntry
+func encodeCnf(cnf *Confirmation) (corecbor.Map, error) {
+	var m corecbor.Map
 	if cnf.Key != nil {
 		keyMap, err := marshalCOSEKey(cnf.Key)
 		if err != nil {
-			return corecbor.Value{}, err
+			return nil, err
 		}
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyByCOSEKey), Value: keyMap})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyByCOSEKey), Value: keyMap})
 	}
 	if len(cnf.Encrypted) > 0 {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyEncrypted), Value: corecbor.Bytes(cnf.Encrypted)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyEncrypted), Value: corecbor.Bytes(cnf.Encrypted)})
 	}
 	if len(cnf.KeyID) > 0 {
-		entries = append(entries, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyByKid), Value: corecbor.Bytes(cnf.KeyID)})
+		m = append(m, corecbor.MapEntry{Key: corecbor.Uint(cnfKeyByKid), Value: corecbor.Bytes(cnf.KeyID)})
 	}
-	return corecbor.MakeMap(entries...), nil
+	return m, nil
 }
 
 func decodeCnf(v corecbor.Value) (*Confirmation, error) {
-	if v.Kind() != corecbor.KindMap {
-		return nil, fmt.Errorf("expected map, got %v", v.Kind())
+	m, ok := v.(corecbor.Map)
+	if !ok {
+		return nil, fmt.Errorf("expected map, got %T", v)
 	}
-	m := v.Map()
 	cnf := &Confirmation{}
 	for _, entry := range m {
 		k, isInt := entryKeyInt(entry.Key)
@@ -306,58 +309,61 @@ func decodeCnf(v corecbor.Value) (*Confirmation, error) {
 		}
 		switch k {
 		case cnfKeyByCOSEKey:
-			if entry.Value.Kind() != corecbor.KindMap {
+			keyMap, ok := entry.Value.(corecbor.Map)
+			if !ok {
 				return nil, fmt.Errorf("COSE_Key must be map")
 			}
-			key, err := unmarshalCOSEKey(entry.Value.Map())
+			key, err := unmarshalCOSEKey(keyMap)
 			if err != nil {
 				return nil, err
 			}
 			cnf.Key = key
 		case cnfKeyEncrypted:
-			if entry.Value.Kind() != corecbor.KindBytes {
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
 				return nil, fmt.Errorf("encrypted key must be bytes")
 			}
-			cnf.Encrypted = entry.Value.Bytes()
+			cnf.Encrypted = []byte(b)
 		case cnfKeyByKid:
-			if entry.Value.Kind() != corecbor.KindBytes {
+			b, ok := entry.Value.(corecbor.Bytes)
+			if !ok {
 				return nil, fmt.Errorf("kid must be bytes")
 			}
-			cnf.KeyID = entry.Value.Bytes()
+			cnf.KeyID = []byte(b)
 		}
 	}
 	return cnf, nil
 }
 
-func marshalCOSEKey(k *cose.Key) (corecbor.Value, error) {
+func marshalCOSEKey(k *cose.Key) (corecbor.Map, error) {
 	pub, err := k.PublicKey()
 	if err != nil {
-		return corecbor.Value{}, fmt.Errorf("marshalCOSEKey: %w", err)
+		return nil, fmt.Errorf("marshalCOSEKey: %w", err)
 	}
 	return cosePublicKeyToMap(pub, k)
 }
 
-func cosePublicKeyToMap(pub interface{}, k *cose.Key) (corecbor.Value, error) {
+func cosePublicKeyToMap(pub interface{}, k *cose.Key) (corecbor.Map, error) {
 	switch p := pub.(type) {
 	case ed25519.PublicKey:
-		return corecbor.MakeMap(
-			corecbor.MapEntry{Key: corecbor.Uint(1), Value: corecbor.Uint(uint64(cose.KeyTypeOKP))},
-			corecbor.MapEntry{Key: corecbor.NegInt(0), Value: corecbor.Uint(uint64(cose.CurveEd25519))},
-			corecbor.MapEntry{Key: corecbor.NegInt(1), Value: corecbor.Bytes([]byte(p))},
-		), nil
+		return corecbor.Map{
+			{Key: corecbor.Uint(1), Value: corecbor.Uint(int64(cose.KeyTypeOKP))},
+			{Key: corecbor.NegInt(0), Value: corecbor.Uint(int64(cose.CurveEd25519))},
+			{Key: corecbor.NegInt(1), Value: corecbor.Bytes([]byte(p))},
+		}, nil
 	case *ecdsa.PublicKey:
 		crv := k.Curve()
 		size := (p.Curve.Params().BitSize + 7) / 8
 		x := padLeftBytes(p.X.Bytes(), size)
 		y := padLeftBytes(p.Y.Bytes(), size)
-		return corecbor.MakeMap(
-			corecbor.MapEntry{Key: corecbor.Uint(1), Value: corecbor.Uint(uint64(cose.KeyTypeEC2))},
-			corecbor.MapEntry{Key: corecbor.NegInt(0), Value: corecbor.Uint(uint64(crv))},
-			corecbor.MapEntry{Key: corecbor.NegInt(1), Value: corecbor.Bytes(x)},
-			corecbor.MapEntry{Key: corecbor.NegInt(2), Value: corecbor.Bytes(y)},
-		), nil
+		return corecbor.Map{
+			{Key: corecbor.Uint(1), Value: corecbor.Uint(int64(cose.KeyTypeEC2))},
+			{Key: corecbor.NegInt(0), Value: corecbor.Uint(int64(crv))},
+			{Key: corecbor.NegInt(1), Value: corecbor.Bytes(x)},
+			{Key: corecbor.NegInt(2), Value: corecbor.Bytes(y)},
+		}, nil
 	default:
-		return corecbor.Value{}, fmt.Errorf("unsupported public key type %T", pub)
+		return nil, fmt.Errorf("unsupported public key type %T", pub)
 	}
 }
 
@@ -370,30 +376,28 @@ func padLeftBytes(b []byte, size int) []byte {
 	return out
 }
 
-func unmarshalCOSEKey(m []corecbor.MapEntry) (*cose.Key, error) {
+func unmarshalCOSEKey(m corecbor.Map) (*cose.Key, error) {
 	pos := make(map[int64]any)
 	neg := make(map[int64]any)
 	for _, entry := range m {
-		switch entry.Key.Kind() {
-		case corecbor.KindUint:
-			kv := int64(entry.Key.Uint())
-			switch entry.Value.Kind() {
-			case corecbor.KindUint:
-				pos[kv] = int64(entry.Value.Uint())
-			case corecbor.KindNegInt:
-				pos[kv] = -1 - int64(entry.Value.NegInt())
-			case corecbor.KindBytes:
-				pos[kv] = entry.Value.Bytes()
+		switch kv := entry.Key.(type) {
+		case corecbor.Uint:
+			switch val := entry.Value.(type) {
+			case corecbor.Uint:
+				pos[int64(kv)] = int64(val)
+			case corecbor.NegInt:
+				pos[int64(kv)] = int64(val)
+			case corecbor.Bytes:
+				pos[int64(kv)] = []byte(val)
 			}
-		case corecbor.KindNegInt:
-			kv := int64(entry.Key.NegInt())
-			switch entry.Value.Kind() {
-			case corecbor.KindUint:
-				neg[kv] = int64(entry.Value.Uint())
-			case corecbor.KindNegInt:
-				neg[kv] = -1 - int64(entry.Value.NegInt())
-			case corecbor.KindBytes:
-				neg[kv] = entry.Value.Bytes()
+		case corecbor.NegInt:
+			switch val := entry.Value.(type) {
+			case corecbor.Uint:
+				neg[int64(kv)] = int64(val)
+			case corecbor.NegInt:
+				neg[int64(kv)] = int64(val)
+			case corecbor.Bytes:
+				neg[int64(kv)] = []byte(val)
 			}
 		}
 	}

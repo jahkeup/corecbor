@@ -138,10 +138,10 @@ func FuzzMapKeyOrderInvariance(f *testing.F) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
 
-	seeds := []Value{
-		MakeMap(MapEntry{Key: Uint(1), Value: Uint(2)}, MapEntry{Key: Uint(3), Value: Uint(4)}),
-		MakeMap(MapEntry{Key: Text("a"), Value: Uint(1)}, MapEntry{Key: Text("b"), Value: Uint(2)}, MapEntry{Key: Text("c"), Value: Uint(3)}),
-		MakeMap(MapEntry{Key: Uint(10), Value: Bool(true)}, MapEntry{Key: NegInt(0), Value: Bool(false)}, MapEntry{Key: Bytes([]byte{1}), Value: Null()}),
+	seeds := []Map{
+		{{Key: Uint(1), Value: Uint(2)}, {Key: Uint(3), Value: Uint(4)}},
+		{{Key: Text("a"), Value: Uint(1)}, {Key: Text("b"), Value: Uint(2)}, {Key: Text("c"), Value: Uint(3)}},
+		{{Key: Uint(10), Value: Bool(true)}, {Key: NegInt(0), Value: Bool(false)}, {Key: Bytes([]byte{1}), Value: Null{}}},
 	}
 	for _, m := range seeds {
 		b, _ := enc.Encode(nil, m)
@@ -153,11 +153,8 @@ func FuzzMapKeyOrderInvariance(f *testing.F) {
 		if err != nil {
 			return
 		}
-		if v.Kind() != KindMap {
-			return
-		}
-		m := v.Map()
-		if len(m) < 2 {
+		m, ok := v.(Map)
+		if !ok || len(m) < 2 {
 			return
 		}
 
@@ -175,19 +172,19 @@ func FuzzMapKeyOrderInvariance(f *testing.F) {
 			seen[s] = struct{}{}
 		}
 
-		canonical, err := enc.Encode(nil, MakeMap(m...))
+		canonical, err := enc.Encode(nil, m)
 		if err != nil {
 			return
 		}
 
 		rng := rand.New(rand.NewPCG(uint64(len(data)), uint64(data[0])))
-		shuffled := make([]MapEntry, len(m))
+		shuffled := make(Map, len(m))
 		copy(shuffled, m)
 		rng.Shuffle(len(shuffled), func(i, j int) {
 			shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 		})
 
-		reEncoded, err := enc.Encode(nil, MakeMap(shuffled...))
+		reEncoded, err := enc.Encode(nil, shuffled)
 		if err != nil {
 			t.Fatalf("re-encode shuffled failed: %v", err)
 		}
@@ -240,10 +237,10 @@ func FuzzTagPreservation(f *testing.F) {
 	dec := NewDecoder()
 
 	seeds := []Value{
-		MakeTag(1, Uint(1000)),
-		MakeTag(24, Bytes([]byte{0x01})),
-		MakeTag(100, Text("hello")),
-		MakeTag(1, MakeTag(2, Uint(42))),
+		Tag{ID: 1, Inner: Uint(1000)},
+		Tag{ID: 24, Inner: Bytes([]byte{0x01})},
+		Tag{ID: 100, Inner: Text("hello")},
+		Tag{ID: 1, Inner: Tag{ID: 2, Inner: Uint(42)}},
 	}
 	for _, s := range seeds {
 		b, _ := enc.Encode(nil, s)
@@ -256,11 +253,12 @@ func FuzzTagPreservation(f *testing.F) {
 			return
 		}
 
-		if v.Kind() != KindTag {
+		tag, ok := v.(Tag)
+		if !ok {
 			return
 		}
 
-		encoded, err := enc.Encode(nil, v)
+		encoded, err := enc.Encode(nil, tag)
 		if err != nil {
 			return
 		}
@@ -270,19 +268,20 @@ func FuzzTagPreservation(f *testing.F) {
 			t.Fatalf("re-decode failed: %v (encoded: %x)", err, encoded)
 		}
 
-		if v2.Kind() != KindTag {
-			t.Fatalf("re-decoded value is kind %d, not Tag", v2.Kind())
+		tag2, ok := v2.(Tag)
+		if !ok {
+			t.Fatalf("re-decoded value is %T, not Tag", v2)
 		}
 
-		if v.TagID() != v2.TagID() {
-			t.Fatalf("tag ID mismatch: %d vs %d", v.TagID(), v2.TagID())
+		if tag.ID != tag2.ID {
+			t.Fatalf("tag ID mismatch: %d vs %d", tag.ID, tag2.ID)
 		}
 
-		innerEnc1, err := enc.Encode(nil, v.TagInner())
+		innerEnc1, err := enc.Encode(nil, tag.Inner)
 		if err != nil {
 			return
 		}
-		innerEnc2, err := enc.Encode(nil, v2.TagInner())
+		innerEnc2, err := enc.Encode(nil, tag2.Inner)
 		if err != nil {
 			t.Fatalf("re-encode inner failed: %v", err)
 		}

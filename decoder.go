@@ -79,10 +79,10 @@ func StrictDecoder(opts ...DecoderOption) *Decoder {
 func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
 	v, n, err := rfc8949.Decode(src, d.cfg.opts)
 	if err != nil {
-		return cbor.Value{}, err
+		return nil, err
 	}
 	if n != len(src) {
-		return cbor.Value{}, fmt.Errorf("decode: %w", cbor.ErrTrailingBytes)
+		return nil, fmt.Errorf("decode: %w", cbor.ErrTrailingBytes)
 	}
 	return v, nil
 }

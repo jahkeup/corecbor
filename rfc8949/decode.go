@@ -3,7 +3,6 @@
 
 package rfc8949
 
-
 import (
 	"fmt"
 	"math"

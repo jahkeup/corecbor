@@ -18,9 +18,9 @@ const (
 // Headers represents COSE header parameters.
 // Keys are int64 (integer labels) or string (text labels).
 type Headers struct {
-	params        map[any]any
-	encodedCache  []byte // cached CBOR encoding of protected headers
-	cacheValid    bool
+	params       map[any]any
+	encodedCache []byte // cached CBOR encoding of protected headers
+	cacheValid   bool
 }
 
 // Get returns the value for the given label, or nil if not set.

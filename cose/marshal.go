@@ -18,6 +18,8 @@ const (
 	tagMac      uint64 = 97
 )
 
+var sharedEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic)
+
 // MarshalSign1 encodes a Sign1 message as CBOR with tag 18.
 func MarshalSign1(msg *Sign1) ([]byte, error) {
 	protectedBytes, err := msg.Protected.encodeProtected()
@@ -48,7 +50,7 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 	}
 
 	tagged := corecbor.Tag{ID: tagSign1, Inner: arr}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	buf := make([]byte, 0, len(protectedBytes)+len(msg.Payload)+len(msg.Signature)+64)
 	return enc.Encode(buf, tagged)
 }
@@ -148,7 +150,7 @@ func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
 	}
 
 	tagged := corecbor.Tag{ID: tagEncrypt0, Inner: arr}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, tagged)
 }
 
@@ -241,7 +243,7 @@ func MarshalMac0(msg *Mac0) ([]byte, error) {
 	}
 
 	tagged := corecbor.Tag{ID: tagMac0, Inner: arr}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, tagged)
 }
 
@@ -366,7 +368,7 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 	}
 
 	tagged := corecbor.Tag{ID: tagEncrypt, Inner: arr}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, tagged)
 }
 
@@ -523,7 +525,7 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 	}
 
 	tagged := corecbor.Tag{ID: tagSign, Inner: arr}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, tagged)
 }
 
@@ -682,7 +684,7 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 	}
 
 	tagged := corecbor.Tag{ID: tagMac, Inner: arr}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, tagged)
 }
 

@@ -44,14 +44,29 @@ type Encoder struct {
 	mode      Mode
 	cfg       encodeConfig
 	sortCache rfc8949.SortStateCache
+	shared    bool
 }
 
+// New returns an Encoder with a goroutine-local sort cache. The returned
+// encoder is NOT safe for concurrent use from multiple goroutines.
 func New(mode Mode, opts ...Option) *Encoder {
 	cfg := encodeConfig{}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	return &Encoder{mode: mode, cfg: cfg}
+}
+
+// NewShared returns an Encoder safe for concurrent use from multiple
+// goroutines. It omits the goroutine-local sort cache, falling back to
+// sync.Pool for deterministic map encoding. Use for package-level
+// singletons shared across goroutines.
+func NewShared(mode Mode, opts ...Option) *Encoder {
+	cfg := encodeConfig{}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return &Encoder{mode: mode, cfg: cfg, shared: true}
 }
 
 func (e *Encoder) Encode(dst []byte, v cbor.Value) ([]byte, error) {
@@ -80,7 +95,9 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 	opts := rfc8949.EncodeOpts{
 		AllowNonFiniteFloats: e.cfg.allowNonFiniteFloats,
 		AllowInvalidUTF8:     e.cfg.allowInvalidUTF8,
-		SortCache:            &e.sortCache,
+	}
+	if !e.shared {
+		opts.SortCache = &e.sortCache
 	}
 	switch e.mode {
 	case ModePermissive:

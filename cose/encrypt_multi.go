@@ -176,6 +176,6 @@ func buildEncStructureMulti(protectedBytes, externalAAD []byte) ([]byte, error) 
 		corecbor.Bytes(protectedBytes),
 		corecbor.Bytes(externalAAD),
 	}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, arr)
 }

@@ -137,7 +137,7 @@ func buildMACStructureMulti(protectedBytes, externalAAD, payload []byte) ([]byte
 		corecbor.Bytes(externalAAD),
 		corecbor.Bytes(payload),
 	}
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
+	enc := sharedEncoder
 	return enc.Encode(nil, arr)
 }
 

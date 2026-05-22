@@ -127,8 +127,7 @@ func headerParamsToMap(params map[any]any) corecbor.Map {
 // encodeHeaderMap encodes a header map to CBOR bytes using CoreDeterministic.
 func encodeHeaderMap(params map[any]any) ([]byte, error) {
 	m := headerParamsToMap(params)
-	enc := corecbor.New(corecbor.ModeCoreDeterministic)
-	return enc.Encode(nil, m)
+	return sharedEncoder.Encode(nil, m)
 }
 
 // decodeProtected decodes CBOR-encoded protected headers.

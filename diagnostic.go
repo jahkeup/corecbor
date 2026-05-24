@@ -15,7 +15,6 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 )
 
-// DiagnosticOption configures diagnostic notation output.
 type DiagnosticOption func(*diagOpts)
 
 type diagOpts struct {
@@ -23,19 +22,14 @@ type diagOpts struct {
 	indicators bool
 }
 
-// DiagCompact removes optional whitespace from diagnostic output.
 func DiagCompact() DiagnosticOption {
 	return func(o *diagOpts) { o.compact = true }
 }
 
-// DiagIndicators enables encoding indicator suffixes (e.g. 0_0 for
-// non-preferred encodings). Reserved for future use.
 func DiagIndicators() DiagnosticOption {
 	return func(o *diagOpts) { o.indicators = true }
 }
 
-// Diagnostic decodes CBOR bytes and returns diagnostic notation per
-// RFC 8949 §8.
 func Diagnostic(data []byte, opts ...DiagnosticOption) (string, error) {
 	dec := NewDecoder()
 	v, err := dec.Decode(data)
@@ -45,8 +39,6 @@ func Diagnostic(data []byte, opts ...DiagnosticOption) (string, error) {
 	return DiagnosticValue(v, opts...), nil
 }
 
-// DiagnosticValue formats a Value tree as diagnostic notation per
-// RFC 8949 §8.
 func DiagnosticValue(v Value, opts ...DiagnosticOption) string {
 	o := &diagOpts{}
 	for _, fn := range opts {
@@ -58,28 +50,28 @@ func DiagnosticValue(v Value, opts ...DiagnosticOption) string {
 }
 
 func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
-	switch val := v.(type) {
-	case cbor.Uint:
-		b.WriteString(strconv.FormatUint(uint64(val), 10))
+	switch v.Kind() {
+	case cbor.KindUint:
+		b.WriteString(strconv.FormatUint(v.UintVal(), 10))
 
-	case cbor.NegInt:
-		n := uint64(val)
+	case cbor.KindNegInt:
+		n := v.NegIntVal()
 		b.WriteByte('-')
 		b.WriteString(strconv.FormatUint(n+1, 10))
 
-	case cbor.Bytes:
+	case cbor.KindBytes:
 		b.WriteString("h'")
-		b.WriteString(hex.EncodeToString([]byte(val)))
+		b.WriteString(hex.EncodeToString(v.BytesVal()))
 		b.WriteByte('\'')
 
-	case cbor.Text:
+	case cbor.KindText:
 		b.WriteByte('"')
-		diagWriteText(b, string(val))
+		diagWriteText(b, v.TextVal())
 		b.WriteByte('"')
 
-	case cbor.Array:
+	case cbor.KindArray:
 		b.WriteByte('[')
-		for i, item := range val {
+		for i, item := range v.Array() {
 			if i > 0 {
 				if o.compact {
 					b.WriteByte(',')
@@ -91,9 +83,9 @@ func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
 		}
 		b.WriteByte(']')
 
-	case cbor.Map:
+	case cbor.KindMap:
 		b.WriteByte('{')
-		for i, entry := range val {
+		for i, entry := range v.Map() {
 			if i > 0 {
 				if o.compact {
 					b.WriteByte(',')
@@ -111,33 +103,33 @@ func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
 		}
 		b.WriteByte('}')
 
-	case cbor.Tag:
-		b.WriteString(strconv.FormatUint(val.ID, 10))
+	case cbor.KindTag:
+		b.WriteString(strconv.FormatUint(v.TagID(), 10))
 		b.WriteByte('(')
-		diagWrite(b, val.Inner, o)
+		diagWrite(b, v.TagInner(), o)
 		b.WriteByte(')')
 
-	case cbor.Bool:
-		if bool(val) {
+	case cbor.KindBool:
+		if v.BoolVal() {
 			b.WriteString("true")
 		} else {
 			b.WriteString("false")
 		}
 
-	case cbor.Null:
+	case cbor.KindNull:
 		b.WriteString("null")
 
-	case cbor.Undefined:
+	case cbor.KindUndefined:
 		b.WriteString("undefined")
 
-	case cbor.Float32:
-		diagWriteFloat(b, float64(val), 32)
+	case cbor.KindFloat32:
+		diagWriteFloat(b, float64(v.Float32Val()), 32)
 
-	case cbor.Float64:
-		diagWriteFloat(b, float64(val), 64)
+	case cbor.KindFloat64:
+		diagWriteFloat(b, v.Float64Val(), 64)
 
-	case cbor.Simple:
-		fmt.Fprintf(b, "simple(%d)", uint8(val))
+	case cbor.KindSimple:
+		fmt.Fprintf(b, "simple(%d)", v.SimpleVal())
 
 	default:
 		b.WriteString("?")

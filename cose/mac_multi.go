@@ -131,12 +131,12 @@ func buildMACStructureMulti(protectedBytes, externalAAD, payload []byte) ([]byte
 	if payload == nil {
 		payload = []byte{}
 	}
-	arr := corecbor.Array{
+	arr := corecbor.MakeArray(
 		corecbor.Text("MAC"),
 		corecbor.Bytes(protectedBytes),
 		corecbor.Bytes(externalAAD),
 		corecbor.Bytes(payload),
-	}
+	)
 	enc := sharedEncoder
 	return enc.Encode(nil, arr)
 }

@@ -299,7 +299,7 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: decoding signature: %v", ErrMessageFormat, err)
 	}
-	sigBytes, ok := sig.(cbor.Bytes)
+	ok := sig.Kind() == cbor.KindBytes; sigBytes := sig.BytesVal()
 	if !ok {
 		return fmt.Errorf("%w: signature must be bstr", ErrMessageFormat)
 	}
@@ -320,7 +320,7 @@ func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
 
 	peerPub := r.cfg.PeerPublic
 	if r.cfg.PeerCredential != nil && r.cfg.PeerCredential.Type == CredentialCWT {
-		cwtBytes, ok := idCred.(cbor.Bytes)
+		ok := idCred.Kind() == cbor.KindBytes; cwtBytes := idCred.BytesVal()
 		if !ok {
 			return fmt.Errorf("%w: CWT credential ID_CRED must be bstr", ErrMessageFormat)
 		}

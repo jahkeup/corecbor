@@ -7,51 +7,51 @@ import "github.com/jahkeup/corecbor/cbor"
 
 const maxHeadSize = 9
 
-// EstimateSize returns a conservative estimate of the CBOR-encoded size
-// of v in bytes. The estimate never underestimates but may overestimate
-// by up to 9 bytes per node (using maximum head size rather than shortest
-// encoding). The walk is O(tree-size) in CPU and zero-allocation.
 func EstimateSize(v cbor.Value) int {
-	if v == nil {
+	if v.IsZero() {
 		return 0
 	}
-	switch val := v.(type) {
-	case cbor.Uint:
-		return headSize(uint64(val))
-	case cbor.NegInt:
-		return headSize(uint64(val))
-	case cbor.Bytes:
-		return headSize(uint64(len(val))) + len(val)
-	case cbor.Text:
-		return headSize(uint64(len(val))) + len(val)
-	case cbor.Array:
-		n := headSize(uint64(len(val)))
-		for _, elem := range val {
+	switch v.Kind() {
+	case cbor.KindUint:
+		return headSize(v.UintVal())
+	case cbor.KindNegInt:
+		return headSize(v.NegIntVal())
+	case cbor.KindBytes:
+		b := v.BytesVal()
+		return headSize(uint64(len(b))) + len(b)
+	case cbor.KindText:
+		s := v.TextVal()
+		return headSize(uint64(len(s))) + len(s)
+	case cbor.KindArray:
+		items := v.Array()
+		n := headSize(uint64(len(items)))
+		for _, elem := range items {
 			n += EstimateSize(elem)
 		}
 		return n
-	case cbor.Map:
-		n := headSize(uint64(len(val)))
-		for _, entry := range val {
+	case cbor.KindMap:
+		pairs := v.Map()
+		n := headSize(uint64(len(pairs)))
+		for _, entry := range pairs {
 			n += EstimateSize(entry.Key) + EstimateSize(entry.Value)
 		}
 		return n
-	case cbor.Tag:
-		return headSize(val.ID) + EstimateSize(val.Inner)
-	case cbor.Bool:
+	case cbor.KindTag:
+		return headSize(v.TagID()) + EstimateSize(v.TagInner())
+	case cbor.KindBool:
 		return 1
-	case cbor.Null:
+	case cbor.KindNull:
 		return 1
-	case cbor.Undefined:
+	case cbor.KindUndefined:
 		return 1
-	case cbor.Simple:
-		if uint8(val) < 24 {
+	case cbor.KindSimple:
+		if v.SimpleVal() < 24 {
 			return 1
 		}
 		return 2
-	case cbor.Float32:
+	case cbor.KindFloat32:
 		return 5
-	case cbor.Float64:
+	case cbor.KindFloat64:
 		return 9
 	default:
 		return maxHeadSize
@@ -73,9 +73,6 @@ func headSize(arg uint64) int {
 	}
 }
 
-// EncodeWithHint is like Encode but ensures dst has at least hint bytes
-// of available capacity before encoding. This avoids intermediate slice
-// growth for callers who know their approximate output size.
 func EncodeWithHint(dst []byte, v cbor.Value, opts EncodeOpts, hint int) ([]byte, error) {
 	if avail := cap(dst) - len(dst); avail < hint {
 		grown := make([]byte, len(dst), len(dst)+hint)

@@ -101,27 +101,27 @@ func (h *Headers) encodeProtected() ([]byte, error) {
 	return encoded, nil
 }
 
-// toCBORMap converts headers to a corecbor Map value.
-func (h *Headers) toCBORMap() corecbor.Map {
+// toCBORMap converts headers to a corecbor map Value.
+func (h *Headers) toCBORMap() corecbor.Value {
 	if h.IsEmpty() {
-		return nil
+		return corecbor.MakeMap()
 	}
 	return headerParamsToMap(h.params)
 }
 
-// headerParamsToMap converts a Go map to a corecbor Map.
-func headerParamsToMap(params map[any]any) corecbor.Map {
+// headerParamsToMap converts a Go map to a corecbor map Value.
+func headerParamsToMap(params map[any]any) corecbor.Value {
 	if len(params) == 0 {
-		return nil
+		return corecbor.Value{}
 	}
-	m := make(corecbor.Map, 0, len(params))
+	m := make([]corecbor.MapEntry, 0, len(params))
 	for k, v := range params {
 		m = append(m, corecbor.MapEntry{
 			Key:   goToCBOR(k),
 			Value: goToCBOR(v),
 		})
 	}
-	return m
+	return corecbor.MakeMapFromSlice(m)
 }
 
 // encodeHeaderMap encodes a header map to CBOR bytes using CoreDeterministic.
@@ -140,28 +140,30 @@ func decodeProtected(data []byte) (*Headers, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, ok := v.(corecbor.Map)
+	m, ok := v.Kind() == corecbor.KindMap, v.Kind() == corecbor.KindMap
 	if !ok {
 		return nil, ErrMalformed
 	}
-	h := &Headers{params: make(map[any]any, len(m))}
-	for _, entry := range m {
+	pairs := v.Map()
+	h := &Headers{params: make(map[any]any, len(pairs))}
+	for _, entry := range pairs {
 		key := cborToGo(entry.Key)
 		val := cborToGo(entry.Value)
 		h.params[key] = val
 	}
+	_ = m
 	return h, nil
 }
 
 // decodeUnprotected decodes an unprotected header CBOR map value.
 func decodeUnprotected(v corecbor.Value) (*Headers, error) {
-	if v == nil {
+	if v.IsZero() {
 		return &Headers{}, nil
 	}
-	m, ok := v.(corecbor.Map)
-	if !ok {
+	if v.Kind() != corecbor.KindMap {
 		return nil, ErrMalformed
 	}
+	m := v.Map()
 	if len(m) == 0 {
 		return &Headers{}, nil
 	}
@@ -179,14 +181,14 @@ func goToCBOR(v any) corecbor.Value {
 	switch x := v.(type) {
 	case int64:
 		if x >= 0 {
-			return corecbor.Uint(x)
+			return corecbor.Uint(uint64(x))
 		}
 		return corecbor.NegInt(uint64(-1 - x))
 	case uint64:
 		return corecbor.Uint(x)
 	case int:
 		if x >= 0 {
-			return corecbor.Uint(x)
+			return corecbor.Uint(uint64(x))
 		}
 		return corecbor.NegInt(uint64(-1 - x))
 	case string:
@@ -196,30 +198,29 @@ func goToCBOR(v any) corecbor.Value {
 	case bool:
 		return corecbor.Bool(x)
 	case nil:
-		return corecbor.Null{}
+		return corecbor.Null()
 	default:
-		// Fallback: try to use as-is if it's already a cbor.Value
 		if cv, ok := v.(corecbor.Value); ok {
 			return cv
 		}
-		return corecbor.Null{}
+		return corecbor.Null()
 	}
 }
 
 // cborToGo converts a corecbor Value to a Go value.
 func cborToGo(v corecbor.Value) any {
-	switch x := v.(type) {
-	case corecbor.Uint:
-		return int64(x)
-	case corecbor.NegInt:
-		return int64(-1 - int64(x))
-	case corecbor.Text:
-		return string(x)
-	case corecbor.Bytes:
-		return []byte(x)
-	case corecbor.Bool:
-		return bool(x)
-	case corecbor.Null:
+	switch v.Kind() {
+	case corecbor.KindUint:
+		return int64(v.UintVal())
+	case corecbor.KindNegInt:
+		return int64(-1 - int64(v.NegIntVal()))
+	case corecbor.KindText:
+		return v.TextVal()
+	case corecbor.KindBytes:
+		return v.BytesVal()
+	case corecbor.KindBool:
+		return v.BoolVal()
+	case corecbor.KindNull:
 		return nil
 	default:
 		return v

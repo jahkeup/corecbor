@@ -96,7 +96,7 @@ func (c *Cursor) RawBytes() ([]byte, error) {
 func (c *Cursor) Decode() (cbor.Value, error) {
 	v, next, err := Decode(c.src[c.pos:], c.opts)
 	if err != nil {
-		return nil, err
+		return cbor.Value{}, err
 	}
 	c.pos += next
 	c.consumeFromFrame()

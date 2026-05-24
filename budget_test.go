@@ -12,11 +12,11 @@ import (
 
 func TestMemoryBudgetExceeded(t *testing.T) {
 	enc := New(ModePermissive)
-	bigArray := make(Array, 1000)
-	for i := range bigArray {
-		bigArray[i] = Uint(uint64(i))
+	items := make([]Value, 1000)
+	for i := range items {
+		items[i] = Uint(uint64(i))
 	}
-	data, _ := enc.Encode(nil, bigArray)
+	data, _ := enc.Encode(nil, MakeArrayFromSlice(items))
 
 	dec := NewDecoder(WithMemoryBudget(100))
 	_, err := dec.Decode(data)
@@ -30,7 +30,7 @@ func TestMemoryBudgetExceeded(t *testing.T) {
 
 func TestMemoryBudgetSufficientPasses(t *testing.T) {
 	enc := New(ModePermissive)
-	small := Array{Uint(1), Uint(2), Uint(3)}
+	small := MakeArray(Uint(1), Uint(2), Uint(3))
 	data, _ := enc.Encode(nil, small)
 
 	dec := NewDecoder(WithMemoryBudget(1 << 20))
@@ -42,10 +42,9 @@ func TestMemoryBudgetSufficientPasses(t *testing.T) {
 
 func TestMemoryBudgetResetBetweenCalls(t *testing.T) {
 	enc := New(ModePermissive)
-	m := Map{
-		{Key: Text("a"), Value: Bytes(make([]byte, 50))},
-		{Key: Text("b"), Value: Bytes(make([]byte, 50))},
-	}
+	m := MakeMap(
+		MapEntry{Key: Text("a"), Value: Bytes(make([]byte, 50))}, MapEntry{Key: Text("b"), Value: Bytes(make([]byte, 50))},
+	)
 	data, _ := enc.Encode(nil, m)
 
 	dec := NewDecoder(WithMemoryBudget(500))
@@ -61,11 +60,11 @@ func TestMemoryBudgetResetBetweenCalls(t *testing.T) {
 
 func TestMemoryBudgetDisabledByDefault(t *testing.T) {
 	enc := New(ModePermissive)
-	bigArray := make(Array, 10000)
-	for i := range bigArray {
-		bigArray[i] = Uint(uint64(i))
+	items := make([]Value, 10000)
+	for i := range items {
+		items[i] = Uint(uint64(i))
 	}
-	data, _ := enc.Encode(nil, bigArray)
+	data, _ := enc.Encode(nil, MakeArrayFromSlice(items))
 
 	dec := NewDecoder()
 	_, err := dec.Decode(data)
@@ -76,11 +75,11 @@ func TestMemoryBudgetDisabledByDefault(t *testing.T) {
 
 func TestMemoryBudgetMapExceeded(t *testing.T) {
 	enc := New(ModePermissive)
-	m := make(Map, 100)
-	for i := range m {
-		m[i] = MapEntry{Key: Text("key"), Value: Uint(uint64(i))}
+	pairs := make([]MapEntry, 100)
+	for i := range pairs {
+		pairs[i] = MapEntry{Key: Text("key"), Value: Uint(uint64(i))}
 	}
-	data, _ := enc.Encode(nil, m)
+	data, _ := enc.Encode(nil, MakeMapFromSlice(pairs))
 
 	dec := NewDecoder(WithMemoryBudget(100))
 	_, err := dec.Decode(data)

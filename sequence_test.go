@@ -57,7 +57,10 @@ func TestDecodeSequence_Basic(t *testing.T) {
 		t.Fatalf("got %d items, want %d", len(seq), len(items))
 	}
 	for i, item := range items {
-		if seq[i] != item {
+		enc := New(ModeCoreDeterministic)
+		a, _ := enc.Encode(nil, seq[i])
+		b, _ := enc.Encode(nil, item)
+		if !bytes.Equal(a, b) {
 			t.Errorf("item[%d]: got %v, want %v", i, seq[i], item)
 		}
 	}
@@ -67,10 +70,10 @@ func TestSequence_RoundTrip(t *testing.T) {
 	original := Sequence{
 		cbor.Uint(42),
 		cbor.NegInt(7),
-		cbor.Bytes{0xde, 0xad, 0xbe, 0xef},
+		cbor.Bytes([]byte{0xde, 0xad, 0xbe, 0xef}),
 		cbor.Text("world"),
 		cbor.Bool(false),
-		cbor.Null{},
+		cbor.Null(),
 	}
 
 	encoded, err := original.MarshalCBOR()

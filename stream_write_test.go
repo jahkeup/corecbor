@@ -20,7 +20,7 @@ func TestStreamWriteUint(t *testing.T) {
 	s.WriteUint(65536)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Uint(0), Uint(255), Uint(65536)})
+	expected, _ := enc.Encode(nil, MakeArray(Uint(0), Uint(255), Uint(65536)))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -35,7 +35,7 @@ func TestStreamWriteNegInt(t *testing.T) {
 	s.WriteNegInt(999)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{NegInt(0), NegInt(999)})
+	expected, _ := enc.Encode(nil, MakeArray(NegInt(0), NegInt(999)))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -50,7 +50,7 @@ func TestStreamWriteBytes(t *testing.T) {
 	s.WriteBytes(nil)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Bytes{0xde, 0xad}, Bytes(nil)})
+	expected, _ := enc.Encode(nil, MakeArray(Bytes([]byte{0xde, 0xad}), Bytes(nil)))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -65,7 +65,7 @@ func TestStreamWriteText(t *testing.T) {
 	s.WriteText("")
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Text("hello"), Text("")})
+	expected, _ := enc.Encode(nil, MakeArray(Text("hello"), Text("")))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -105,7 +105,7 @@ func TestStreamWriteBoolNullUndefined(t *testing.T) {
 	s.WriteUndefined()
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Bool(true), Bool(false), Null{}, Undefined{}})
+	expected, _ := enc.Encode(nil, MakeArray(Bool(true), Bool(false), Null(), Undefined()))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -120,7 +120,7 @@ func TestStreamWriteFloat(t *testing.T) {
 	s.WriteFloat64(3.14159)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Float32(1.5), Float64(3.14159)})
+	expected, _ := enc.Encode(nil, MakeArray(Float32(1.5), Float64(3.14159)))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -146,7 +146,7 @@ func TestStreamWriteSimple(t *testing.T) {
 	s.WriteSimple(255)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Simple(16), Simple(255)})
+	expected, _ := enc.Encode(nil, MakeArray(Simple(16), Simple(255)))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -161,7 +161,7 @@ func TestStreamWriteTag(t *testing.T) {
 	s.WriteUint(1000)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{Tag{ID: 1, Inner: Uint(1000)}})
+	expected, _ := enc.Encode(nil, MakeArray(MakeTag(1, Uint(1000))))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -169,9 +169,9 @@ func TestStreamWriteTag(t *testing.T) {
 
 func TestStreamWriteRawCBOR(t *testing.T) {
 	enc := New(ModePermissive)
-	preEncoded, _ := enc.Encode(nil, Map{
-		{Key: Text("x"), Value: Uint(1)},
-	})
+	preEncoded, _ := enc.Encode(nil, MakeMap(
+		MapEntry{Key: Text("x"), Value: Uint(1)},
+	))
 
 	var buf bytes.Buffer
 	s := enc.Stream(&buf)
@@ -180,10 +180,10 @@ func TestStreamWriteRawCBOR(t *testing.T) {
 	s.WriteRawCBOR(preEncoded)
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Array{
+	expected, _ := enc.Encode(nil, MakeArray(
 		Uint(42),
-		Map{{Key: Text("x"), Value: Uint(1)}},
-	})
+		MakeMap(MapEntry{Key: Text("x"), Value: Uint(1)}),
+	))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}
@@ -200,10 +200,9 @@ func TestStreamWriteMapDirect(t *testing.T) {
 	s.WriteBytes([]byte{0x01, 0x02})
 	s.EndContainer()
 
-	expected, _ := enc.Encode(nil, Map{
-		{Key: Text("id"), Value: Uint(42)},
-		{Key: Text("data"), Value: Bytes{0x01, 0x02}},
-	})
+	expected, _ := enc.Encode(nil, MakeMap(
+		MapEntry{Key: Text("id"), Value: Uint(42)}, MapEntry{Key: Text("data"), Value: Bytes([]byte{0x01, 0x02})},
+	))
 	if !bytes.Equal(buf.Bytes(), expected) {
 		t.Errorf("got %x, want %x", buf.Bytes(), expected)
 	}

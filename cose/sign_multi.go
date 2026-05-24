@@ -124,5 +124,5 @@ func encodeMultiSigStructure(enc *corecbor.Encoder, bodyProtected, signProtected
 	elems[2] = corecbor.Bytes(signProtected)
 	elems[3] = corecbor.Bytes(external)
 	elems[4] = corecbor.Bytes(payload)
-	return enc.Encode(nil, corecbor.Array(elems[:]))
+	return enc.Encode(nil, corecbor.MakeArrayFromSlice(elems[:]))
 }

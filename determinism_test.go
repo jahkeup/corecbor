@@ -14,16 +14,15 @@ func TestEncodeDeterminism(t *testing.T) {
 	// Assert all 100 outputs are byte-equal.
 	enc := New(ModeCoreDeterministic)
 
-	complexValue := Map{
-		{Key: Uint(1), Value: Array{Uint(10), Text("hello"), Bytes([]byte{0xde, 0xad})}},
-		{Key: Text("key"), Value: Map{
-			{Key: Uint(99), Value: Bool(true)},
-			{Key: NegInt(5), Value: Null{}},
-		}},
-		{Key: NegInt(0), Value: Tag{ID: 1, Inner: Uint(1234567890)}},
-		{Key: Bytes([]byte{0x01}), Value: Float64(3.14159)},
-		{Key: Bool(false), Value: Array{Undefined{}, Float32(1.5)}},
-	}
+	complexValue := MakeMap(
+		MapEntry{Key: Uint(1), Value: MakeArray(Uint(10), Text("hello"), Bytes([]byte{0xde, 0xad}))},
+		MapEntry{Key: Text("key"), Value: MakeMap(
+			MapEntry{Key: Uint(99), Value: Bool(true)}, MapEntry{Key: NegInt(5), Value: Null()},
+		)},
+		MapEntry{Key: NegInt(0), Value: MakeTag(1, Uint(1234567890))},
+		MapEntry{Key: Bytes([]byte{0x01}), Value: Float64(3.14159)},
+		MapEntry{Key: Bool(false), Value: MakeArray(Undefined(), Float32(1.5))},
+	)
 
 	first, err := enc.Encode(nil, complexValue)
 	if err != nil {
@@ -47,20 +46,13 @@ func TestEncodeDeterminism_MapKeyShuffle(t *testing.T) {
 	enc := New(ModeCoreDeterministic)
 
 	baseEntries := []MapEntry{
-		{Key: Uint(1), Value: Text("one")},
-		{Key: Uint(2), Value: Text("two")},
-		{Key: Uint(3), Value: Text("three")},
-		{Key: Text("alpha"), Value: Uint(100)},
-		{Key: Text("beta"), Value: Uint(200)},
-		{Key: NegInt(0), Value: Bool(true)},
-		{Key: Bytes([]byte{0x01, 0x02}), Value: Null{}},
-		{Key: Bool(false), Value: Float64(2.718)},
+		{Key: Uint(1), Value: Text("one")}, {Key: Uint(2), Value: Text("two")}, {Key: Uint(3), Value: Text("three")}, {Key: Text("alpha"), Value: Uint(100)}, {Key: Text("beta"), Value: Uint(200)}, {Key: NegInt(0), Value: Bool(true)}, {Key: Bytes([]byte{0x01, 0x02}), Value: Null()}, {Key: Bool(false), Value: Float64(2.718)},
 	}
 
 	// Encode with the original order to get reference output.
-	m := make(Map, len(baseEntries))
+	m := make([]MapEntry, len(baseEntries))
 	copy(m, baseEntries)
-	first, err := enc.Encode(nil, m)
+	first, err := enc.Encode(nil, MakeMapFromSlice(m))
 	if err != nil {
 		t.Fatalf("first encode failed: %v", err)
 	}
@@ -69,13 +61,13 @@ func TestEncodeDeterminism_MapKeyShuffle(t *testing.T) {
 
 	for i := range 99 {
 		// Shuffle entries.
-		shuffled := make(Map, len(baseEntries))
+		shuffled := make([]MapEntry, len(baseEntries))
 		copy(shuffled, baseEntries)
 		rng.Shuffle(len(shuffled), func(a, b int) {
 			shuffled[a], shuffled[b] = shuffled[b], shuffled[a]
 		})
 
-		got, err := enc.Encode(nil, shuffled)
+		got, err := enc.Encode(nil, MakeMapFromSlice(shuffled))
 		if err != nil {
 			t.Fatalf("encode iteration %d failed: %v", i+1, err)
 		}

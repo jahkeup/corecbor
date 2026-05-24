@@ -12,20 +12,11 @@ import (
 	"github.com/jahkeup/corecbor/wire"
 )
 
-// MapKeyOrder is a pre-computed deterministic key ordering for a known
-// set of map keys. It caches encoded key bytes and their sorted
-// permutation, eliminating re-encoding and re-sorting on every call to
-// EncodeMapPreordered.
-//
-// MapKeyOrder is immutable after construction and safe for concurrent use.
 type MapKeyOrder struct {
-	encodedKeys [][]byte // encoded key bytes in sorted order
-	indices     []int    // sorted position → original map index
+	encodedKeys [][]byte
+	indices     []int
 }
 
-// PrecomputeMapOrder computes the deterministic key order for keys
-// under the given sort mode. The returned order can be reused across
-// any number of encode calls with the same key set.
 func PrecomputeMapOrder(keys []cbor.Value, sortMode SortMode, opts EncodeOpts) (*MapKeyOrder, error) {
 	type entry struct {
 		encoded []byte
@@ -60,11 +51,7 @@ func PrecomputeMapOrder(keys []cbor.Value, sortMode SortMode, opts EncodeOpts) (
 	return order, nil
 }
 
-// EncodeMapPreordered encodes a map using a pre-computed key order,
-// skipping key encoding and sorting entirely. The map MUST have exactly
-// the same keys at the same indices as were used to create the order.
-// Values are encoded using opts; keys are written from the cached bytes.
-func EncodeMapPreordered(dst []byte, m cbor.Map, order *MapKeyOrder, opts EncodeOpts) ([]byte, error) {
+func EncodeMapPreordered(dst []byte, m []cbor.MapEntry, order *MapKeyOrder, opts EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	var err error
 	for i, keyBytes := range order.encodedKeys {

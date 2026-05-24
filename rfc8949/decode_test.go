@@ -25,22 +25,15 @@ func mustEncode(t *testing.T, v cbor.Value) []byte {
 func TestDecodeUint(t *testing.T) {
 	tests := []struct {
 		name string
-		val  cbor.Uint
+		val  uint64
 	}{
-		{"zero", cbor.Uint(0)},
-		{"one", cbor.Uint(1)},
-		{"23", cbor.Uint(23)},
-		{"24", cbor.Uint(24)},
-		{"255", cbor.Uint(255)},
-		{"256", cbor.Uint(256)},
-		{"65535", cbor.Uint(65535)},
-		{"65536", cbor.Uint(65536)},
-		{"max32", cbor.Uint(0xffffffff)},
-		{"max64", cbor.Uint(math.MaxUint64)},
+		{"zero", 0}, {"one", 1}, {"23", 23}, {"24", 24},
+		{"255", 255}, {"256", 256}, {"65535", 65535}, {"65536", 65536},
+		{"max32", 0xffffffff}, {"max64", math.MaxUint64},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src := mustEncode(t, tt.val)
+			src := mustEncode(t, cbor.Uint(tt.val))
 			got, n, err := Decode(src, DecodeOpts{})
 			if err != nil {
 				t.Fatal(err)
@@ -48,8 +41,8 @@ func TestDecodeUint(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got != tt.val {
-				t.Fatalf("got %v, want %v", got, tt.val)
+			if got.Kind() != cbor.KindUint || got.UintVal() != tt.val {
+				t.Fatalf("got %v, want Uint(%d)", got, tt.val)
 			}
 		})
 	}
@@ -58,18 +51,14 @@ func TestDecodeUint(t *testing.T) {
 func TestDecodeNegInt(t *testing.T) {
 	tests := []struct {
 		name string
-		val  cbor.NegInt
+		val  uint64
 	}{
-		{"neg1", cbor.NegInt(0)},
-		{"neg24", cbor.NegInt(23)},
-		{"neg25", cbor.NegInt(24)},
-		{"neg256", cbor.NegInt(255)},
-		{"neg65536", cbor.NegInt(65535)},
-		{"max", cbor.NegInt(math.MaxUint64)},
+		{"neg1", 0}, {"neg24", 23}, {"neg25", 24},
+		{"neg256", 255}, {"neg65536", 65535}, {"max", math.MaxUint64},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src := mustEncode(t, tt.val)
+			src := mustEncode(t, cbor.NegInt(tt.val))
 			got, n, err := Decode(src, DecodeOpts{})
 			if err != nil {
 				t.Fatal(err)
@@ -77,8 +66,8 @@ func TestDecodeNegInt(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got != tt.val {
-				t.Fatalf("got %v, want %v", got, tt.val)
+			if got.Kind() != cbor.KindNegInt || got.NegIntVal() != tt.val {
+				t.Fatalf("got %v, want NegInt(%d)", got, tt.val)
 			}
 		})
 	}
@@ -87,15 +76,15 @@ func TestDecodeNegInt(t *testing.T) {
 func TestDecodeBytes(t *testing.T) {
 	tests := []struct {
 		name string
-		val  cbor.Bytes
+		val  []byte
 	}{
-		{"empty", cbor.Bytes{}},
-		{"one", cbor.Bytes{0x42}},
-		{"multi", cbor.Bytes{0x01, 0x02, 0x03, 0x04, 0x05}},
+		{"empty", []byte{}},
+		{"one", []byte{0x42}},
+		{"multi", []byte{0x01, 0x02, 0x03, 0x04, 0x05}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src := mustEncode(t, tt.val)
+			src := mustEncode(t, cbor.Bytes(tt.val))
 			got, n, err := Decode(src, DecodeOpts{})
 			if err != nil {
 				t.Fatal(err)
@@ -103,7 +92,10 @@ func TestDecodeBytes(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			gb := got.(cbor.Bytes)
+			if got.Kind() != cbor.KindBytes {
+				t.Fatalf("kind = %d, want KindBytes", got.Kind())
+			}
+			gb := got.BytesVal()
 			if len(gb) != len(tt.val) {
 				t.Fatalf("len got %d, want %d", len(gb), len(tt.val))
 			}
@@ -119,15 +111,13 @@ func TestDecodeBytes(t *testing.T) {
 func TestDecodeText(t *testing.T) {
 	tests := []struct {
 		name string
-		val  cbor.Text
+		val  string
 	}{
-		{"empty", cbor.Text("")},
-		{"hello", cbor.Text("hello")},
-		{"unicode", cbor.Text("日本語")},
+		{"empty", ""}, {"hello", "hello"}, {"unicode", "日本語"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			src := mustEncode(t, tt.val)
+			src := mustEncode(t, cbor.Text(tt.val))
 			got, n, err := Decode(src, DecodeOpts{})
 			if err != nil {
 				t.Fatal(err)
@@ -135,8 +125,8 @@ func TestDecodeText(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got != tt.val {
-				t.Fatalf("got %v, want %v", got, tt.val)
+			if got.Kind() != cbor.KindText || got.TextVal() != tt.val {
+				t.Fatalf("got %v, want Text(%q)", got, tt.val)
 			}
 		})
 	}
@@ -145,12 +135,13 @@ func TestDecodeText(t *testing.T) {
 func TestDecodeArray(t *testing.T) {
 	tests := []struct {
 		name string
-		val  cbor.Array
+		val  cbor.Value
+		len  int
 	}{
-		{"empty", cbor.Array{}},
-		{"one", cbor.Array{cbor.Uint(1)}},
-		{"mixed", cbor.Array{cbor.Uint(1), cbor.Text("two"), cbor.Bool(true)}},
-		{"nested", cbor.Array{cbor.Array{cbor.Uint(1), cbor.Uint(2)}}},
+		{"empty", cbor.MakeArray(), 0},
+		{"one", cbor.MakeArray(cbor.Uint(1)), 1},
+		{"mixed", cbor.MakeArray(cbor.Uint(1), cbor.Text("two"), cbor.Bool(true)), 3},
+		{"nested", cbor.MakeArray(cbor.MakeArray(cbor.Uint(1), cbor.Uint(2))), 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -162,9 +153,11 @@ func TestDecodeArray(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			ga := got.(cbor.Array)
-			if len(ga) != len(tt.val) {
-				t.Fatalf("len got %d, want %d", len(ga), len(tt.val))
+			if got.Kind() != cbor.KindArray {
+				t.Fatalf("kind = %d, want KindArray", got.Kind())
+			}
+			if len(got.Array()) != tt.len {
+				t.Fatalf("len got %d, want %d", len(got.Array()), tt.len)
 			}
 		})
 	}
@@ -173,14 +166,15 @@ func TestDecodeArray(t *testing.T) {
 func TestDecodeMap(t *testing.T) {
 	tests := []struct {
 		name string
-		val  cbor.Map
+		val  cbor.Value
+		len  int
 	}{
-		{"empty", cbor.Map{}},
-		{"one", cbor.Map{{Key: cbor.Text("a"), Value: cbor.Uint(1)}}},
-		{"two", cbor.Map{
-			{Key: cbor.Text("a"), Value: cbor.Uint(1)},
-			{Key: cbor.Text("b"), Value: cbor.Uint(2)},
-		}},
+		{"empty", cbor.MakeMap(), 0},
+		{"one", cbor.MakeMap(cbor.MapEntry{Key: cbor.Text("a"), Value: cbor.Uint(1)}), 1},
+		{"two", cbor.MakeMap(
+			cbor.MapEntry{Key: cbor.Text("a"), Value: cbor.Uint(1)},
+			cbor.MapEntry{Key: cbor.Text("b"), Value: cbor.Uint(2)},
+		), 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -192,17 +186,17 @@ func TestDecodeMap(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			gm := got.(cbor.Map)
-			if len(gm) != len(tt.val) {
-				t.Fatalf("len got %d, want %d", len(gm), len(tt.val))
+			if got.Kind() != cbor.KindMap {
+				t.Fatalf("kind = %d, want KindMap", got.Kind())
+			}
+			if len(got.Map()) != tt.len {
+				t.Fatalf("len got %d, want %d", len(got.Map()), tt.len)
 			}
 		})
 	}
 }
 
 func TestDecodeIndefiniteByteString(t *testing.T) {
-	// 0x5f 0x42 0x01 0x02 0x43 0x03 0x04 0x05 0xff
-	// indefinite byte string: [0x01,0x02] ++ [0x03,0x04,0x05]
 	src := []byte{0x5f, 0x42, 0x01, 0x02, 0x43, 0x03, 0x04, 0x05, 0xff}
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
@@ -211,7 +205,10 @@ func TestDecodeIndefiniteByteString(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gb := got.(cbor.Bytes)
+	if got.Kind() != cbor.KindBytes {
+		t.Fatalf("kind = %d, want KindBytes", got.Kind())
+	}
+	gb := got.BytesVal()
 	want := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	if len(gb) != len(want) {
 		t.Fatalf("len got %d, want %d", len(gb), len(want))
@@ -224,7 +221,6 @@ func TestDecodeIndefiniteByteString(t *testing.T) {
 }
 
 func TestDecodeIndefiniteTextString(t *testing.T) {
-	// 0x7f 0x65 "hello" 0x65 "world" 0xff
 	src := []byte{0x7f, 0x65, 'h', 'e', 'l', 'l', 'o', 0x65, 'w', 'o', 'r', 'l', 'd', 0xff}
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
@@ -233,14 +229,12 @@ func TestDecodeIndefiniteTextString(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gt := got.(cbor.Text)
-	if string(gt) != "helloworld" {
-		t.Fatalf("got %q, want %q", gt, "helloworld")
+	if got.Kind() != cbor.KindText || got.TextVal() != "helloworld" {
+		t.Fatalf("got %v, want Text(helloworld)", got)
 	}
 }
 
 func TestDecodeIndefiniteArray(t *testing.T) {
-	// 0x9f 0x01 0x02 0x03 0xff → [1, 2, 3]
 	src := []byte{0x9f, 0x01, 0x02, 0x03, 0xff}
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
@@ -249,19 +243,18 @@ func TestDecodeIndefiniteArray(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	ga := got.(cbor.Array)
+	ga := got.Array()
 	if len(ga) != 3 {
 		t.Fatalf("len got %d, want 3", len(ga))
 	}
-	for i, want := range []cbor.Uint{0, 1, 2} {
-		if ga[i] != cbor.Uint(want+1) {
-			t.Fatalf("elem %d: got %v, want %v", i, ga[i], want+1)
+	for i, wantVal := range []uint64{1, 2, 3} {
+		if ga[i].Kind() != cbor.KindUint || ga[i].UintVal() != wantVal {
+			t.Fatalf("elem %d: got %v, want Uint(%d)", i, ga[i], wantVal)
 		}
 	}
 }
 
 func TestDecodeIndefiniteMap(t *testing.T) {
-	// 0xbf 0x61 "a" 0x01 0x61 "b" 0x02 0xff → {"a":1, "b":2}
 	src := []byte{0xbf, 0x61, 'a', 0x01, 0x61, 'b', 0x02, 0xff}
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
@@ -270,14 +263,12 @@ func TestDecodeIndefiniteMap(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gm := got.(cbor.Map)
-	if len(gm) != 2 {
-		t.Fatalf("len got %d, want 2", len(gm))
+	if got.Kind() != cbor.KindMap || len(got.Map()) != 2 {
+		t.Fatalf("got kind=%d len=%d, want map with 2 entries", got.Kind(), len(got.Map()))
 	}
 }
 
 func TestDecodeFloat16(t *testing.T) {
-	// 0xf9 0x3c 0x00 = 1.0 in half precision
 	src := []byte{0xf9, 0x3c, 0x00}
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
@@ -286,9 +277,8 @@ func TestDecodeFloat16(t *testing.T) {
 	if n != 3 {
 		t.Fatalf("consumed %d, want 3", n)
 	}
-	gf := got.(cbor.Float64)
-	if float64(gf) != 1.0 {
-		t.Fatalf("got %v, want 1.0", gf)
+	if got.Kind() != cbor.KindFloat64 || got.Float64Val() != 1.0 {
+		t.Fatalf("got %v, want Float64(1.0)", got)
 	}
 }
 
@@ -301,9 +291,8 @@ func TestDecodeFloat32(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gf := got.(cbor.Float32)
-	if float32(gf) != 3.14 {
-		t.Fatalf("got %v, want 3.14", gf)
+	if got.Kind() != cbor.KindFloat32 || got.Float32Val() != 3.14 {
+		t.Fatalf("got %v, want Float32(3.14)", got)
 	}
 }
 
@@ -316,14 +305,13 @@ func TestDecodeFloat64(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gf := got.(cbor.Float64)
-	if float64(gf) != 3.141592653589793 {
-		t.Fatalf("got %v, want 3.141592653589793", gf)
+	if got.Kind() != cbor.KindFloat64 || got.Float64Val() != 3.141592653589793 {
+		t.Fatalf("got %v, want Float64(3.141592653589793)", got)
 	}
 }
 
 func TestDecodeTag(t *testing.T) {
-	src := mustEncode(t, cbor.Tag{ID: 1, Inner: cbor.Uint(1234567890)})
+	src := mustEncode(t, cbor.MakeTag(1, cbor.Uint(1234567890)))
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
@@ -331,18 +319,17 @@ func TestDecodeTag(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gt := got.(cbor.Tag)
-	if gt.ID != 1 {
-		t.Fatalf("tag ID got %d, want 1", gt.ID)
+	if got.Kind() != cbor.KindTag || got.TagID() != 1 {
+		t.Fatalf("tag ID got %d, want 1", got.TagID())
 	}
-	if gt.Inner != cbor.Uint(1234567890) {
-		t.Fatalf("inner got %v, want Uint(1234567890)", gt.Inner)
+	inner := got.TagInner()
+	if inner.Kind() != cbor.KindUint || inner.UintVal() != 1234567890 {
+		t.Fatalf("inner got %v, want Uint(1234567890)", inner)
 	}
 }
 
 func TestDecodeSelfDescribeStrip(t *testing.T) {
-	// Tag 55799 wrapping Uint(42)
-	src := mustEncode(t, cbor.Tag{ID: 55799, Inner: cbor.Uint(42)})
+	src := mustEncode(t, cbor.MakeTag(55799, cbor.Uint(42)))
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +337,7 @@ func TestDecodeSelfDescribeStrip(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got != cbor.Uint(42) {
+	if got.Kind() != cbor.KindUint || got.UintVal() != 42 {
 		t.Fatalf("got %v, want Uint(42) (self-describe stripped)", got)
 	}
 }
@@ -364,7 +351,6 @@ func TestDecodeRejectIndefiniteLength(t *testing.T) {
 }
 
 func TestDecodeRejectNonShortest(t *testing.T) {
-	// Uint 0 encoded as 2-byte: 0x18 0x00 (non-shortest)
 	src := []byte{0x18, 0x00}
 	_, _, err := Decode(src, DecodeOpts{RejectNonShortest: true})
 	if !errors.Is(err, cbor.ErrNonShortest) {
@@ -373,12 +359,7 @@ func TestDecodeRejectNonShortest(t *testing.T) {
 }
 
 func TestDecodeRejectDuplicateMapKeys(t *testing.T) {
-	// Map with key "a" twice: {a:1, a:2}
-	src := []byte{
-		0xa2,
-		0x61, 'a', 0x01,
-		0x61, 'a', 0x02,
-	}
+	src := []byte{0xa2, 0x61, 'a', 0x01, 0x61, 'a', 0x02}
 	_, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
 	if !errors.Is(err, cbor.ErrDuplicateMapKey) {
 		t.Fatalf("got err=%v, want ErrDuplicateMapKey", err)
@@ -386,14 +367,11 @@ func TestDecodeRejectDuplicateMapKeys(t *testing.T) {
 }
 
 func TestDecodeRejectInvalidUTF8(t *testing.T) {
-	// Text string with invalid UTF-8: 0x62 followed by 0xff 0xfe
 	src := []byte{0x62, 0xff, 0xfe}
 	_, _, err := Decode(src, DecodeOpts{RejectInvalidUTF8: true})
 	if !errors.Is(err, cbor.ErrInvalidUTF8) {
 		t.Fatalf("got err=%v, want ErrInvalidUTF8", err)
 	}
-
-	// Forgiving mode accepts it
 	_, _, err = Decode(src, DecodeOpts{})
 	if err != nil {
 		t.Fatalf("forgiving mode should accept invalid UTF-8, got %v", err)
@@ -401,14 +379,11 @@ func TestDecodeRejectInvalidUTF8(t *testing.T) {
 }
 
 func TestDecodeRejectNonFiniteFloats(t *testing.T) {
-	// Float16 NaN: 0xf9 0x7e 0x00
 	src := []byte{0xf9, 0x7e, 0x00}
 	_, _, err := Decode(src, DecodeOpts{RejectNonFiniteFloats: true})
 	if !errors.Is(err, cbor.ErrNonFiniteFloat) {
 		t.Fatalf("got err=%v, want ErrNonFiniteFloat", err)
 	}
-
-	// Float16 +Inf: 0xf9 0x7c 0x00
 	src = []byte{0xf9, 0x7c, 0x00}
 	_, _, err = Decode(src, DecodeOpts{RejectNonFiniteFloats: true})
 	if !errors.Is(err, cbor.ErrNonFiniteFloat) {
@@ -417,7 +392,6 @@ func TestDecodeRejectNonFiniteFloats(t *testing.T) {
 }
 
 func TestDecodeRejectNullMapKeys(t *testing.T) {
-	// Map {null: 1}
 	src := []byte{0xa1, 0xf6, 0x01}
 	_, _, err := Decode(src, DecodeOpts{RejectNullMapKeys: true})
 	if !errors.Is(err, cbor.ErrNullMapKey) {
@@ -426,20 +400,16 @@ func TestDecodeRejectNullMapKeys(t *testing.T) {
 }
 
 func TestDecodeMaxNestingDepth(t *testing.T) {
-	// Build deeply nested arrays: [[[[...]]]]
 	depth := 5
 	src := make([]byte, 0, depth*2)
 	for range depth {
-		src = append(src, 0x81) // array of length 1
+		src = append(src, 0x81)
 	}
-	src = append(src, 0x00) // uint 0 at the bottom
-
+	src = append(src, 0x00)
 	_, _, err := Decode(src, DecodeOpts{MaxNestingDepth: 3})
 	if !errors.Is(err, cbor.ErrMaxNestingDepth) {
 		t.Fatalf("got err=%v, want ErrMaxNestingDepth", err)
 	}
-
-	// Should succeed with enough depth
 	_, _, err = Decode(src, DecodeOpts{MaxNestingDepth: 10})
 	if err != nil {
 		t.Fatalf("expected success with depth=10, got %v", err)
@@ -447,7 +417,6 @@ func TestDecodeMaxNestingDepth(t *testing.T) {
 }
 
 func TestDecodeMaxArrayLength(t *testing.T) {
-	// Array declaring 1000 elements
 	src := wire.AppendHead(nil, wire.MajorArray, 1000)
 	for range 1000 {
 		src = append(src, 0x00)
@@ -459,7 +428,6 @@ func TestDecodeMaxArrayLength(t *testing.T) {
 }
 
 func TestDecodeMaxByteStringLength(t *testing.T) {
-	// Byte string declaring 1000 bytes
 	src := wire.AppendHead(nil, wire.MajorBytes, 1000)
 	src = append(src, make([]byte, 1000)...)
 	_, _, err := Decode(src, DecodeOpts{MaxByteStringLength: 100})
@@ -490,7 +458,6 @@ func TestDecodeTruncated(t *testing.T) {
 }
 
 func TestDecodeReservedAI(t *testing.T) {
-	// AI 28 = 0x1c, AI 29 = 0x1d, AI 30 = 0x1e (in major type 0)
 	for _, ai := range []byte{28, 29, 30} {
 		src := []byte{wire.MajorUint | ai}
 		_, _, err := Decode(src, DecodeOpts{})
@@ -501,12 +468,7 @@ func TestDecodeReservedAI(t *testing.T) {
 }
 
 func TestDecodeDuplicateMapKeysLastWins(t *testing.T) {
-	// Map with key "a" twice: {a:1, a:2} — last wins in forgiving mode
-	src := []byte{
-		0xa2,
-		0x61, 'a', 0x01,
-		0x61, 'a', 0x02,
-	}
+	src := []byte{0xa2, 0x61, 'a', 0x01, 0x61, 'a', 0x02}
 	got, n, err := Decode(src, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
@@ -514,40 +476,35 @@ func TestDecodeDuplicateMapKeysLastWins(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	gm := got.(cbor.Map)
+	gm := got.Map()
 	if len(gm) != 1 {
 		t.Fatalf("map should have 1 entry (deduped), got %d", len(gm))
 	}
-	if gm[0].Value != cbor.Uint(2) {
+	if gm[0].Value.Kind() != cbor.KindUint || gm[0].Value.UintVal() != 2 {
 		t.Fatalf("last-write-wins: got value %v, want Uint(2)", gm[0].Value)
 	}
 }
 
 func TestDecodeSimpleValues(t *testing.T) {
-	// Simple 0: 0xe0
 	got, _, err := Decode([]byte{0xe0}, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != cbor.Simple(0) {
+	if got.Kind() != cbor.KindSimple || got.SimpleVal() != 0 {
 		t.Fatalf("got %v, want Simple(0)", got)
 	}
-
-	// Simple 19: 0xf3
 	got, _, err = Decode([]byte{0xf3}, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != cbor.Simple(19) {
+	if got.Kind() != cbor.KindSimple || got.SimpleVal() != 19 {
 		t.Fatalf("got %v, want Simple(19)", got)
 	}
-
-	// Simple 255: 0xf8 0xff
 	got, _, err = Decode([]byte{0xf8, 0xff}, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != cbor.Simple(255) {
+	if got.Kind() != cbor.KindSimple || got.SimpleVal() != 255 {
 		t.Fatalf("got %v, want Simple(255)", got)
 	}
 }
@@ -555,20 +512,20 @@ func TestDecodeSimpleValues(t *testing.T) {
 func TestDecodeBoolNullUndefined(t *testing.T) {
 	tests := []struct {
 		src  []byte
-		want cbor.Value
+		kind cbor.Kind
 	}{
-		{[]byte{0xf4}, cbor.Bool(false)},
-		{[]byte{0xf5}, cbor.Bool(true)},
-		{[]byte{0xf6}, cbor.Null{}},
-		{[]byte{0xf7}, cbor.Undefined{}},
+		{[]byte{0xf4}, cbor.KindBool},
+		{[]byte{0xf5}, cbor.KindBool},
+		{[]byte{0xf6}, cbor.KindNull},
+		{[]byte{0xf7}, cbor.KindUndefined},
 	}
 	for _, tt := range tests {
 		got, _, err := Decode(tt.src, DecodeOpts{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got != tt.want {
-			t.Fatalf("got %v, want %v", got, tt.want)
+		if got.Kind() != tt.kind {
+			t.Fatalf("got kind %d, want %d", got.Kind(), tt.kind)
 		}
 	}
 }
@@ -577,18 +534,18 @@ func TestDecodeRoundTrip(t *testing.T) {
 	values := []cbor.Value{
 		cbor.Uint(42),
 		cbor.NegInt(99),
-		cbor.Bytes{0xde, 0xad, 0xbe, 0xef},
+		cbor.Bytes([]byte{0xde, 0xad, 0xbe, 0xef}),
 		cbor.Text("hello world"),
-		cbor.Array{cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)},
-		cbor.Map{
-			{Key: cbor.Text("x"), Value: cbor.Uint(10)},
-			{Key: cbor.Text("y"), Value: cbor.Uint(20)},
-		},
-		cbor.Tag{ID: 1, Inner: cbor.Uint(1000)},
+		cbor.MakeArray(cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)),
+		cbor.MakeMap(
+			cbor.MapEntry{Key: cbor.Text("x"), Value: cbor.Uint(10)},
+			cbor.MapEntry{Key: cbor.Text("y"), Value: cbor.Uint(20)},
+		),
+		cbor.MakeTag(1, cbor.Uint(1000)),
 		cbor.Bool(true),
 		cbor.Bool(false),
-		cbor.Null{},
-		cbor.Undefined{},
+		cbor.Null(),
+		cbor.Undefined(),
 		cbor.Float32(1.5),
 		cbor.Float64(math.Pi),
 	}
@@ -596,18 +553,18 @@ func TestDecodeRoundTrip(t *testing.T) {
 		src := mustEncode(t, v)
 		got, n, err := Decode(src, DecodeOpts{})
 		if err != nil {
-			t.Fatalf("decode %T: %v", v, err)
+			t.Fatalf("decode kind %d: %v", v.Kind(), err)
 		}
 		if n != len(src) {
-			t.Fatalf("decode %T: consumed %d, want %d", v, n, len(src))
+			t.Fatalf("decode kind %d: consumed %d, want %d", v.Kind(), n, len(src))
 		}
 		reenc := mustEncode(t, got)
 		if len(reenc) != len(src) {
-			t.Fatalf("re-encode %T: len %d != %d", v, len(reenc), len(src))
+			t.Fatalf("re-encode kind %d: len %d != %d", v.Kind(), len(reenc), len(src))
 		}
 		for i := range src {
 			if src[i] != reenc[i] {
-				t.Fatalf("re-encode %T: mismatch at byte %d", v, i)
+				t.Fatalf("re-encode kind %d: mismatch at byte %d", v.Kind(), i)
 			}
 		}
 	}
@@ -625,31 +582,27 @@ func TestDecodeTrailingBytes(t *testing.T) {
 }
 
 func TestDecodeDuplicateMapKeysLarge(t *testing.T) {
-	// Build a map with 50 unique keys — exercises hash-based dedup path (threshold=16).
-	m := make(cbor.Map, 50)
+	pairs := make([]cbor.MapEntry, 50)
 	for i := range 50 {
-		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
+		pairs[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
 	}
-	src := mustEncode(t, m)
+	src := mustEncode(t, cbor.MakeMapFromSlice(pairs))
 	got, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
 	if err != nil {
 		t.Fatalf("unique keys should not error: %v", err)
 	}
-	gotMap := got.(cbor.Map)
-	if len(gotMap) != 50 {
-		t.Fatalf("got %d entries, want 50", len(gotMap))
+	if len(got.Map()) != 50 {
+		t.Fatalf("got %d entries, want 50", len(got.Map()))
 	}
 }
 
 func TestDecodeDuplicateMapKeysLargeReject(t *testing.T) {
-	// Build a map with a duplicate key beyond the dedup threshold.
-	m := make(cbor.Map, 20)
+	pairs := make([]cbor.MapEntry, 21)
 	for i := range 20 {
-		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
+		pairs[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
 	}
-	// Duplicate the first key at position 20.
-	m = append(m, cbor.MapEntry{Key: cbor.Text("k00"), Value: cbor.Uint(999)})
-	src := mustEncode(t, m)
+	pairs[20] = cbor.MapEntry{Key: cbor.Text("k00"), Value: cbor.Uint(999)}
+	src := mustEncode(t, cbor.MakeMapFromSlice(pairs))
 	_, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
 	if !errors.Is(err, cbor.ErrDuplicateMapKey) {
 		t.Fatalf("expected ErrDuplicateMapKey, got: %v", err)
@@ -657,25 +610,23 @@ func TestDecodeDuplicateMapKeysLargeReject(t *testing.T) {
 }
 
 func TestDecodeDuplicateMapKeysLargeLastWins(t *testing.T) {
-	// Without RejectDuplicateMapKeys, last-write-wins for large maps.
-	m := make(cbor.Map, 20)
+	pairs := make([]cbor.MapEntry, 21)
 	for i := range 20 {
-		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
+		pairs[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
 	}
-	m = append(m, cbor.MapEntry{Key: cbor.Text("k00"), Value: cbor.Uint(999)})
-	src := mustEncode(t, m)
+	pairs[20] = cbor.MapEntry{Key: cbor.Text("k00"), Value: cbor.Uint(999)}
+	src := mustEncode(t, cbor.MakeMapFromSlice(pairs))
 	got, _, err := Decode(src, DecodeOpts{})
 	if err != nil {
 		t.Fatalf("last-write-wins should not error: %v", err)
 	}
-	gotMap := got.(cbor.Map)
+	gotMap := got.Map()
 	if len(gotMap) != 20 {
 		t.Fatalf("got %d entries, want 20 (duplicate merged)", len(gotMap))
 	}
-	// Verify the first key has the last-written value.
 	for _, entry := range gotMap {
-		if entry.Key == cbor.Text("k00") {
-			if entry.Value != cbor.Uint(999) {
+		if entry.Key.Kind() == cbor.KindText && entry.Key.TextVal() == "k00" {
+			if entry.Value.Kind() != cbor.KindUint || entry.Value.UintVal() != 999 {
 				t.Fatalf("k00 value = %v, want 999", entry.Value)
 			}
 			return
@@ -685,29 +636,26 @@ func TestDecodeDuplicateMapKeysLargeLastWins(t *testing.T) {
 }
 
 func TestDecodeDuplicateMapKeysHashCollision(t *testing.T) {
-	// Verify correctness even with hash collisions by testing many keys
-	// with similar patterns that might collide.
-	m := make(cbor.Map, 100)
+	pairs := make([]cbor.MapEntry, 100)
 	for i := range 100 {
-		m[i] = cbor.MapEntry{Key: cbor.Uint(uint64(i)), Value: cbor.Uint(uint64(i * 2))}
+		pairs[i] = cbor.MapEntry{Key: cbor.Uint(uint64(i)), Value: cbor.Uint(uint64(i * 2))}
 	}
-	src := mustEncode(t, m)
+	src := mustEncode(t, cbor.MakeMapFromSlice(pairs))
 	got, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
 	if err != nil {
 		t.Fatalf("no duplicates should not error: %v", err)
 	}
-	gotMap := got.(cbor.Map)
-	if len(gotMap) != 100 {
-		t.Fatalf("got %d entries, want 100", len(gotMap))
+	if len(got.Map()) != 100 {
+		t.Fatalf("got %d entries, want 100", len(got.Map()))
 	}
 }
 
 func BenchmarkMapInsertLinear(b *testing.B) {
-	m := make(cbor.Map, 10)
+	pairs := make([]cbor.MapEntry, 10)
 	for i := range 10 {
-		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%d", i)), Value: cbor.Uint(uint64(i))}
+		pairs[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%d", i)), Value: cbor.Uint(uint64(i))}
 	}
-	src, err := Encode(nil, m, EncodeOpts{})
+	src, err := Encode(nil, cbor.MakeMapFromSlice(pairs), EncodeOpts{})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -718,11 +666,11 @@ func BenchmarkMapInsertLinear(b *testing.B) {
 }
 
 func BenchmarkMapInsertHash(b *testing.B) {
-	m := make(cbor.Map, 100)
+	pairs := make([]cbor.MapEntry, 100)
 	for i := range 100 {
-		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("key-%03d", i)), Value: cbor.Uint(uint64(i))}
+		pairs[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("key-%03d", i)), Value: cbor.Uint(uint64(i))}
 	}
-	src, err := Encode(nil, m, EncodeOpts{})
+	src, err := Encode(nil, cbor.MakeMapFromSlice(pairs), EncodeOpts{})
 	if err != nil {
 		b.Fatal(err)
 	}

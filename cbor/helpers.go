@@ -5,19 +5,18 @@ package cbor
 
 import "errors"
 
-// ErrNonStringKey is returned by Map.AsStringMap when a key is not Text.
+// ErrNonStringKey is returned by AsStringMap when a key is not Text.
 var ErrNonStringKey = errors.New("cbor: map contains non-string key")
 
-// AsStringMap converts a Map to map[string]Value if every key is Text.
-// Returns ErrNonStringKey if any key is not a Text value.
-func (m Map) AsStringMap() (map[string]Value, error) {
-	result := make(map[string]Value, len(m))
-	for _, entry := range m {
-		key, ok := entry.Key.(Text)
-		if !ok {
+// AsStringMap converts a map Value to map[string]Value if every key is Text.
+func AsStringMap(m Value) (map[string]Value, error) {
+	pairs := m.Map()
+	result := make(map[string]Value, len(pairs))
+	for _, entry := range pairs {
+		if entry.Key.Kind() != KindText {
 			return nil, ErrNonStringKey
 		}
-		result[string(key)] = entry.Value
+		result[entry.Key.TextVal()] = entry.Value
 	}
 	return result, nil
 }

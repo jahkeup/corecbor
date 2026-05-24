@@ -49,19 +49,19 @@ var rfc8949Vectors = []vectorCase{
 	// Simple values
 	{"Bool(false)", Bool(false), "f4", false},
 	{"Bool(true)", Bool(true), "f5", false},
-	{"Null{}", Null{}, "f6", false},
-	{"Undefined{}", Undefined{}, "f7", false},
+	{"Null()", Null(), "f6", false},
+	{"Undefined()", Undefined(), "f7", false},
 
 	// Arrays
-	{"Array(nil)", Array(nil), "80", false},
-	{"Array{1,2,3}", Array{Uint(1), Uint(2), Uint(3)}, "83010203", false},
+	{"MakeArray()", MakeArray(), "80", false},
+	{"MakeArray(1,2,3)", MakeArray(Uint(1), Uint(2), Uint(3)), "83010203", false},
 
 	// Maps
-	{"Map(nil)", Map(nil), "a0", false},
-	{"Map{1:2,3:4}", Map{{Key: Uint(1), Value: Uint(2)}, {Key: Uint(3), Value: Uint(4)}}, "a201020304", false},
+	{"MakeMap()", MakeMap(), "a0", false},
+	{"Map{1:2,3:4}", MakeMap(MapEntry{Key: Uint(1), Value: Uint(2)}, MapEntry{Key: Uint(3), Value: Uint(4)}), "a201020304", false},
 
 	// Tags
-	{"Tag{1,1363896240}", Tag{ID: 1, Inner: Uint(1363896240)}, "c11a514b67b0", false},
+	{"Tag{1,1363896240}", MakeTag(1, Uint(1363896240)), "c11a514b67b0", false},
 
 	// Decode-only: float16 → Float64
 	{"f16 0.0", Float64(0.0), "f90000", true},
@@ -76,8 +76,8 @@ var rfc8949Vectors = []vectorCase{
 	{"f64 1.1", Float64(1.1), "fb3ff199999999999a", true},
 
 	// Decode-only: indefinite-length
-	{"indef empty array", Array{}, "9fff", true},
-	{"indef byte string", Bytes{0x01, 0x02, 0x03, 0x04, 0x05}, "5f42010243030405ff", true},
+	{"indef empty array", MakeArray(), "9fff", true},
+	{"indef byte string", Bytes([]byte{0x01, 0x02, 0x03, 0x04, 0x05}), "5f42010243030405ff", true},
 	{"indef text string", Text("streaming"), "7f657374726561646d696e67ff", true},
 }
 

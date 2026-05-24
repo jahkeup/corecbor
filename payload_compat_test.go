@@ -118,28 +118,28 @@ func validateType(t *testing.T, val Value, wantType string) {
 		return
 	}
 	var gotType string
-	switch val.(type) {
-	case Uint:
+	switch val.Kind() {
+	case KindUint:
 		gotType = "uint"
-	case NegInt:
+	case KindNegInt:
 		gotType = "negint"
-	case Bytes:
+	case KindBytes:
 		gotType = "bytes"
-	case Text:
+	case KindText:
 		gotType = "text"
-	case Array:
+	case KindArray:
 		gotType = "array"
-	case Map:
+	case KindMap:
 		gotType = "map"
-	case Tag:
+	case KindTag:
 		gotType = "tag"
-	case Bool:
+	case KindBool:
 		gotType = "bool"
-	case Null:
+	case KindNull:
 		gotType = "null"
-	case Undefined:
+	case KindUndefined:
 		gotType = "undefined"
-	case Float32, Float64:
+	case KindFloat32, KindFloat64:
 		gotType = "float"
 	default:
 		gotType = "unknown"
@@ -152,23 +152,22 @@ func validateType(t *testing.T, val Value, wantType string) {
 func validateStructure(t *testing.T, val Value, expect payloadExpect) {
 	t.Helper()
 	if expect.Length != nil {
-		switch v := val.(type) {
-		case Array:
-			if len(v) != *expect.Length {
-				t.Errorf("array length = %d, want %d", len(v), *expect.Length)
+		switch val.Kind() {
+		case KindArray:
+			if len(val.Array()) != *expect.Length {
+				t.Errorf("array length = %d, want %d", len(val.Array()), *expect.Length)
 			}
-		case Map:
-			if len(v) != *expect.Length {
-				t.Errorf("map length = %d, want %d", len(v), *expect.Length)
+		case KindMap:
+			if len(val.Map()) != *expect.Length {
+				t.Errorf("map length = %d, want %d", len(val.Map()), *expect.Length)
 			}
 		}
 	}
 	if expect.TagID != nil {
-		tag, ok := val.(Tag)
-		if !ok {
-			t.Errorf("expected Tag, got %T", val)
-		} else if int(tag.ID) != *expect.TagID {
-			t.Errorf("tag ID = %d, want %d", tag.ID, *expect.TagID)
+		if val.Kind() != KindTag {
+			t.Errorf("expected Tag, got kind %d", val.Kind())
+		} else if int(val.TagID()) != *expect.TagID {
+			t.Errorf("tag ID = %d, want %d", val.TagID(), *expect.TagID)
 		}
 	}
 }

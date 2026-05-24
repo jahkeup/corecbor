@@ -24,10 +24,10 @@ func TestCursorSkipScalars(t *testing.T) {
 	values := []cbor.Value{
 		cbor.Uint(0), cbor.Uint(1000), cbor.Uint(0xffffffff),
 		cbor.NegInt(0), cbor.NegInt(255),
-		cbor.Bytes{0x01, 0x02, 0x03},
+		cbor.Bytes([]byte{0x01, 0x02, 0x03}),
 		cbor.Text("hello"),
 		cbor.Bool(true), cbor.Bool(false),
-		cbor.Null{}, cbor.Undefined{},
+		cbor.Null(), cbor.Undefined(),
 		cbor.Float32(1.5), cbor.Float64(3.14),
 		cbor.Simple(16),
 	}
@@ -36,42 +36,42 @@ func TestCursorSkipScalars(t *testing.T) {
 		c := NewCursor(src, DecodeOpts{})
 		n, err := c.Skip()
 		if err != nil {
-			t.Fatalf("Skip(%T): %v", v, err)
+			t.Fatalf("Skip(kind %d): %v", v.Kind(), err)
 		}
 		if n != len(src) {
-			t.Fatalf("Skip(%T) consumed %d, want %d", v, n, len(src))
+			t.Fatalf("Skip(kind %d) consumed %d, want %d", v.Kind(), n, len(src))
 		}
 	}
 }
 
 func TestCursorSkipContainers(t *testing.T) {
 	values := []cbor.Value{
-		cbor.Array{cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)},
-		cbor.Map{
-			{Key: cbor.Text("a"), Value: cbor.Uint(1)},
-			{Key: cbor.Text("b"), Value: cbor.Uint(2)},
-		},
-		cbor.Tag{ID: 1, Inner: cbor.Uint(42)},
-		cbor.Array{cbor.Array{cbor.Uint(1)}, cbor.Map{{Key: cbor.Uint(0), Value: cbor.Null{}}}},
+		cbor.MakeArray(cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)),
+		cbor.MakeMap(
+			cbor.MapEntry{Key: cbor.Text("a"), Value: cbor.Uint(1)},
+			cbor.MapEntry{Key: cbor.Text("b"), Value: cbor.Uint(2)},
+		),
+		cbor.MakeTag(1, cbor.Uint(42)),
+		cbor.MakeArray(cbor.MakeArray(cbor.Uint(1)), cbor.MakeMap(cbor.MapEntry{Key: cbor.Uint(0), Value: cbor.Null()})),
 	}
 	for _, v := range values {
 		src := encodeCBOR(t, v)
 		c := NewCursor(src, DecodeOpts{})
 		n, err := c.Skip()
 		if err != nil {
-			t.Fatalf("Skip(%T): %v", v, err)
+			t.Fatalf("Skip(kind %d): %v", v.Kind(), err)
 		}
 		if n != len(src) {
-			t.Fatalf("Skip(%T) consumed %d, want %d", v, n, len(src))
+			t.Fatalf("Skip(kind %d) consumed %d, want %d", v.Kind(), n, len(src))
 		}
 	}
 }
 
 func TestCursorRawBytes(t *testing.T) {
-	v := cbor.Map{
-		{Key: cbor.Text("x"), Value: cbor.Uint(1)},
-		{Key: cbor.Text("y"), Value: cbor.Uint(2)},
-	}
+	v := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("x"), Value: cbor.Uint(1)},
+		cbor.MapEntry{Key: cbor.Text("y"), Value: cbor.Uint(2)},
+	)
 	src := encodeCBOR(t, v)
 	c := NewCursor(src, DecodeOpts{})
 	raw, err := c.RawBytes()
@@ -84,7 +84,7 @@ func TestCursorRawBytes(t *testing.T) {
 }
 
 func TestCursorEnterArrayExitArray(t *testing.T) {
-	arr := cbor.Array{cbor.Uint(10), cbor.Uint(20), cbor.Uint(30)}
+	arr := cbor.MakeArray(cbor.Uint(10), cbor.Uint(20), cbor.Uint(30))
 	src := encodeCBOR(t, arr)
 	c := NewCursor(src, DecodeOpts{})
 
@@ -100,7 +100,7 @@ func TestCursorEnterArrayExitArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != cbor.Uint(10) {
+	if v.Kind() != cbor.KindUint || v.UintVal() != 10 {
 		t.Fatalf("first = %v, want Uint(10)", v)
 	}
 
@@ -115,11 +115,11 @@ func TestCursorEnterArrayExitArray(t *testing.T) {
 }
 
 func TestCursorEnterMapFindKey(t *testing.T) {
-	m := cbor.Map{
-		{Key: cbor.Text("id"), Value: cbor.Uint(42)},
-		{Key: cbor.Text("name"), Value: cbor.Text("alice")},
-		{Key: cbor.Text("score"), Value: cbor.Float64(99.5)},
-	}
+	m := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("id"), Value: cbor.Uint(42)},
+		cbor.MapEntry{Key: cbor.Text("name"), Value: cbor.Text("alice")},
+		cbor.MapEntry{Key: cbor.Text("score"), Value: cbor.Float64(99.5)},
+	)
 	src := encodeCBOR(t, m)
 	c := NewCursor(src, DecodeOpts{})
 
@@ -137,7 +137,7 @@ func TestCursorEnterMapFindKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != cbor.Text("alice") {
+	if v.Kind() != cbor.KindText || v.TextVal() != "alice" {
 		t.Fatalf("name value = %v, want Text(alice)", v)
 	}
 
@@ -148,10 +148,10 @@ func TestCursorEnterMapFindKey(t *testing.T) {
 }
 
 func TestCursorFindMapKeyNotFound(t *testing.T) {
-	m := cbor.Map{
-		{Key: cbor.Text("a"), Value: cbor.Uint(1)},
-		{Key: cbor.Text("b"), Value: cbor.Uint(2)},
-	}
+	m := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("a"), Value: cbor.Uint(1)},
+		cbor.MapEntry{Key: cbor.Text("b"), Value: cbor.Uint(2)},
+	)
 	src := encodeCBOR(t, m)
 	c := NewCursor(src, DecodeOpts{})
 	c.EnterMap()
@@ -163,13 +163,13 @@ func TestCursorFindMapKeyNotFound(t *testing.T) {
 }
 
 func TestCursorNestedAccess(t *testing.T) {
-	outer := cbor.Map{
-		{Key: cbor.Text("header"), Value: cbor.Map{
-			{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
-			{Key: cbor.Text("kid"), Value: cbor.Bytes{0x01}},
-		}},
-		{Key: cbor.Text("payload"), Value: cbor.Bytes(make([]byte, 100))},
-	}
+	outer := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("header"), Value: cbor.MakeMap(
+			cbor.MapEntry{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
+			cbor.MapEntry{Key: cbor.Text("kid"), Value: cbor.Bytes([]byte{0x01})},
+		)},
+		cbor.MapEntry{Key: cbor.Text("payload"), Value: cbor.Bytes(make([]byte, 100))},
+	)
 	src := encodeCBOR(t, outer)
 	c := NewCursor(src, DecodeOpts{})
 
@@ -181,7 +181,7 @@ func TestCursorNestedAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v != cbor.NegInt(6) {
+	if v.Kind() != cbor.KindNegInt || v.NegIntVal() != 6 {
 		t.Fatalf("alg = %v, want NegInt(6)", v)
 	}
 	c.ExitMap()
@@ -214,14 +214,14 @@ func TestCursorKind(t *testing.T) {
 }
 
 func buildLargeCBOR(n int) []byte {
-	m := make(cbor.Map, n)
+	pairs := make([]cbor.MapEntry, n)
 	for i := range n {
-		m[i] = cbor.MapEntry{
+		pairs[i] = cbor.MapEntry{
 			Key:   cbor.Text(fmt.Sprintf("key-%04d", i)),
 			Value: cbor.Bytes(make([]byte, 100)),
 		}
 	}
-	src, _ := Encode(nil, m, EncodeOpts{})
+	src, _ := Encode(nil, cbor.MakeMapFromSlice(pairs), EncodeOpts{})
 	return src
 }
 
@@ -240,7 +240,7 @@ func BenchmarkCursorFindMapKey(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		c := NewCursor(src, DecodeOpts{})
-		c.EnterMap()              //nolint:errcheck
+		c.EnterMap()             //nolint:errcheck
 		c.FindMapKey("key-0025") //nolint:errcheck
 		c.Decode()               //nolint:errcheck
 	}
@@ -251,7 +251,7 @@ func BenchmarkCursorFindMapKeyLast(b *testing.B) {
 	b.ResetTimer()
 	for range b.N {
 		c := NewCursor(src, DecodeOpts{})
-		c.EnterMap()              //nolint:errcheck
+		c.EnterMap()             //nolint:errcheck
 		c.FindMapKey("key-0049") //nolint:errcheck
 		c.Decode()               //nolint:errcheck
 	}

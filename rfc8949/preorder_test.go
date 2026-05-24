@@ -11,7 +11,7 @@ import (
 )
 
 func TestPrecomputeMapOrderEquivalence(t *testing.T) {
-	m := cbor.Map{
+	m := []cbor.MapEntry{
 		{Key: cbor.Text("zebra"), Value: cbor.Uint(1)},
 		{Key: cbor.Text("alpha"), Value: cbor.Uint(2)},
 		{Key: cbor.Text("middle"), Value: cbor.Uint(3)},
@@ -29,7 +29,7 @@ func TestPrecomputeMapOrderEquivalence(t *testing.T) {
 		t.Fatalf("preordered encode: %v", err)
 	}
 
-	standard, err := Encode(nil, m, opts)
+	standard, err := Encode(nil, cbor.MakeMapFromSlice(m), opts)
 	if err != nil {
 		t.Fatalf("standard encode: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestPrecomputeMapOrderEquivalence(t *testing.T) {
 }
 
 func TestPrecomputeMapOrderLengthFirst(t *testing.T) {
-	m := cbor.Map{
+	m := []cbor.MapEntry{
 		{Key: cbor.Text("bb"), Value: cbor.Uint(1)},
 		{Key: cbor.Text("a"), Value: cbor.Uint(2)},
 		{Key: cbor.Text("ccc"), Value: cbor.Uint(3)},
@@ -58,7 +58,7 @@ func TestPrecomputeMapOrderLengthFirst(t *testing.T) {
 		t.Fatalf("preordered encode: %v", err)
 	}
 
-	standard, err := Encode(nil, m, opts)
+	standard, err := Encode(nil, cbor.MakeMapFromSlice(m), opts)
 	if err != nil {
 		t.Fatalf("standard encode: %v", err)
 	}
@@ -69,13 +69,13 @@ func TestPrecomputeMapOrderLengthFirst(t *testing.T) {
 }
 
 func TestPrecomputeMapOrderMixedKeyTypes(t *testing.T) {
-	m := cbor.Map{
+	m := []cbor.MapEntry{
 		{Key: cbor.Uint(10), Value: cbor.Text("ten")},
 		{Key: cbor.Text("z"), Value: cbor.Text("zed")},
 		{Key: cbor.Uint(1), Value: cbor.Text("one")},
-		{Key: cbor.Bytes{0xff}, Value: cbor.Text("ff")},
+		{Key: cbor.Bytes([]byte{0xff}), Value: cbor.Text("ff")},
 	}
-	keys := []cbor.Value{cbor.Uint(10), cbor.Text("z"), cbor.Uint(1), cbor.Bytes{0xff}}
+	keys := []cbor.Value{cbor.Uint(10), cbor.Text("z"), cbor.Uint(1), cbor.Bytes([]byte{0xff})}
 	opts := EncodeOpts{Deterministic: true, SortMode: SortBytewiseLex}
 
 	order, err := PrecomputeMapOrder(keys, SortBytewiseLex, opts)
@@ -88,7 +88,7 @@ func TestPrecomputeMapOrderMixedKeyTypes(t *testing.T) {
 		t.Fatalf("preordered encode: %v", err)
 	}
 
-	standard, err := Encode(nil, m, opts)
+	standard, err := Encode(nil, cbor.MakeMapFromSlice(m), opts)
 	if err != nil {
 		t.Fatalf("standard encode: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestPrecomputeMapOrderMixedKeyTypes(t *testing.T) {
 }
 
 func TestPrecomputeMapOrderSingleKey(t *testing.T) {
-	m := cbor.Map{{Key: cbor.Text("only"), Value: cbor.Uint(42)}}
+	m := []cbor.MapEntry{{Key: cbor.Text("only"), Value: cbor.Uint(42)}}
 	keys := []cbor.Value{cbor.Text("only")}
 	opts := EncodeOpts{Deterministic: true}
 
@@ -113,7 +113,7 @@ func TestPrecomputeMapOrderSingleKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	standard, err := Encode(nil, m, opts)
+	standard, err := Encode(nil, cbor.MakeMapFromSlice(m), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestPrecomputeMapOrderSingleKey(t *testing.T) {
 }
 
 func TestPrecomputeMapOrderEmpty(t *testing.T) {
-	m := cbor.Map{}
+	m := []cbor.MapEntry{}
 	order, err := PrecomputeMapOrder(nil, SortBytewiseLex, EncodeOpts{Deterministic: true})
 	if err != nil {
 		t.Fatal(err)
@@ -135,7 +135,7 @@ func TestPrecomputeMapOrderEmpty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	standard, err := Encode(nil, m, EncodeOpts{Deterministic: true})
+	standard, err := Encode(nil, cbor.MakeMap(), EncodeOpts{Deterministic: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,9 +146,9 @@ func TestPrecomputeMapOrderEmpty(t *testing.T) {
 }
 
 func BenchmarkEncodeMapPreordered(b *testing.B) {
-	m := cbor.Map{
+	m := []cbor.MapEntry{
 		{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
-		{Key: cbor.Text("kid"), Value: cbor.Bytes{0x01, 0x02, 0x03, 0x04}},
+		{Key: cbor.Text("kid"), Value: cbor.Bytes([]byte{0x01, 0x02, 0x03, 0x04})},
 		{Key: cbor.Text("iv"), Value: cbor.Bytes(make([]byte, 12))},
 	}
 	keys := []cbor.Value{cbor.Text("alg"), cbor.Text("kid"), cbor.Text("iv")}
@@ -168,11 +168,11 @@ func BenchmarkEncodeMapPreordered(b *testing.B) {
 }
 
 func BenchmarkEncodeMapDeterministic(b *testing.B) {
-	m := cbor.Map{
-		{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
-		{Key: cbor.Text("kid"), Value: cbor.Bytes{0x01, 0x02, 0x03, 0x04}},
-		{Key: cbor.Text("iv"), Value: cbor.Bytes(make([]byte, 12))},
-	}
+	m := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
+		cbor.MapEntry{Key: cbor.Text("kid"), Value: cbor.Bytes([]byte{0x01, 0x02, 0x03, 0x04})},
+		cbor.MapEntry{Key: cbor.Text("iv"), Value: cbor.Bytes(make([]byte, 12))},
+	)
 	opts := EncodeOpts{Deterministic: true, SortMode: SortBytewiseLex}
 
 	buf, _ := Encode(nil, m, opts)

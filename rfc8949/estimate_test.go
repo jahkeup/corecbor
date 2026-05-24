@@ -11,67 +11,53 @@ import (
 
 func TestEstimateSizeNeverUnderestimates(t *testing.T) {
 	values := []cbor.Value{
-		cbor.Uint(0),
-		cbor.Uint(23),
-		cbor.Uint(24),
-		cbor.Uint(255),
-		cbor.Uint(256),
-		cbor.Uint(65535),
-		cbor.Uint(65536),
-		cbor.Uint(0xffffffff),
-		cbor.Uint(0x100000000),
-		cbor.NegInt(0),
-		cbor.NegInt(1000),
+		cbor.Uint(0), cbor.Uint(23), cbor.Uint(24), cbor.Uint(255),
+		cbor.Uint(256), cbor.Uint(65535), cbor.Uint(65536),
+		cbor.Uint(0xffffffff), cbor.Uint(0x100000000),
+		cbor.NegInt(0), cbor.NegInt(1000),
 		cbor.Bytes(nil),
-		cbor.Bytes{0x01, 0x02, 0x03},
+		cbor.Bytes([]byte{0x01, 0x02, 0x03}),
 		cbor.Bytes(make([]byte, 300)),
-		cbor.Text(""),
-		cbor.Text("hello"),
+		cbor.Text(""), cbor.Text("hello"),
 		cbor.Text(string(make([]byte, 300))),
-		cbor.Array{cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)},
-		cbor.Array{},
-		cbor.Map{
-			{Key: cbor.Text("a"), Value: cbor.Uint(1)},
-			{Key: cbor.Text("b"), Value: cbor.Uint(2)},
-		},
-		cbor.Map{},
-		cbor.Tag{ID: 1, Inner: cbor.Uint(42)},
-		cbor.Tag{ID: 55799, Inner: cbor.Text("self")},
-		cbor.Bool(true),
-		cbor.Bool(false),
-		cbor.Null{},
-		cbor.Undefined{},
-		cbor.Simple(0),
-		cbor.Simple(19),
-		cbor.Simple(32),
-		cbor.Simple(255),
-		cbor.Float32(1.5),
-		cbor.Float64(3.14159),
+		cbor.MakeArray(cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)),
+		cbor.MakeArray(),
+		cbor.MakeMap(
+			cbor.MapEntry{Key: cbor.Text("a"), Value: cbor.Uint(1)},
+			cbor.MapEntry{Key: cbor.Text("b"), Value: cbor.Uint(2)},
+		),
+		cbor.MakeMap(),
+		cbor.MakeTag(1, cbor.Uint(42)),
+		cbor.MakeTag(55799, cbor.Text("self")),
+		cbor.Bool(true), cbor.Bool(false),
+		cbor.Null(), cbor.Undefined(),
+		cbor.Simple(0), cbor.Simple(19), cbor.Simple(32), cbor.Simple(255),
+		cbor.Float32(1.5), cbor.Float64(3.14159),
 	}
 
 	for _, v := range values {
 		estimated := EstimateSize(v)
 		actual, err := Encode(nil, v, EncodeOpts{})
 		if err != nil {
-			t.Fatalf("encode %T: %v", v, err)
+			t.Fatalf("encode kind %d: %v", v.Kind(), err)
 		}
 		if estimated < len(actual) {
-			t.Errorf("EstimateSize(%T) = %d, actual encoded = %d (UNDERESTIMATE)",
-				v, estimated, len(actual))
+			t.Errorf("EstimateSize(kind %d) = %d, actual encoded = %d (UNDERESTIMATE)",
+				v.Kind(), estimated, len(actual))
 		}
 	}
 }
 
 func TestEstimateSizeNested(t *testing.T) {
-	nested := cbor.Map{
-		{Key: cbor.Text("inner"), Value: cbor.Array{
+	nested := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("inner"), Value: cbor.MakeArray(
 			cbor.Uint(1),
-			cbor.Bytes{0xde, 0xad},
-			cbor.Map{
-				{Key: cbor.Text("deep"), Value: cbor.Tag{ID: 1, Inner: cbor.Uint(999)}},
-			},
-		}},
-	}
+			cbor.Bytes([]byte{0xde, 0xad}),
+			cbor.MakeMap(
+				cbor.MapEntry{Key: cbor.Text("deep"), Value: cbor.MakeTag(1, cbor.Uint(999))},
+			),
+		)},
+	)
 	estimated := EstimateSize(nested)
 	actual, err := Encode(nil, nested, EncodeOpts{})
 	if err != nil {
@@ -87,14 +73,14 @@ func TestEstimateSizeNested(t *testing.T) {
 	}
 }
 
-func TestEstimateSizeNil(t *testing.T) {
-	if got := EstimateSize(nil); got != 0 {
-		t.Errorf("EstimateSize(nil) = %d, want 0", got)
+func TestEstimateSizeZero(t *testing.T) {
+	if got := EstimateSize(cbor.Value{}); got != 0 {
+		t.Errorf("EstimateSize(zero) = %d, want 0", got)
 	}
 }
 
 func TestEncodeWithHintPreAllocates(t *testing.T) {
-	v := cbor.Array{cbor.Uint(1), cbor.Uint(2), cbor.Uint(3)}
+	v := cbor.MakeArray(cbor.Uint(1), cbor.Uint(2), cbor.Uint(3))
 	hint := EstimateSize(v)
 	dst, err := EncodeWithHint(nil, v, EncodeOpts{}, hint)
 	if err != nil {
@@ -124,11 +110,11 @@ func TestEncodeWithHintExistingCapacity(t *testing.T) {
 }
 
 func BenchmarkEncodePresized(b *testing.B) {
-	m := cbor.Map{
-		{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
-		{Key: cbor.Text("kid"), Value: cbor.Bytes{0x01, 0x02, 0x03, 0x04}},
-		{Key: cbor.Text("data"), Value: cbor.Bytes(make([]byte, 64))},
-	}
+	m := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
+		cbor.MapEntry{Key: cbor.Text("kid"), Value: cbor.Bytes([]byte{0x01, 0x02, 0x03, 0x04})},
+		cbor.MapEntry{Key: cbor.Text("data"), Value: cbor.Bytes(make([]byte, 64))},
+	)
 	hint := EstimateSize(m)
 	b.ResetTimer()
 	for range b.N {
@@ -137,11 +123,11 @@ func BenchmarkEncodePresized(b *testing.B) {
 }
 
 func BenchmarkEncodeNoHint(b *testing.B) {
-	m := cbor.Map{
-		{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
-		{Key: cbor.Text("kid"), Value: cbor.Bytes{0x01, 0x02, 0x03, 0x04}},
-		{Key: cbor.Text("data"), Value: cbor.Bytes(make([]byte, 64))},
-	}
+	m := cbor.MakeMap(
+		cbor.MapEntry{Key: cbor.Text("alg"), Value: cbor.NegInt(6)},
+		cbor.MapEntry{Key: cbor.Text("kid"), Value: cbor.Bytes([]byte{0x01, 0x02, 0x03, 0x04})},
+		cbor.MapEntry{Key: cbor.Text("data"), Value: cbor.Bytes(make([]byte, 64))},
+	)
 	b.ResetTimer()
 	for range b.N {
 		Encode(nil, m, EncodeOpts{Deterministic: true}) //nolint:errcheck

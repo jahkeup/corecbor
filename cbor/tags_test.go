@@ -12,7 +12,7 @@ import (
 )
 
 func TestAsTime_Tag0(t *testing.T) {
-	tag := cbor.Tag{ID: cbor.TagDateTimeString, Inner: cbor.Text("2023-06-15T12:30:00Z")}
+	tag := cbor.MakeTag(cbor.TagDateTimeString, cbor.Text("2023-06-15T12:30:00Z"))
 	got, err := cbor.AsTime(tag)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -24,7 +24,7 @@ func TestAsTime_Tag0(t *testing.T) {
 }
 
 func TestAsTime_Tag1_Integer(t *testing.T) {
-	tag := cbor.Tag{ID: cbor.TagEpochDateTime, Inner: cbor.Uint(1686830000)}
+	tag := cbor.MakeTag(cbor.TagEpochDateTime, cbor.Uint(1686830000))
 	got, err := cbor.AsTime(tag)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -36,7 +36,7 @@ func TestAsTime_Tag1_Integer(t *testing.T) {
 }
 
 func TestAsTime_Tag1_Float(t *testing.T) {
-	tag := cbor.Tag{ID: cbor.TagEpochDateTime, Inner: cbor.Float64(1686830000.5)}
+	tag := cbor.MakeTag(cbor.TagEpochDateTime, cbor.Float64(1686830000.5))
 	got, err := cbor.AsTime(tag)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -48,7 +48,7 @@ func TestAsTime_Tag1_Float(t *testing.T) {
 }
 
 func TestAsTime_WrongTag(t *testing.T) {
-	tag := cbor.Tag{ID: 99, Inner: cbor.Text("hello")}
+	tag := cbor.MakeTag(99, cbor.Text("hello"))
 	_, err := cbor.AsTime(tag)
 	if err == nil {
 		t.Fatal("expected error for wrong tag ID")
@@ -80,8 +80,7 @@ func TestTimeToString_RoundTrip(t *testing.T) {
 }
 
 func TestAsBigInt_Tag2(t *testing.T) {
-	// Tag 2 with bytes representing 256
-	tag := cbor.Tag{ID: cbor.TagUnsignedBignum, Inner: cbor.Bytes([]byte{0x01, 0x00})}
+	tag := cbor.MakeTag(cbor.TagUnsignedBignum, cbor.Bytes([]byte{0x01, 0x00}))
 	got, err := cbor.AsBigInt(tag)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -93,8 +92,7 @@ func TestAsBigInt_Tag2(t *testing.T) {
 }
 
 func TestAsBigInt_Tag3(t *testing.T) {
-	// Tag 3 with bytes representing 0 → actual value = -1 - 0 = -1
-	tag := cbor.Tag{ID: cbor.TagNegativeBignum, Inner: cbor.Bytes([]byte{0x00})}
+	tag := cbor.MakeTag(cbor.TagNegativeBignum, cbor.Bytes([]byte{0x00}))
 	got, err := cbor.AsBigInt(tag)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,16 +106,16 @@ func TestAsBigInt_Tag3(t *testing.T) {
 func TestBigIntTo_Positive(t *testing.T) {
 	n := big.NewInt(1000)
 	tag := cbor.BigIntTo(n)
-	if tag.ID != cbor.TagUnsignedBignum {
-		t.Fatalf("expected tag 2, got %d", tag.ID)
+	if tag.TagID() != cbor.TagUnsignedBignum {
+		t.Fatalf("expected tag 2, got %d", tag.TagID())
 	}
 }
 
 func TestBigIntTo_Negative(t *testing.T) {
 	n := big.NewInt(-1000)
 	tag := cbor.BigIntTo(n)
-	if tag.ID != cbor.TagNegativeBignum {
-		t.Fatalf("expected tag 3, got %d", tag.ID)
+	if tag.TagID() != cbor.TagNegativeBignum {
+		t.Fatalf("expected tag 3, got %d", tag.TagID())
 	}
 }
 
@@ -140,8 +138,8 @@ func TestBigIntTo_RoundTrip(t *testing.T) {
 }
 
 func TestAsNestedCBOR_Tag24(t *testing.T) {
-	inner := []byte{0xa1, 0x01, 0x02} // some CBOR bytes
-	tag := cbor.Tag{ID: cbor.TagEncodedCBOR, Inner: cbor.Bytes(inner)}
+	inner := []byte{0xa1, 0x01, 0x02}
+	tag := cbor.MakeTag(cbor.TagEncodedCBOR, cbor.Bytes(inner))
 	got, err := cbor.AsNestedCBOR(tag)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

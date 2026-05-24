@@ -153,12 +153,12 @@ func cekLenForAlg(alg Algorithm) int {
 // HKDF info per RFC 9053 §5.1 (simplified):
 // CBOR array: [AlgID, partyU (bstr), partyV (bstr), suppPub ([keyLength*8])]
 func buildHKDFInfo(alg Algorithm, keyLen int) ([]byte, error) {
-	arr := corecbor.Array{
+	arr := corecbor.MakeArray(
 		goToCBOR(int64(alg)),
 		corecbor.Bytes(nil),
 		corecbor.Bytes(nil),
-		corecbor.Array{goToCBOR(int64(keyLen * 8))},
-	}
+		corecbor.MakeArray(goToCBOR(int64(keyLen * 8))),
+	)
 	enc := sharedEncoder
 	return enc.Encode(nil, arr)
 }

@@ -141,7 +141,7 @@ func TestErrorCatalogFuzzReachability(t *testing.T) {
 			target: ErrNilValue,
 			trigger: func() error {
 				enc := New(ModeCoreDeterministic)
-				_, err := enc.Encode(nil, nil)
+				_, err := enc.Encode(nil, Value{})
 				return err
 			},
 		},

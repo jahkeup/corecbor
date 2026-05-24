@@ -11,8 +11,10 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-
-_(no active proposals)_
+| [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling | corecbor maintainers | 001 | 2026-05-21 |
+| [016](016-value-tagged-union-struct.md) | 1 | Draft | Replace Value interface with tagged-union struct | corecbor maintainers | 001 | 2026-05-22 |
+| [017](017-cose-encoder-reuse.md) | 2 | Draft | COSE encoder reuse strategy | corecbor maintainers | 001, 016 | 2026-05-22 |
+| [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 
 ## Closed proposals
 
@@ -35,7 +37,7 @@ _(no active proposals)_
 
 ## Numbering
 
-Next available proposal number: **015**
+Next available proposal number: **019**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than
@@ -48,6 +50,9 @@ sequence compactness.
 - **Tier-2, depends on a tier-1:**
   - [006](006-iana-registry-sync-codegen.md) — IANA registry sync + codegen (depends on 001)
   - [007](007-cross-library-compatibility-testing.md) — Cross-library compatibility testing (depends on 001)
+  - [015](015-tinygo-support-and-profiling.md) — TinyGo latent support + profiling (depends on 001)
+  - [017](017-cose-encoder-reuse.md) — COSE encoder reuse (depends on 001, 016)
+  - [018](018-opt-in-performance-extensions.md) — Opt-in performance extensions (depends on 001, 016)
 - **Tier-3, sibling-module:**
   - [002](002-cose-structures-and-signing.md) — COSE (RFC 9052/9053; depends on 001)
   - [003](003-cwt-cbor-web-tokens.md) — CWT (RFC 8392; depends on 001, 002)

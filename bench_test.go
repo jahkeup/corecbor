@@ -3,7 +3,10 @@
 
 package corecbor
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func buildScalarArray() Value {
 	arr := make(Array, 1000)
@@ -68,6 +71,41 @@ func BenchmarkDecodeScalars(b *testing.B) {
 func BenchmarkDecodeNestedMapStrict(b *testing.B) {
 	enc := New(ModeCoreDeterministic)
 	v := buildNestedMap()
+	data, _ := enc.Encode(nil, v)
+	b.SetBytes(int64(len(data)))
+	dec := StrictDecoder()
+	b.ResetTimer()
+	for range b.N {
+		dec.Decode(data) //nolint:errcheck
+	}
+}
+
+func buildLargeMap(n int) Value {
+	m := make(Map, n)
+	for i := range n {
+		m[i] = MapEntry{
+			Key:   Text(fmt.Sprintf("key-%04d", i)),
+			Value: Uint(uint64(i)),
+		}
+	}
+	return m
+}
+
+func BenchmarkDecodeStrictLargeMap100(b *testing.B) {
+	enc := New(ModeCoreDeterministic)
+	v := buildLargeMap(100)
+	data, _ := enc.Encode(nil, v)
+	b.SetBytes(int64(len(data)))
+	dec := StrictDecoder()
+	b.ResetTimer()
+	for range b.N {
+		dec.Decode(data) //nolint:errcheck
+	}
+}
+
+func BenchmarkDecodeStrictLargeMap1000(b *testing.B) {
+	enc := New(ModeCoreDeterministic)
+	v := buildLargeMap(1000)
 	data, _ := enc.Encode(nil, v)
 	b.SetBytes(int64(len(data)))
 	dec := StrictDecoder()

@@ -5,6 +5,7 @@ package rfc8949
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"testing"
 
@@ -620,5 +621,113 @@ func TestDecodeTrailingBytes(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("consumed %d, want 1 (trailing byte at offset 1)", n)
+	}
+}
+
+func TestDecodeDuplicateMapKeysLarge(t *testing.T) {
+	// Build a map with 50 unique keys — exercises hash-based dedup path (threshold=16).
+	m := make(cbor.Map, 50)
+	for i := range 50 {
+		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
+	}
+	src := mustEncode(t, m)
+	got, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
+	if err != nil {
+		t.Fatalf("unique keys should not error: %v", err)
+	}
+	gotMap := got.(cbor.Map)
+	if len(gotMap) != 50 {
+		t.Fatalf("got %d entries, want 50", len(gotMap))
+	}
+}
+
+func TestDecodeDuplicateMapKeysLargeReject(t *testing.T) {
+	// Build a map with a duplicate key beyond the dedup threshold.
+	m := make(cbor.Map, 20)
+	for i := range 20 {
+		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
+	}
+	// Duplicate the first key at position 20.
+	m = append(m, cbor.MapEntry{Key: cbor.Text("k00"), Value: cbor.Uint(999)})
+	src := mustEncode(t, m)
+	_, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
+	if !errors.Is(err, cbor.ErrDuplicateMapKey) {
+		t.Fatalf("expected ErrDuplicateMapKey, got: %v", err)
+	}
+}
+
+func TestDecodeDuplicateMapKeysLargeLastWins(t *testing.T) {
+	// Without RejectDuplicateMapKeys, last-write-wins for large maps.
+	m := make(cbor.Map, 20)
+	for i := range 20 {
+		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%02d", i)), Value: cbor.Uint(uint64(i))}
+	}
+	m = append(m, cbor.MapEntry{Key: cbor.Text("k00"), Value: cbor.Uint(999)})
+	src := mustEncode(t, m)
+	got, _, err := Decode(src, DecodeOpts{})
+	if err != nil {
+		t.Fatalf("last-write-wins should not error: %v", err)
+	}
+	gotMap := got.(cbor.Map)
+	if len(gotMap) != 20 {
+		t.Fatalf("got %d entries, want 20 (duplicate merged)", len(gotMap))
+	}
+	// Verify the first key has the last-written value.
+	for _, entry := range gotMap {
+		if entry.Key == cbor.Text("k00") {
+			if entry.Value != cbor.Uint(999) {
+				t.Fatalf("k00 value = %v, want 999", entry.Value)
+			}
+			return
+		}
+	}
+	t.Fatal("k00 not found in decoded map")
+}
+
+func TestDecodeDuplicateMapKeysHashCollision(t *testing.T) {
+	// Verify correctness even with hash collisions by testing many keys
+	// with similar patterns that might collide.
+	m := make(cbor.Map, 100)
+	for i := range 100 {
+		m[i] = cbor.MapEntry{Key: cbor.Uint(uint64(i)), Value: cbor.Uint(uint64(i * 2))}
+	}
+	src := mustEncode(t, m)
+	got, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true})
+	if err != nil {
+		t.Fatalf("no duplicates should not error: %v", err)
+	}
+	gotMap := got.(cbor.Map)
+	if len(gotMap) != 100 {
+		t.Fatalf("got %d entries, want 100", len(gotMap))
+	}
+}
+
+func BenchmarkMapInsertLinear(b *testing.B) {
+	m := make(cbor.Map, 10)
+	for i := range 10 {
+		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("k%d", i)), Value: cbor.Uint(uint64(i))}
+	}
+	src, err := Encode(nil, m, EncodeOpts{})
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for range b.N {
+		Decode(src, DecodeOpts{RejectDuplicateMapKeys: true}) //nolint:errcheck
+	}
+}
+
+func BenchmarkMapInsertHash(b *testing.B) {
+	m := make(cbor.Map, 100)
+	for i := range 100 {
+		m[i] = cbor.MapEntry{Key: cbor.Text(fmt.Sprintf("key-%03d", i)), Value: cbor.Uint(uint64(i))}
+	}
+	src, err := Encode(nil, m, EncodeOpts{})
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.ResetTimer()
+	for range b.N {
+		Decode(src, DecodeOpts{RejectDuplicateMapKeys: true}) //nolint:errcheck
 	}
 }

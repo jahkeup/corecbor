@@ -6,6 +6,7 @@ package rfc8949
 import (
 	"fmt"
 	"math"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
@@ -26,6 +27,36 @@ func init() {
 	for i := range 256 {
 		negintCache[i] = cbor.NegInt(i)
 	}
+}
+
+// dedupThreshold is the map key count above which hash-based duplicate
+// detection replaces linear scan. Below this threshold, linear scan is
+// faster due to lower constant overhead.
+const dedupThreshold = 16
+
+// keyDedup provides O(1) amortized duplicate key detection for large maps.
+// It hashes the encoded key bytes (FNV-1a) and maintains a collision list
+// of map indices for each hash bucket.
+type keyDedup struct {
+	seen map[uint64][]int
+}
+
+var keyDedupPool = sync.Pool{
+	New: func() any { return &keyDedup{seen: make(map[uint64][]int, 32)} },
+}
+
+func (kd *keyDedup) reset() {
+	clear(kd.seen)
+}
+
+// fnv1a computes FNV-1a hash over b.
+func fnv1a(b []byte) uint64 {
+	h := uint64(14695981039346656037)
+	for _, c := range b {
+		h ^= uint64(c)
+		h *= 1099511628211
+	}
+	return h
 }
 
 // DecodeOpts controls decoder strictness. Zero value is maximally
@@ -411,6 +442,14 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if depth+1 > opts.maxNesting() {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
 	}
+
+	var dedup *keyDedup
+	if count > dedupThreshold {
+		dedup = keyDedupPool.Get().(*keyDedup)
+		dedup.reset()
+		defer keyDedupPool.Put(dedup)
+	}
+
 	m := make(cbor.Map, 0, count)
 	pos := off + h.N
 	for range count {
@@ -419,6 +458,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		if err != nil {
 			return nil, next, err
 		}
+		encodedKey := src[keyOff:next]
 		pos = next
 		if opts.RejectNullMapKeys {
 			if _, ok := k.(cbor.Null); ok {
@@ -430,7 +470,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 			return nil, next, err
 		}
 		pos = next
-		m, err = mapInsert(m, k, v, keyOff, opts)
+		m, err = mapInsert(m, k, v, keyOff, encodedKey, dedup, opts)
 		if err != nil {
 			return nil, keyOff, err
 		}
@@ -459,6 +499,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		if err != nil {
 			return nil, next, err
 		}
+		encodedKey := src[keyOff:next]
 		pos = next
 		if opts.RejectNullMapKeys {
 			if _, ok := k.(cbor.Null); ok {
@@ -470,27 +511,48 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 			return nil, next, err
 		}
 		pos = next
-		m, err = mapInsert(m, k, v, keyOff, opts)
+		m, err = mapInsert(m, k, v, keyOff, encodedKey, nil, opts)
 		if err != nil {
 			return nil, keyOff, err
 		}
 	}
 }
 
-func mapInsert(m cbor.Map, key, val cbor.Value, keyOff int, opts DecodeOpts) (cbor.Map, error) {
+func mapInsert(m cbor.Map, key, val cbor.Value, keyOff int, encodedKey []byte, dedup *keyDedup, opts DecodeOpts) (cbor.Map, error) {
 	if opts.RejectDuplicateMapKeys {
-		for _, entry := range m {
-			if valuesEqual(entry.Key, key) {
-				return m, fmt.Errorf("%w at offset %d", cbor.ErrDuplicateMapKey, keyOff)
+		if dedup != nil {
+			h := fnv1a(encodedKey)
+			for _, idx := range dedup.seen[h] {
+				if valuesEqual(m[idx].Key, key) {
+					return m, fmt.Errorf("%w at offset %d", cbor.ErrDuplicateMapKey, keyOff)
+				}
+			}
+			dedup.seen[h] = append(dedup.seen[h], len(m))
+		} else {
+			for _, entry := range m {
+				if valuesEqual(entry.Key, key) {
+					return m, fmt.Errorf("%w at offset %d", cbor.ErrDuplicateMapKey, keyOff)
+				}
 			}
 		}
 		m = append(m, cbor.MapEntry{Key: key, Value: val})
 		return m, nil
 	}
-	for i, entry := range m {
-		if valuesEqual(entry.Key, key) {
-			m[i].Value = val
-			return m, nil
+	if dedup != nil {
+		h := fnv1a(encodedKey)
+		for _, idx := range dedup.seen[h] {
+			if valuesEqual(m[idx].Key, key) {
+				m[idx].Value = val
+				return m, nil
+			}
+		}
+		dedup.seen[h] = append(dedup.seen[h], len(m))
+	} else {
+		for i, entry := range m {
+			if valuesEqual(entry.Key, key) {
+				m[i].Value = val
+				return m, nil
+			}
 		}
 	}
 	m = append(m, cbor.MapEntry{Key: key, Value: val})

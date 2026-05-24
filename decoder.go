@@ -56,6 +56,18 @@ func WithMaxByteStringLength(n int) DecoderOption {
 	return func(c *decodeConfig) { c.opts.MaxByteStringLength = n }
 }
 
+// WithMemoryBudget sets a global allocation budget (in bytes) for a
+// single decode operation. Returns ErrMemoryBudgetExceeded when
+// cumulative allocations exceed the limit. A limit of 0 disables
+// tracking (the default).
+func WithMemoryBudget(limit int) DecoderOption {
+	return func(c *decodeConfig) {
+		if limit > 0 {
+			c.opts.Budget = rfc8949.NewBudget(limit)
+		}
+	}
+}
+
 type Decoder struct {
 	cfg decodeConfig
 }
@@ -77,6 +89,9 @@ func StrictDecoder(opts ...DecoderOption) *Decoder {
 }
 
 func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
+	if d.cfg.opts.Budget != nil {
+		d.cfg.opts.Budget.Allocated = 0
+	}
 	v, n, err := rfc8949.Decode(src, d.cfg.opts)
 	if err != nil {
 		return nil, err

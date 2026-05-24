@@ -73,6 +73,31 @@ type DecodeOpts struct {
 	MaxNestingDepth     int
 	MaxArrayLength      int
 	MaxByteStringLength int
+
+	Budget *BudgetState
+}
+
+// BudgetState tracks cumulative allocation during a decode operation.
+// Shared across recursive calls via pointer semantics in DecodeOpts.
+type BudgetState struct {
+	Allocated int
+	Limit     int
+}
+
+// NewBudget creates a BudgetState with the given byte limit.
+func NewBudget(limit int) *BudgetState {
+	return &BudgetState{Limit: limit}
+}
+
+func (bs *BudgetState) charge(n int) error {
+	if bs == nil {
+		return nil
+	}
+	bs.Allocated += n
+	if bs.Allocated > bs.Limit {
+		return fmt.Errorf("%w: used %d, limit %d", cbor.ErrMemoryBudgetExceeded, bs.Allocated, bs.Limit)
+	}
+	return nil
 }
 
 // StrictOpts returns a DecodeOpts with all Reject* flags enabled.
@@ -181,6 +206,9 @@ func decodeBytes(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 	if end > len(src) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
+	if err := opts.Budget.charge(length); err != nil {
+		return nil, off, err
+	}
 	buf := make([]byte, length)
 	copy(buf, src[start:end])
 	return cbor.Bytes(buf), end, nil
@@ -244,6 +272,9 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 	if opts.RejectInvalidUTF8 && !utf8.Valid(src[start:end]) {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, off)
 	}
+	if err := opts.Budget.charge(length); err != nil {
+		return nil, off, err
+	}
 	s := string(src[start:end])
 	return cbor.Text(s), end, nil
 }
@@ -301,6 +332,9 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	count := int(h.Arg)
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return nil, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
+	}
+	if err := opts.Budget.charge(count * 16); err != nil {
+		return nil, off, err
 	}
 	arr := make(cbor.Array, count)
 	pos := off + h.N
@@ -450,6 +484,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		defer keyDedupPool.Put(dedup)
 	}
 
+	if err := opts.Budget.charge(count * 32); err != nil {
+		return nil, off, err
+	}
 	m := make(cbor.Map, 0, count)
 	pos := off + h.N
 	for range count {

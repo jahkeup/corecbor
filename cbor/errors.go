@@ -66,4 +66,8 @@ var (
 	// ErrReservedAI indicates the input contains a reserved additional
 	// information value (28, 29, or 30) which is not well-formed.
 	ErrReservedAI = errors.New("cbor: reserved additional information value")
+
+	// ErrMemoryBudgetExceeded indicates cumulative decode allocations
+	// exceeded the configured memory budget.
+	ErrMemoryBudgetExceeded = errors.New("cbor: memory budget exceeded")
 )

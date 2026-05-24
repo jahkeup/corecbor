@@ -109,9 +109,36 @@ func encode(dst []byte, v *cbor.Value, opts EncodeOpts) ([]byte, error) {
 		dst = wire.AppendHead(dst, wire.MajorArray, uint64(len(items)))
 		var err error
 		for i := range items {
-			dst, err = encode(dst, &items[i], opts)
-			if err != nil {
-				return dst, err
+			elem := &items[i]
+			switch elem.Kind() {
+			case cbor.KindUint:
+				dst = wire.AppendHead(dst, wire.MajorUint, elem.UintVal())
+			case cbor.KindNegInt:
+				dst = wire.AppendHead(dst, wire.MajorNegInt, elem.NegIntVal())
+			case cbor.KindBool:
+				if elem.BoolVal() {
+					dst = append(dst, wire.SimpleTrue)
+				} else {
+					dst = append(dst, wire.SimpleFalse)
+				}
+			case cbor.KindNull:
+				dst = append(dst, wire.SimpleNull)
+			case cbor.KindBytes:
+				b := elem.BytesVal()
+				dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(b)))
+				dst = append(dst, b...)
+			case cbor.KindText:
+				s := elem.TextVal()
+				if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(s) {
+					return dst, fmt.Errorf("encode text: %w", cbor.ErrInvalidUTF8)
+				}
+				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(s)))
+				dst = append(dst, s...)
+			default:
+				dst, err = encode(dst, elem, opts)
+				if err != nil {
+					return dst, err
+				}
 			}
 		}
 		return dst, nil

@@ -68,6 +68,14 @@ func WithMemoryBudget(limit int) DecoderOption {
 	}
 }
 
+// WithStringIntern configures the decoder to deduplicate decoded text
+// strings through the provided interner. Repeated keys (common in
+// stream decode of repetitive schemas) are returned without allocation
+// once seen.
+func WithStringIntern(si *rfc8949.StringInterner) DecoderOption {
+	return func(c *decodeConfig) { c.opts.Interner = si }
+}
+
 type Decoder struct {
 	cfg decodeConfig
 }

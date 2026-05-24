@@ -49,7 +49,8 @@ type DecodeOpts struct {
 	MaxArrayLength      int
 	MaxByteStringLength int
 
-	Budget *BudgetState
+	Budget   *BudgetState
+	Interner *StringInterner
 }
 
 type BudgetState struct {
@@ -238,7 +239,12 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 	if err := opts.Budget.charge(length); err != nil {
 		return cbor.Value{}, off, err
 	}
-	s := string(src[start:end])
+	var s string
+	if opts.Interner != nil {
+		s = opts.Interner.Intern(src[start:end])
+	} else {
+		s = string(src[start:end])
+	}
 	return cbor.Text(s), end, nil
 }
 

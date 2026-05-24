@@ -76,15 +76,15 @@ type EncodeOpts struct {
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
-	return encode(dst, v, opts)
+	return encode(dst, &v, opts)
 }
 
 func EncodeDeterministic(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
 	opts.Deterministic = true
-	return encode(dst, v, opts)
+	return encode(dst, &v, opts)
 }
 
-func encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
+func encode(dst []byte, v *cbor.Value, opts EncodeOpts) ([]byte, error) {
 	if v.IsZero() {
 		return dst, fmt.Errorf("encode: %w", cbor.ErrNilValue)
 	}
@@ -108,8 +108,8 @@ func encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
 		items := v.Array()
 		dst = wire.AppendHead(dst, wire.MajorArray, uint64(len(items)))
 		var err error
-		for _, elem := range items {
-			dst, err = encode(dst, elem, opts)
+		for i := range items {
+			dst, err = encode(dst, &items[i], opts)
 			if err != nil {
 				return dst, err
 			}
@@ -123,7 +123,7 @@ func encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
 			return dst, fmt.Errorf("encode tag %d: inner is %w", v.TagID(), cbor.ErrNilValue)
 		}
 		dst = wire.AppendHead(dst, wire.MajorTag, v.TagID())
-		return encode(dst, inner, opts)
+		return encode(dst, &inner, opts)
 	case cbor.KindBool:
 		if v.BoolVal() {
 			return append(dst, wire.SimpleTrue), nil
@@ -198,12 +198,12 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	if !opts.Deterministic || len(m) <= 1 {
 		var err error
-		for _, entry := range m {
-			dst, err = encode(dst, entry.Key, opts)
+		for i := range m {
+			dst, err = encode(dst, &m[i].Key, opts)
 			if err != nil {
 				return dst, err
 			}
-			dst, err = encode(dst, entry.Value, opts)
+			dst, err = encode(dst, &m[i].Value, opts)
 			if err != nil {
 				return dst, err
 			}
@@ -227,10 +227,10 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts EncodeOpts) ([]byte, error) {
 		ss.entries = make([]sortEntry, len(m))
 	}
 
-	for i, entry := range m {
+	for i := range m {
 		start := len(ss.keyBuf)
 		var err error
-		ss.keyBuf, err = encode(ss.keyBuf, entry.Key, opts)
+		ss.keyBuf, err = encode(ss.keyBuf, &m[i].Key, opts)
 		if err != nil {
 			if pooled {
 				sortStatePool.Put(ss)
@@ -261,7 +261,7 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts EncodeOpts) ([]byte, error) {
 	var err error
 	for _, se := range entries {
 		dst = append(dst, keyBuf[se.keyStart:se.keyEnd]...)
-		dst, err = encode(dst, m[se.index].Value, opts)
+		dst, err = encode(dst, &m[se.index].Value, opts)
 		if err != nil {
 			if pooled {
 				sortStatePool.Put(ss)

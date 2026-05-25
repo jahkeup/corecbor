@@ -400,6 +400,67 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 			continue
 		}
 
+		// Inline fast-path: short text (major 3, AI < 24)
+		if ib&0xe0 == 0x60 && ib&0x1f < 24 {
+			length := int(ib & 0x1f)
+			end := pos + 1 + length
+			if end <= srcLen {
+				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
+					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, pos)
+				}
+				var s string
+				if opts.Interner != nil {
+					s = opts.Interner.Intern(src[pos+1 : end])
+				} else if opts.ZeroCopy {
+					s = zeroCopyString(src, pos+1, end)
+				} else {
+					s = string(src[pos+1 : end])
+				}
+				arr[i] = cbor.Text(s)
+				pos = end
+				continue
+			}
+		}
+
+		// Inline fast-path: short bytes (major 2, AI < 24)
+		if ib&0xe0 == 0x40 && ib&0x1f < 24 {
+			length := int(ib & 0x1f)
+			end := pos + 1 + length
+			if end <= srcLen {
+				if opts.ZeroCopy {
+					arr[i] = cbor.Bytes(src[pos+1 : end])
+				} else {
+					buf := make([]byte, length)
+					copy(buf, src[pos+1:end])
+					arr[i] = cbor.Bytes(buf)
+				}
+				pos = end
+				continue
+			}
+		}
+
+		// Inline fast-path: simple values (bool, null, undefined)
+		if ib == wire.SimpleTrue {
+			arr[i] = cbor.Bool(true)
+			pos++
+			continue
+		}
+		if ib == wire.SimpleFalse {
+			arr[i] = cbor.Bool(false)
+			pos++
+			continue
+		}
+		if ib == wire.SimpleNull {
+			arr[i] = cbor.Null()
+			pos++
+			continue
+		}
+		if ib == wire.SimpleUndefined {
+			arr[i] = cbor.Undefined()
+			pos++
+			continue
+		}
+
 		v, next, err := decodeValue(src, pos, childDepth, opts, false)
 		if err != nil {
 			return cbor.Value{}, next, err
@@ -472,12 +533,46 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	pos := off + h.N
 	for range count {
 		keyOff := pos
-		k, next, err := decodeValue(src, pos, depth+1, opts, false)
-		if err != nil {
-			return cbor.Value{}, next, err
+
+		// Inline fast-path: short definite-length text key (covers >90% of real map keys)
+		var k cbor.Value
+		var encodedKey []byte
+		if pos < len(src) && src[pos]&0xe0 == 0x60 && src[pos]&0x1f < 24 {
+			length := int(src[pos] & 0x1f)
+			end := pos + 1 + length
+			if end <= len(src) {
+				raw := src[pos:end]
+				var s string
+				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
+					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, pos)
+				}
+				if opts.RejectNonShortest {
+					// AI < 24 is always shortest for text
+				}
+				if opts.Interner != nil {
+					s = opts.Interner.Intern(src[pos+1 : end])
+				} else if opts.ZeroCopy {
+					s = zeroCopyString(src, pos+1, end)
+				} else {
+					s = string(src[pos+1 : end])
+				}
+				k = cbor.Text(s)
+				encodedKey = raw
+				pos = end
+				goto keyDone
+			}
 		}
-		encodedKey := src[keyOff:next]
-		pos = next
+		{
+			var next int
+			var err error
+			k, next, err = decodeValue(src, pos, depth+1, opts, false)
+			if err != nil {
+				return cbor.Value{}, next, err
+			}
+			encodedKey = src[keyOff:next]
+			pos = next
+		}
+	keyDone:
 		if opts.RejectNullMapKeys {
 			if k.Kind == cbor.KindNull {
 				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)

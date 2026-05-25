@@ -100,12 +100,66 @@ func (s *StreamEncoder) BeginMap(n int) error {
 	return nil
 }
 
-// WriteValue writes a single CBOR value to the stream.
+// WriteValue writes a single CBOR value to the stream. For scalar kinds,
+// dispatches directly to zero-alloc write methods.
 func (s *StreamEncoder) WriteValue(v Value) error {
 	if err := s.trackWrite(); err != nil {
 		return err
 	}
-	return rfc8949.EncodeTo(s.w, v, s.enc.encodeOpts())
+	switch v.Kind {
+	case cbor.KindUint:
+		return s.writeHead(wire.MajorUint, v.Num)
+	case cbor.KindNegInt:
+		return s.writeHead(wire.MajorNegInt, v.Num)
+	case cbor.KindBool:
+		if v.Num != 0 {
+			s.scratch[0] = wire.SimpleTrue
+		} else {
+			s.scratch[0] = wire.SimpleFalse
+		}
+		_, err := s.w.Write(s.scratch[:1])
+		return err
+	case cbor.KindNull:
+		s.scratch[0] = wire.SimpleNull
+		_, err := s.w.Write(s.scratch[:1])
+		return err
+	case cbor.KindUndefined:
+		s.scratch[0] = wire.SimpleUndefined
+		_, err := s.w.Write(s.scratch[:1])
+		return err
+	case cbor.KindText:
+		if err := s.writeHead(wire.MajorText, uint64(len(v.Str))); err != nil {
+			return err
+		}
+		_, err := io.WriteString(s.w, v.Str)
+		return err
+	case cbor.KindBytes:
+		if err := s.writeHead(wire.MajorBytes, uint64(len(v.Bstr))); err != nil {
+			return err
+		}
+		_, err := s.w.Write(v.Bstr)
+		return err
+	case cbor.KindFloat32:
+		buf := wire.AppendFloat32(s.scratch[:0], math.Float32frombits(uint32(v.Num)))
+		_, err := s.w.Write(buf)
+		return err
+	case cbor.KindFloat64:
+		buf := wire.AppendFloat64(s.scratch[:0], math.Float64frombits(v.Num))
+		_, err := s.w.Write(buf)
+		return err
+	case cbor.KindSimple:
+		if v.Num < 24 {
+			s.scratch[0] = wire.MajorOther | byte(v.Num)
+			_, err := s.w.Write(s.scratch[:1])
+			return err
+		}
+		s.scratch[0] = wire.SimpleOneByte
+		s.scratch[1] = byte(v.Num)
+		_, err := s.w.Write(s.scratch[:2])
+		return err
+	default:
+		return rfc8949.EncodeTo(s.w, v, s.enc.encodeOpts())
+	}
 }
 
 // EndContainer closes the current container. For indefinite-length containers,

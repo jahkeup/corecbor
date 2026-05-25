@@ -114,3 +114,74 @@ func BenchmarkDecodeStrictLargeMap1000(b *testing.B) {
 		dec.Decode(data) //nolint:errcheck
 	}
 }
+
+func TestWithoutInternalArena(t *testing.T) {
+	enc := New(ModeCoreDeterministic)
+	v := MakeArray(Uint(1), Uint(2), Text("hello"))
+	data, _ := enc.Encode(nil, v)
+
+	dec := NewDecoder(WithoutInternalArena())
+	got, err := dec.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(got.Items))
+	}
+	if got.Items[2].Str != "hello" {
+		t.Fatalf("expected hello, got %q", got.Items[2].Str)
+	}
+}
+
+func TestInternalArenaResetBetweenCalls(t *testing.T) {
+	enc := New(ModeCoreDeterministic)
+	data1, _ := enc.Encode(nil, MakeArray(Uint(1), Uint(2)))
+	data2, _ := enc.Encode(nil, MakeArray(Uint(3), Uint(4)))
+
+	dec := NewDecoder()
+
+	v1, err := dec.Decode(data1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v1.Items[0].Num != 1 {
+		t.Fatalf("v1[0] = %d, want 1", v1.Items[0].Num)
+	}
+
+	v2, err := dec.Decode(data2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v2.Items[0].Num != 3 {
+		t.Fatalf("v2[0] = %d, want 3", v2.Items[0].Num)
+	}
+	if v2.Items[1].Num != 4 {
+		t.Fatalf("v2[1] = %d, want 4", v2.Items[1].Num)
+	}
+}
+
+func TestClonePreservesValueAcrossDecodes(t *testing.T) {
+	enc := New(ModeCoreDeterministic)
+	data1, _ := enc.Encode(nil, MakeArray(Text("persist"), Uint(99)))
+	data2, _ := enc.Encode(nil, MakeArray(Text("other"), Uint(0)))
+
+	dec := NewDecoder()
+
+	v1, err := dec.Decode(data1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cloned := v1.Clone()
+
+	_, err = dec.Decode(data2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if cloned.Items[0].Str != "persist" {
+		t.Fatalf("cloned[0] = %q, want persist", cloned.Items[0].Str)
+	}
+	if cloned.Items[1].Num != 99 {
+		t.Fatalf("cloned[1] = %d, want 99", cloned.Items[1].Num)
+	}
+}

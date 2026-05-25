@@ -3,7 +3,10 @@
 
 package cbor
 
-import "math"
+import (
+	"math"
+	"strings"
+)
 
 // Kind identifies the CBOR data type stored in a Value.
 type Kind uint8
@@ -172,4 +175,37 @@ func MakeArrayFromSlice(items []Value) Value {
 // MakeMapFromSlice creates a map Value from a pre-allocated slice.
 func MakeMapFromSlice(pairs []MapEntry) Value {
 	return Value{Kind: KindMap, Pairs: pairs}
+}
+
+// Clone returns a deep copy of v that is independent of any arena or
+// shared backing storage. Scalars without heap backing are returned as-is.
+func (v Value) Clone() Value {
+	switch v.Kind {
+	case KindBytes:
+		b := make([]byte, len(v.Bstr))
+		copy(b, v.Bstr)
+		return Value{Kind: KindBytes, Bstr: b}
+	case KindText:
+		return Value{Kind: KindText, Str: strings.Clone(v.Str)}
+	case KindArray:
+		items := make([]Value, len(v.Items))
+		for i := range v.Items {
+			items[i] = v.Items[i].Clone()
+		}
+		return Value{Kind: KindArray, Items: items}
+	case KindMap:
+		pairs := make([]MapEntry, len(v.Pairs))
+		for i := range v.Pairs {
+			pairs[i] = MapEntry{Key: v.Pairs[i].Key.Clone(), Value: v.Pairs[i].Value.Clone()}
+		}
+		return Value{Kind: KindMap, Pairs: pairs}
+	case KindTag:
+		inner := make([]Value, len(v.Items))
+		for i := range v.Items {
+			inner[i] = v.Items[i].Clone()
+		}
+		return Value{Kind: KindTag, Num: v.Num, Items: inner}
+	default:
+		return v
+	}
 }

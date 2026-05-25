@@ -11,7 +11,8 @@ import (
 )
 
 type decodeConfig struct {
-	opts rfc8949.DecodeOpts
+	opts             rfc8949.DecodeOpts
+	noInternalArena  bool
 }
 
 type DecoderOption func(*decodeConfig)
@@ -91,8 +92,18 @@ func WithZeroCopy() DecoderOption {
 	return func(c *decodeConfig) { c.opts.ZeroCopy = true }
 }
 
+// WithoutInternalArena disables the decoder's internal arena. By default,
+// the Decoder uses an auto-managed arena that is reset on each Decode()
+// call, meaning decoded Values are valid only until the NEXT Decode() on
+// the same decoder. Use this option when Values must outlive the decode
+// call (e.g., accumulating into a slice, passing to another goroutine).
+func WithoutInternalArena() DecoderOption {
+	return func(c *decodeConfig) { c.noInternalArena = true }
+}
+
 type Decoder struct {
-	cfg decodeConfig
+	cfg   decodeConfig
+	arena *rfc8949.Arena // internal, auto-managed (nil when disabled)
 }
 
 func NewDecoder(opts ...DecoderOption) *Decoder {
@@ -100,7 +111,11 @@ func NewDecoder(opts ...DecoderOption) *Decoder {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return &Decoder{cfg: cfg}
+	d := &Decoder{cfg: cfg}
+	if !cfg.noInternalArena && cfg.opts.Arena == nil {
+		d.arena = rfc8949.NewArena(256, 64)
+	}
+	return d
 }
 
 func StrictDecoder(opts ...DecoderOption) *Decoder {
@@ -108,14 +123,23 @@ func StrictDecoder(opts ...DecoderOption) *Decoder {
 	for _, o := range opts {
 		o(&cfg)
 	}
-	return &Decoder{cfg: cfg}
+	d := &Decoder{cfg: cfg}
+	if !cfg.noInternalArena && cfg.opts.Arena == nil {
+		d.arena = rfc8949.NewArena(256, 64)
+	}
+	return d
 }
 
 func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
 	if d.cfg.opts.Budget != nil {
 		d.cfg.opts.Budget.Allocated = 0
 	}
-	v, n, err := rfc8949.Decode(src, d.cfg.opts)
+	opts := d.cfg.opts
+	if d.arena != nil {
+		d.arena.Reset()
+		opts.Arena = d.arena
+	}
+	v, n, err := rfc8949.Decode(src, opts)
 	if err != nil {
 		return cbor.Value{}, err
 	}

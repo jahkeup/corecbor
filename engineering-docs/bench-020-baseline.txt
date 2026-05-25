@@ -1,0 +1,77 @@
+Post-020 baseline: default-path decode recovery (proposal 020 implemented)
+============================================================================
+
+Date:    2026-05-25
+Commit:  deb69de (feat(decode): implement proposal 020 default-path decode recovery)
+System:  darwin/arm64, Apple M3 Max, Go 1.26.0
+Runs:    5 per benchmark
+
+§9 Acceptance Targets
+---------------------
+
+| Benchmark                     | §9 Target    | Measured (median) | Status     | Allocs |
+|-------------------------------|--------------|-------------------|------------|--------|
+| EncodeScalars                 | ≥ 500 MB/s   | 1850 MB/s         | ✓ (3.7x)   | 0      |
+| EncodeNestedMap (det)         | ≥ 100 MB/s   | 238 MB/s          | ✓ (2.4x)   | 0      |
+| DecodeScalars (default)       | ≥ 400 MB/s   | 1115 MB/s         | ✓ (2.8x)   | 0      |
+| DecodeNestedMapStrict         | ≥  80 MB/s   | 113 MB/s          | ✓ (1.4x)   | 10     |
+| WriteValue(Uint(42))          | ≤   5 ns     | 4.0 ns            | ✓          | 0      |
+
+Full Results (corecbor package)
+-------------------------------
+
+goos: darwin
+goarch: arm64
+pkg: github.com/jahkeup/corecbor
+cpu: Apple M3 Max
+
+BenchmarkEncodeScalars-16               1442 ns/op   1888 MB/s   0 B/op   0 allocs/op
+BenchmarkEncodeNestedMap-16              425 ns/op    240 MB/s   0 B/op   0 allocs/op
+BenchmarkDecodeScalars-16               2441 ns/op  1115 MB/s   0 B/op   0 allocs/op
+BenchmarkDecodeNestedMapStrict-16        901 ns/op   113 MB/s  80 B/op  10 allocs/op
+BenchmarkDecodeStrictLargeMap100-16     6578 ns/op   164 MB/s 1601 B/op 200 allocs/op
+BenchmarkDecodeStrictLargeMap1000-16   67730 ns/op   173 MB/s 16032 B/op 2000 allocs/op
+BenchmarkStreamWriteUint-16             2.97 ns/op              0 B/op   0 allocs/op
+BenchmarkStreamWriteText-16             9.18 ns/op              0 B/op   0 allocs/op
+BenchmarkStreamWriteBytes-16            3.50 ns/op              0 B/op   0 allocs/op
+BenchmarkStreamWriteValueUint-16        3.99 ns/op              0 B/op   0 allocs/op
+
+Full Results (rfc8949 internal package)
+---------------------------------------
+
+BenchmarkDecodeScalarsArena-16          2454 ns/op  1110 MB/s   0 B/op   0 allocs/op
+BenchmarkDecodeNestedMapArena-16         884 ns/op   115 MB/s  64 B/op  10 allocs/op
+BenchmarkDecodeUintArray-16             2075 ns/op  1313 MB/s 8192 B/op   1 allocs/op
+BenchmarkDecodeGenericScalars-16        9803 ns/op   278 MB/s 106496 B/op 1 allocs/op
+BenchmarkDecodeZeroCopy-16               221 ns/op   403 MB/s  640 B/op   1 allocs/op
+BenchmarkDecodeZeroCopyArena-16          167 ns/op   534 MB/s    0 B/op   0 allocs/op
+BenchmarkDecodeDefault-16                261 ns/op   342 MB/s  725 B/op   6 allocs/op
+BenchmarkCursorSkipLarge-16             6775 ns/op 16384 MB/s    0 B/op   0 allocs/op
+BenchmarkCursorFindMapKey-16             347 ns/op             128 B/op   2 allocs/op
+BenchmarkEncodePresized-16                89 ns/op              96 B/op   1 allocs/op
+BenchmarkEncodeMapPreordered-16           19 ns/op  1654 MB/s    0 B/op   0 allocs/op
+BenchmarkEncodeMapDeterministic-16        72 ns/op   430 MB/s    0 B/op   0 allocs/op
+
+Comparison: pre-020 (struct, no internal arena) → post-020
+----------------------------------------------------------
+
+| Benchmark              | Pre-020     | Post-020    | Change    |
+|------------------------|-------------|-------------|-----------|
+| DecodeScalars          | 276 MB/s    | 1115 MB/s   | +304%     |
+| DecodeNestedMapStrict  |  62 MB/s    |  113 MB/s   | +82%      |
+| DecodeScalars allocs   | 1           | 0           | -100%     |
+| EncodeScalars          | 1793 MB/s   | 1850 MB/s   | +3% (ns)  |
+| WriteValue(Uint)       | ~40 ns      | 4.0 ns      | -90%      |
+
+Notes
+-----
+- DecodeScalars 0 allocs: internal arena eliminates all container allocation
+  on the default path. Values valid until next Decode() on same decoder.
+- DecodeNestedMapStrict 10 allocs: string allocations for map keys (not
+  arena-managed). Could reach 0 with ZeroCopy+Arena but that requires
+  caller to understand source-buffer lifetime.
+- WriteValue fast-path: scalar kinds dispatch directly to wire.AppendHead
+  or single-byte writes, bypassing Encode entirely.
+- Remaining map allocs come from string(src[start:end]) in text decode.
+  These are fundamental to Go's string immutability guarantee unless
+  ZeroCopy is enabled.

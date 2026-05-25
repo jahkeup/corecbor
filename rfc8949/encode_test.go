@@ -223,11 +223,11 @@ func TestEncodeBoolNullUndefined(t *testing.T) {
 	for _, tt := range tests {
 		got, err := Encode(nil, tt.val, EncodeOpts{})
 		if err != nil {
-			t.Fatalf("Encode(kind %d): %v", tt.val.Kind(), err)
+			t.Fatalf("Encode(kind %d): %v", tt.val.Kind, err)
 		}
 		want := mustHex(tt.want)
 		if !bytes.Equal(got, want) {
-			t.Errorf("Encode(kind %d) = %x, want %s", tt.val.Kind(), got, tt.want)
+			t.Errorf("Encode(kind %d) = %x, want %s", tt.val.Kind, got, tt.want)
 		}
 	}
 }

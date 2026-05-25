@@ -51,8 +51,8 @@ func (t *RawTag) UnmarshalCBOR(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("cbor: RawTag decode: %w", err)
 	}
-	if val.Kind() != cbor.KindTag {
-		return fmt.Errorf("cbor: RawTag expected Tag, got kind %d", val.Kind())
+	if val.Kind != cbor.KindTag {
+		return fmt.Errorf("cbor: RawTag expected Tag, got kind %d", val.Kind)
 	}
 	t.ID = val.TagID()
 	enc := New(ModeCoreDeterministic)

@@ -111,8 +111,8 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedClaims, err)
 	}
 
-	if v.Kind() != corecbor.KindMap {
-		return nil, fmt.Errorf("%w: expected map, got kind %d", ErrMalformedClaims, v.Kind())
+	if v.Kind != corecbor.KindMap {
+		return nil, fmt.Errorf("%w: expected map, got kind %d", ErrMalformedClaims, v.Kind)
 	}
 	m := v.Map()
 
@@ -129,21 +129,21 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 
 		switch keyInt {
 		case claimIss:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: iss must be text", ErrMalformedClaims)
 			}
 			cs.Issuer = t
 		case claimSub:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: sub must be text", ErrMalformedClaims)
 			}
 			cs.Subject = t
 		case claimAud:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: aud must be text", ErrMalformedClaims)
@@ -168,7 +168,7 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 			}
 			cs.IssuedAt = ts
 		case claimCti:
-			ok := entry.Value.Kind() == corecbor.KindBytes
+			ok := entry.Value.Kind == corecbor.KindBytes
 			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedClaims)
@@ -204,7 +204,7 @@ func numericDate(t time.Time) corecbor.Value {
 }
 
 func parseNumericDate(v corecbor.Value) (time.Time, error) {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindUint:
 		return time.Unix(int64(v.UintVal()), 0), nil
 	case corecbor.KindNegInt:
@@ -217,12 +217,12 @@ func parseNumericDate(v corecbor.Value) (time.Time, error) {
 		sec, frac := math.Modf(f)
 		return time.Unix(int64(sec), int64(frac*1e9)), nil
 	default:
-		return time.Time{}, fmt.Errorf("expected numeric, got kind %d", v.Kind())
+		return time.Time{}, fmt.Errorf("expected numeric, got kind %d", v.Kind)
 	}
 }
 
 func entryKeyInt(key corecbor.Value) (int64, bool) {
-	switch key.Kind() {
+	switch key.Kind {
 	case corecbor.KindUint:
 		return int64(key.UintVal()), true
 	case corecbor.KindNegInt:
@@ -262,7 +262,7 @@ func toValue(v any) (corecbor.Value, error) {
 }
 
 func fromValue(v corecbor.Value) any {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindUint:
 		return int64(v.UintVal())
 	case corecbor.KindNegInt:
@@ -301,8 +301,8 @@ func encodeCnf(cnf *Confirmation) ([]corecbor.MapEntry, error) {
 }
 
 func decodeCnf(v corecbor.Value) (*Confirmation, error) {
-	if v.Kind() != corecbor.KindMap {
-		return nil, fmt.Errorf("expected map, got kind %d", v.Kind())
+	if v.Kind != corecbor.KindMap {
+		return nil, fmt.Errorf("expected map, got kind %d", v.Kind)
 	}
 	m := v.Map()
 	cnf := &Confirmation{}
@@ -313,7 +313,7 @@ func decodeCnf(v corecbor.Value) (*Confirmation, error) {
 		}
 		switch k {
 		case cnfKeyByCOSEKey:
-			if entry.Value.Kind() != corecbor.KindMap {
+			if entry.Value.Kind != corecbor.KindMap {
 				return nil, fmt.Errorf("COSE_Key must be map")
 			}
 			keyMap := entry.Value.Map()
@@ -323,14 +323,14 @@ func decodeCnf(v corecbor.Value) (*Confirmation, error) {
 			}
 			cnf.Key = key
 		case cnfKeyEncrypted:
-			ok := entry.Value.Kind() == corecbor.KindBytes
+			ok := entry.Value.Kind == corecbor.KindBytes
 			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("encrypted key must be bytes")
 			}
 			cnf.Encrypted = b
 		case cnfKeyByKid:
-			ok := entry.Value.Kind() == corecbor.KindBytes
+			ok := entry.Value.Kind == corecbor.KindBytes
 			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("kid must be bytes")
@@ -390,10 +390,10 @@ func unmarshalCOSEKey(m []corecbor.MapEntry) (*cose.Key, error) {
 	pos := make(map[int64]any)
 	neg := make(map[int64]any)
 	for _, entry := range m {
-		switch entry.Key.Kind() {
+		switch entry.Key.Kind {
 		case corecbor.KindUint:
 			kv := int64(entry.Key.UintVal())
-			switch entry.Value.Kind() {
+			switch entry.Value.Kind {
 			case corecbor.KindUint:
 				pos[kv] = int64(entry.Value.UintVal())
 			case corecbor.KindNegInt:
@@ -403,7 +403,7 @@ func unmarshalCOSEKey(m []corecbor.MapEntry) (*cose.Key, error) {
 			}
 		case corecbor.KindNegInt:
 			kv := int64(entry.Key.NegIntVal())
-			switch entry.Value.Kind() {
+			switch entry.Value.Kind {
 			case corecbor.KindUint:
 				neg[kv] = int64(entry.Value.UintVal())
 			case corecbor.KindNegInt:

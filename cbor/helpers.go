@@ -13,7 +13,7 @@ func AsStringMap(m Value) (map[string]Value, error) {
 	pairs := m.Map()
 	result := make(map[string]Value, len(pairs))
 	for _, entry := range pairs {
-		if entry.Key.Kind() != KindText {
+		if entry.Key.Kind != KindText {
 			return nil, ErrNonStringKey
 		}
 		result[entry.Key.TextVal()] = entry.Value

@@ -22,10 +22,10 @@ func TestAsStringMap_AllText(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(got))
 	}
-	if got["name"].Kind() != cbor.KindText || got["name"].TextVal() != "alice" {
+	if got["name"].Kind != cbor.KindText || got["name"].TextVal() != "alice" {
 		t.Errorf("name = %v, want alice", got["name"])
 	}
-	if got["age"].Kind() != cbor.KindUint || got["age"].UintVal() != 30 {
+	if got["age"].Kind != cbor.KindUint || got["age"].UintVal() != 30 {
 		t.Errorf("age = %v, want 30", got["age"])
 	}
 }

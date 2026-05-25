@@ -48,7 +48,7 @@ func TestDecodeUint(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got.Kind() != cbor.KindUint || got.UintVal() != tt.val {
+			if got.Kind != cbor.KindUint || got.UintVal() != tt.val {
 				t.Fatalf("got %v, want Uint(%d)", got, tt.val)
 			}
 		})
@@ -77,7 +77,7 @@ func TestDecodeNegInt(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got.Kind() != cbor.KindNegInt || got.NegIntVal() != tt.val {
+			if got.Kind != cbor.KindNegInt || got.NegIntVal() != tt.val {
 				t.Fatalf("got %v, want NegInt(%d)", got, tt.val)
 			}
 		})
@@ -103,8 +103,8 @@ func TestDecodeBytes(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got.Kind() != cbor.KindBytes {
-				t.Fatalf("kind = %d, want KindBytes", got.Kind())
+			if got.Kind != cbor.KindBytes {
+				t.Fatalf("kind = %d, want KindBytes", got.Kind)
 			}
 			gb := got.BytesVal()
 			if len(gb) != len(tt.val) {
@@ -136,7 +136,7 @@ func TestDecodeText(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got.Kind() != cbor.KindText || got.TextVal() != tt.val {
+			if got.Kind != cbor.KindText || got.TextVal() != tt.val {
 				t.Fatalf("got %v, want Text(%q)", got, tt.val)
 			}
 		})
@@ -164,8 +164,8 @@ func TestDecodeArray(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got.Kind() != cbor.KindArray {
-				t.Fatalf("kind = %d, want KindArray", got.Kind())
+			if got.Kind != cbor.KindArray {
+				t.Fatalf("kind = %d, want KindArray", got.Kind)
 			}
 			if len(got.Array()) != tt.len {
 				t.Fatalf("len got %d, want %d", len(got.Array()), tt.len)
@@ -197,8 +197,8 @@ func TestDecodeMap(t *testing.T) {
 			if n != len(src) {
 				t.Fatalf("consumed %d, want %d", n, len(src))
 			}
-			if got.Kind() != cbor.KindMap {
-				t.Fatalf("kind = %d, want KindMap", got.Kind())
+			if got.Kind != cbor.KindMap {
+				t.Fatalf("kind = %d, want KindMap", got.Kind)
 			}
 			if len(got.Map()) != tt.len {
 				t.Fatalf("len got %d, want %d", len(got.Map()), tt.len)
@@ -216,8 +216,8 @@ func TestDecodeIndefiniteByteString(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindBytes {
-		t.Fatalf("kind = %d, want KindBytes", got.Kind())
+	if got.Kind != cbor.KindBytes {
+		t.Fatalf("kind = %d, want KindBytes", got.Kind)
 	}
 	gb := got.BytesVal()
 	want := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
@@ -240,7 +240,7 @@ func TestDecodeIndefiniteTextString(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindText || got.TextVal() != "helloworld" {
+	if got.Kind != cbor.KindText || got.TextVal() != "helloworld" {
 		t.Fatalf("got %v, want Text(helloworld)", got)
 	}
 }
@@ -259,7 +259,7 @@ func TestDecodeIndefiniteArray(t *testing.T) {
 		t.Fatalf("len got %d, want 3", len(ga))
 	}
 	for i, wantVal := range []uint64{1, 2, 3} {
-		if ga[i].Kind() != cbor.KindUint || ga[i].UintVal() != wantVal {
+		if ga[i].Kind != cbor.KindUint || ga[i].UintVal() != wantVal {
 			t.Fatalf("elem %d: got %v, want Uint(%d)", i, ga[i], wantVal)
 		}
 	}
@@ -274,8 +274,8 @@ func TestDecodeIndefiniteMap(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindMap || len(got.Map()) != 2 {
-		t.Fatalf("got kind=%d len=%d, want map with 2 entries", got.Kind(), len(got.Map()))
+	if got.Kind != cbor.KindMap || len(got.Map()) != 2 {
+		t.Fatalf("got kind=%d len=%d, want map with 2 entries", got.Kind, len(got.Map()))
 	}
 }
 
@@ -288,7 +288,7 @@ func TestDecodeFloat16(t *testing.T) {
 	if n != 3 {
 		t.Fatalf("consumed %d, want 3", n)
 	}
-	if got.Kind() != cbor.KindFloat64 || got.Float64Val() != 1.0 {
+	if got.Kind != cbor.KindFloat64 || got.Float64Val() != 1.0 {
 		t.Fatalf("got %v, want Float64(1.0)", got)
 	}
 }
@@ -302,7 +302,7 @@ func TestDecodeFloat32(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindFloat32 || got.Float32Val() != 3.14 {
+	if got.Kind != cbor.KindFloat32 || got.Float32Val() != 3.14 {
 		t.Fatalf("got %v, want Float32(3.14)", got)
 	}
 }
@@ -316,7 +316,7 @@ func TestDecodeFloat64(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindFloat64 || got.Float64Val() != 3.141592653589793 {
+	if got.Kind != cbor.KindFloat64 || got.Float64Val() != 3.141592653589793 {
 		t.Fatalf("got %v, want Float64(3.141592653589793)", got)
 	}
 }
@@ -330,11 +330,11 @@ func TestDecodeTag(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindTag || got.TagID() != 1 {
+	if got.Kind != cbor.KindTag || got.TagID() != 1 {
 		t.Fatalf("tag ID got %d, want 1", got.TagID())
 	}
 	inner := got.TagInner()
-	if inner.Kind() != cbor.KindUint || inner.UintVal() != 1234567890 {
+	if inner.Kind != cbor.KindUint || inner.UintVal() != 1234567890 {
 		t.Fatalf("inner got %v, want Uint(1234567890)", inner)
 	}
 }
@@ -348,7 +348,7 @@ func TestDecodeSelfDescribeStrip(t *testing.T) {
 	if n != len(src) {
 		t.Fatalf("consumed %d, want %d", n, len(src))
 	}
-	if got.Kind() != cbor.KindUint || got.UintVal() != 42 {
+	if got.Kind != cbor.KindUint || got.UintVal() != 42 {
 		t.Fatalf("got %v, want Uint(42) (self-describe stripped)", got)
 	}
 }
@@ -491,7 +491,7 @@ func TestDecodeDuplicateMapKeysLastWins(t *testing.T) {
 	if len(gm) != 1 {
 		t.Fatalf("map should have 1 entry (deduped), got %d", len(gm))
 	}
-	if gm[0].Value.Kind() != cbor.KindUint || gm[0].Value.UintVal() != 2 {
+	if gm[0].Value.Kind != cbor.KindUint || gm[0].Value.UintVal() != 2 {
 		t.Fatalf("last-write-wins: got value %v, want Uint(2)", gm[0].Value)
 	}
 }
@@ -501,21 +501,21 @@ func TestDecodeSimpleValues(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Kind() != cbor.KindSimple || got.SimpleVal() != 0 {
+	if got.Kind != cbor.KindSimple || got.SimpleVal() != 0 {
 		t.Fatalf("got %v, want Simple(0)", got)
 	}
 	got, _, err = Decode([]byte{0xf3}, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Kind() != cbor.KindSimple || got.SimpleVal() != 19 {
+	if got.Kind != cbor.KindSimple || got.SimpleVal() != 19 {
 		t.Fatalf("got %v, want Simple(19)", got)
 	}
 	got, _, err = Decode([]byte{0xf8, 0xff}, DecodeOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Kind() != cbor.KindSimple || got.SimpleVal() != 255 {
+	if got.Kind != cbor.KindSimple || got.SimpleVal() != 255 {
 		t.Fatalf("got %v, want Simple(255)", got)
 	}
 }
@@ -535,8 +535,8 @@ func TestDecodeBoolNullUndefined(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got.Kind() != tt.kind {
-			t.Fatalf("got kind %d, want %d", got.Kind(), tt.kind)
+		if got.Kind != tt.kind {
+			t.Fatalf("got kind %d, want %d", got.Kind, tt.kind)
 		}
 	}
 }
@@ -564,18 +564,18 @@ func TestDecodeRoundTrip(t *testing.T) {
 		src := mustEncode(t, v)
 		got, n, err := Decode(src, DecodeOpts{})
 		if err != nil {
-			t.Fatalf("decode kind %d: %v", v.Kind(), err)
+			t.Fatalf("decode kind %d: %v", v.Kind, err)
 		}
 		if n != len(src) {
-			t.Fatalf("decode kind %d: consumed %d, want %d", v.Kind(), n, len(src))
+			t.Fatalf("decode kind %d: consumed %d, want %d", v.Kind, n, len(src))
 		}
 		reenc := mustEncode(t, got)
 		if len(reenc) != len(src) {
-			t.Fatalf("re-encode kind %d: len %d != %d", v.Kind(), len(reenc), len(src))
+			t.Fatalf("re-encode kind %d: len %d != %d", v.Kind, len(reenc), len(src))
 		}
 		for i := range src {
 			if src[i] != reenc[i] {
-				t.Fatalf("re-encode kind %d: mismatch at byte %d", v.Kind(), i)
+				t.Fatalf("re-encode kind %d: mismatch at byte %d", v.Kind, i)
 			}
 		}
 	}
@@ -636,8 +636,8 @@ func TestDecodeDuplicateMapKeysLargeLastWins(t *testing.T) {
 		t.Fatalf("got %d entries, want 20 (duplicate merged)", len(gotMap))
 	}
 	for _, entry := range gotMap {
-		if entry.Key.Kind() == cbor.KindText && entry.Key.TextVal() == "k00" {
-			if entry.Value.Kind() != cbor.KindUint || entry.Value.UintVal() != 999 {
+		if entry.Key.Kind == cbor.KindText && entry.Key.TextVal() == "k00" {
+			if entry.Value.Kind != cbor.KindUint || entry.Value.UintVal() != 999 {
 				t.Fatalf("k00 value = %v, want 999", entry.Value)
 			}
 			return

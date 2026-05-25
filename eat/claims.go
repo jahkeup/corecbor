@@ -206,8 +206,8 @@ func DecodeClaims(data []byte) (*Claims, error) {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedEAT, err)
 	}
 
-	if v.Kind() != corecbor.KindMap {
-		return nil, fmt.Errorf("%w: expected map, got kind %d", ErrMalformedEAT, v.Kind())
+	if v.Kind != corecbor.KindMap {
+		return nil, fmt.Errorf("%w: expected map, got kind %d", ErrMalformedEAT, v.Kind)
 	}
 	m := v.Map()
 	_ = true
@@ -221,21 +221,21 @@ func DecodeClaims(data []byte) (*Claims, error) {
 
 		switch keyInt {
 		case 1:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: iss must be text", ErrMalformedEAT)
 			}
 			c.Issuer = t
 		case 2:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: sub must be text", ErrMalformedEAT)
 			}
 			c.Subject = t
 		case 3:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: aud must be text", ErrMalformedEAT)
@@ -260,7 +260,7 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.IssuedAt = ts
 		case 7:
-			ok := entry.Value.Kind() == corecbor.KindBytes
+			ok := entry.Value.Kind == corecbor.KindBytes
 			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedEAT)
@@ -273,14 +273,14 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.Nonce = nonces
 		case claimUEID:
-			ok := entry.Value.Kind() == corecbor.KindBytes
+			ok := entry.Value.Kind == corecbor.KindBytes
 			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: UEID must be bytes", ErrMalformedEAT)
 			}
 			c.UEID = b
 		case claimOEMId:
-			ok := entry.Value.Kind() == corecbor.KindBytes
+			ok := entry.Value.Kind == corecbor.KindBytes
 			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: OEMId must be bytes", ErrMalformedEAT)
@@ -293,7 +293,7 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.SecurityLevel = SecurityLevel(n)
 		case claimSecureBoot:
-			ok := entry.Value.Kind() == corecbor.KindBool
+			ok := entry.Value.Kind == corecbor.KindBool
 			b := entry.Value.BoolVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: secure-boot must be bool", ErrMalformedEAT)
@@ -313,21 +313,21 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.Uptime = &n
 		case claimProfile:
-			ok := entry.Value.Kind() == corecbor.KindText
+			ok := entry.Value.Kind == corecbor.KindText
 			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: profile must be text", ErrMalformedEAT)
 			}
 			c.Profile = t
 		case claimSWComponents:
-			ok := entry.Value.Kind() == corecbor.KindArray
+			ok := entry.Value.Kind == corecbor.KindArray
 			arr := entry.Value.Array()
 			if !ok {
 				return nil, fmt.Errorf("%w: sw-components must be array", ErrMalformedEAT)
 			}
 			swcs := make([]SWComponent, len(arr))
 			for i, elem := range arr {
-				ok := elem.Kind() == corecbor.KindMap
+				ok := elem.Kind == corecbor.KindMap
 				cm := elem.Map()
 				if !ok {
 					return nil, fmt.Errorf("%w: sw-component[%d] must be map", ErrMalformedEAT, i)
@@ -340,23 +340,23 @@ func DecodeClaims(data []byte) (*Claims, error) {
 					}
 					switch k {
 					case swCompType:
-						if e.Value.Kind() == corecbor.KindText {
+						if e.Value.Kind == corecbor.KindText {
 							sw.Type = e.Value.TextVal()
 						}
 					case swCompMeasValue:
-						if e.Value.Kind() == corecbor.KindBytes {
+						if e.Value.Kind == corecbor.KindBytes {
 							sw.MeasurementValue = e.Value.BytesVal()
 						}
 					case swCompVersion:
-						if e.Value.Kind() == corecbor.KindText {
+						if e.Value.Kind == corecbor.KindText {
 							sw.Version = e.Value.TextVal()
 						}
 					case swCompSignerID:
-						if e.Value.Kind() == corecbor.KindBytes {
+						if e.Value.Kind == corecbor.KindBytes {
 							sw.SignerID = e.Value.BytesVal()
 						}
 					case swCompMeasDesc:
-						if e.Value.Kind() == corecbor.KindText {
+						if e.Value.Kind == corecbor.KindText {
 							sw.MeasurementDescription = e.Value.TextVal()
 						}
 					}
@@ -365,19 +365,19 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.SWComponents = swcs
 		case claimSubmods:
-			ok := entry.Value.Kind() == corecbor.KindMap
+			ok := entry.Value.Kind == corecbor.KindMap
 			sm := entry.Value.Map()
 			if !ok {
 				return nil, fmt.Errorf("%w: submods must be map", ErrMalformedEAT)
 			}
 			c.Submods = make(map[string]Submod, len(sm))
 			for _, e := range sm {
-				ok := e.Key.Kind() == corecbor.KindText
+				ok := e.Key.Kind == corecbor.KindText
 				name := e.Key.TextVal()
 				if !ok {
 					return nil, fmt.Errorf("%w: submod key must be text", ErrMalformedEAT)
 				}
-				switch e.Value.Kind() {
+				switch e.Value.Kind {
 				case corecbor.KindBytes:
 					c.Submods[string(name)] = Submod{Token: e.Value.BytesVal()}
 				case corecbor.KindMap:
@@ -402,57 +402,57 @@ func DecodeClaims(data []byte) (*Claims, error) {
 }
 
 func parseNonce(v corecbor.Value) ([][]byte, error) {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindBytes:
 		return [][]byte{v.BytesVal()}, nil
 	case corecbor.KindArray:
 		items := v.Array()
 		nonces := make([][]byte, len(items))
 		for i, elem := range items {
-			if elem.Kind() != corecbor.KindBytes {
+			if elem.Kind != corecbor.KindBytes {
 				return nil, fmt.Errorf("nonce array element %d must be bytes", i)
 			}
 			nonces[i] = elem.BytesVal()
 		}
 		return nonces, nil
 	default:
-		return nil, fmt.Errorf("nonce must be bytes or array, got kind %d", v.Kind())
+		return nil, fmt.Errorf("nonce must be bytes or array, got kind %d", v.Kind)
 	}
 }
 
 func parseIntClaim(v corecbor.Value) (int64, error) {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindUint:
 		return int64(v.UintVal()), nil
 	case corecbor.KindNegInt:
 		return -1 - int64(v.NegIntVal()), nil
 	default:
-		return 0, fmt.Errorf("expected integer, got kind %d", v.Kind())
+		return 0, fmt.Errorf("expected integer, got kind %d", v.Kind)
 	}
 }
 
 func parseUintClaim(v corecbor.Value) (uint64, error) {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindUint:
 		return v.UintVal(), nil
 	default:
-		return 0, fmt.Errorf("expected unsigned integer, got kind %d", v.Kind())
+		return 0, fmt.Errorf("expected unsigned integer, got kind %d", v.Kind)
 	}
 }
 
 func parseNumericDate(v corecbor.Value) (time.Time, error) {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindUint:
 		return time.Unix(int64(v.UintVal()), 0), nil
 	case corecbor.KindNegInt:
 		return time.Unix(-1-int64(v.NegIntVal()), 0), nil
 	default:
-		return time.Time{}, fmt.Errorf("expected numeric, got kind %d", v.Kind())
+		return time.Time{}, fmt.Errorf("expected numeric, got kind %d", v.Kind)
 	}
 }
 
 func entryKeyInt(key corecbor.Value) (int64, bool) {
-	switch key.Kind() {
+	switch key.Kind {
 	case corecbor.KindUint:
 		return int64(key.UintVal()), true
 	case corecbor.KindNegInt:

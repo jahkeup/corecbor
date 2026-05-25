@@ -479,7 +479,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		encodedKey := src[keyOff:next]
 		pos = next
 		if opts.RejectNullMapKeys {
-			if k.Kind() == cbor.KindNull {
+			if k.Kind == cbor.KindNull {
 				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)
 			}
 		}
@@ -523,7 +523,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		encodedKey := src[keyOff:next]
 		pos = next
 		if opts.RejectNullMapKeys {
-			if k.Kind() == cbor.KindNull {
+			if k.Kind == cbor.KindNull {
 				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)
 			}
 		}
@@ -581,10 +581,10 @@ func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []
 }
 
 func valuesEqual(a, b cbor.Value) bool {
-	if a.Kind() != b.Kind() {
+	if a.Kind != b.Kind {
 		return false
 	}
-	switch a.Kind() {
+	switch a.Kind {
 	case cbor.KindUint:
 		return a.UintVal() == b.UintVal()
 	case cbor.KindNegInt:

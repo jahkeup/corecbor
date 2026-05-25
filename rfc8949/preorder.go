@@ -24,7 +24,7 @@ func PrecomputeMapOrder(keys []cbor.Value, sortMode SortMode, opts EncodeOpts) (
 	}
 	entries := make([]entry, len(keys))
 	for i := range keys {
-		enc, err := encode(nil, &keys[i], opts)
+		enc, err := encode(nil, &keys[i], &opts)
 		if err != nil {
 			return nil, err
 		}
@@ -56,7 +56,7 @@ func EncodeMapPreordered(dst []byte, m []cbor.MapEntry, order *MapKeyOrder, opts
 	var err error
 	for i, keyBytes := range order.encodedKeys {
 		dst = append(dst, keyBytes...)
-		dst, err = encode(dst, &m[order.indices[i]].Value, opts)
+		dst, err = encode(dst, &m[order.indices[i]].Value, &opts)
 		if err != nil {
 			return dst, err
 		}

@@ -21,19 +21,19 @@ const (
 
 // AsTime interprets a Tag Value with ID 0 or 1 as a time.Time.
 func AsTime(t Value) (time.Time, error) {
-	if t.Kind() != KindTag {
-		return time.Time{}, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind())
+	if t.Kind != KindTag {
+		return time.Time{}, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
 	}
 	switch t.TagID() {
 	case TagDateTimeString:
 		inner := t.TagInner()
-		if inner.Kind() != KindText {
-			return time.Time{}, fmt.Errorf("cbor: tag 0 inner must be Text, got kind %d", inner.Kind())
+		if inner.Kind != KindText {
+			return time.Time{}, fmt.Errorf("cbor: tag 0 inner must be Text, got kind %d", inner.Kind)
 		}
 		return time.Parse(time.RFC3339, inner.TextVal())
 	case TagEpochDateTime:
 		inner := t.TagInner()
-		switch inner.Kind() {
+		switch inner.Kind {
 		case KindUint:
 			return time.Unix(int64(inner.UintVal()), 0).UTC(), nil
 		case KindNegInt:
@@ -45,7 +45,7 @@ func AsTime(t Value) (time.Time, error) {
 		case KindFloat64:
 			return time.Unix(0, int64(inner.Float64Val()*1e9)).UTC(), nil
 		default:
-			return time.Time{}, fmt.Errorf("cbor: tag 1 inner must be Uint/NegInt/Float, got kind %d", inner.Kind())
+			return time.Time{}, fmt.Errorf("cbor: tag 1 inner must be Uint/NegInt/Float, got kind %d", inner.Kind)
 		}
 	default:
 		return time.Time{}, fmt.Errorf("cbor: expected tag 0 or 1, got tag %d", t.TagID())
@@ -66,21 +66,21 @@ func TimeToString(t time.Time) Value {
 }
 
 func AsBigInt(t Value) (*big.Int, error) {
-	if t.Kind() != KindTag {
-		return nil, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind())
+	if t.Kind != KindTag {
+		return nil, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
 	}
 	switch t.TagID() {
 	case TagUnsignedBignum:
 		inner := t.TagInner()
-		if inner.Kind() != KindBytes {
-			return nil, fmt.Errorf("cbor: tag 2 inner must be Bytes, got kind %d", inner.Kind())
+		if inner.Kind != KindBytes {
+			return nil, fmt.Errorf("cbor: tag 2 inner must be Bytes, got kind %d", inner.Kind)
 		}
 		n := new(big.Int).SetBytes(inner.BytesVal())
 		return n, nil
 	case TagNegativeBignum:
 		inner := t.TagInner()
-		if inner.Kind() != KindBytes {
-			return nil, fmt.Errorf("cbor: tag 3 inner must be Bytes, got kind %d", inner.Kind())
+		if inner.Kind != KindBytes {
+			return nil, fmt.Errorf("cbor: tag 3 inner must be Bytes, got kind %d", inner.Kind)
 		}
 		n := new(big.Int).SetBytes(inner.BytesVal())
 		n.Add(n, big.NewInt(1))
@@ -101,15 +101,15 @@ func BigIntTo(n *big.Int) Value {
 }
 
 func AsNestedCBOR(t Value) ([]byte, error) {
-	if t.Kind() != KindTag {
-		return nil, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind())
+	if t.Kind != KindTag {
+		return nil, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
 	}
 	if t.TagID() != TagEncodedCBOR {
 		return nil, fmt.Errorf("cbor: expected tag 24, got tag %d", t.TagID())
 	}
 	inner := t.TagInner()
-	if inner.Kind() != KindBytes {
-		return nil, fmt.Errorf("cbor: tag 24 inner must be Bytes, got kind %d", inner.Kind())
+	if inner.Kind != KindBytes {
+		return nil, fmt.Errorf("cbor: tag 24 inner must be Bytes, got kind %d", inner.Kind)
 	}
 	return inner.BytesVal(), nil
 }

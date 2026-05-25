@@ -36,10 +36,10 @@ func TestCursorSkipScalars(t *testing.T) {
 		c := NewCursor(src, DecodeOpts{})
 		n, err := c.Skip()
 		if err != nil {
-			t.Fatalf("Skip(kind %d): %v", v.Kind(), err)
+			t.Fatalf("Skip(kind %d): %v", v.Kind, err)
 		}
 		if n != len(src) {
-			t.Fatalf("Skip(kind %d) consumed %d, want %d", v.Kind(), n, len(src))
+			t.Fatalf("Skip(kind %d) consumed %d, want %d", v.Kind, n, len(src))
 		}
 	}
 }
@@ -59,10 +59,10 @@ func TestCursorSkipContainers(t *testing.T) {
 		c := NewCursor(src, DecodeOpts{})
 		n, err := c.Skip()
 		if err != nil {
-			t.Fatalf("Skip(kind %d): %v", v.Kind(), err)
+			t.Fatalf("Skip(kind %d): %v", v.Kind, err)
 		}
 		if n != len(src) {
-			t.Fatalf("Skip(kind %d) consumed %d, want %d", v.Kind(), n, len(src))
+			t.Fatalf("Skip(kind %d) consumed %d, want %d", v.Kind, n, len(src))
 		}
 	}
 }
@@ -100,7 +100,7 @@ func TestCursorEnterArrayExitArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind() != cbor.KindUint || v.UintVal() != 10 {
+	if v.Kind != cbor.KindUint || v.UintVal() != 10 {
 		t.Fatalf("first = %v, want Uint(10)", v)
 	}
 
@@ -137,7 +137,7 @@ func TestCursorEnterMapFindKey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind() != cbor.KindText || v.TextVal() != "alice" {
+	if v.Kind != cbor.KindText || v.TextVal() != "alice" {
 		t.Fatalf("name value = %v, want Text(alice)", v)
 	}
 
@@ -181,7 +181,7 @@ func TestCursorNestedAccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind() != cbor.KindNegInt || v.NegIntVal() != 6 {
+	if v.Kind != cbor.KindNegInt || v.NegIntVal() != 6 {
 		t.Fatalf("alg = %v, want NegInt(6)", v)
 	}
 	c.ExitMap() //nolint:errcheck

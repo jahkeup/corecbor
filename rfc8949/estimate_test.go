@@ -39,11 +39,11 @@ func TestEstimateSizeNeverUnderestimates(t *testing.T) {
 		estimated := EstimateSize(v)
 		actual, err := Encode(nil, v, EncodeOpts{})
 		if err != nil {
-			t.Fatalf("encode kind %d: %v", v.Kind(), err)
+			t.Fatalf("encode kind %d: %v", v.Kind, err)
 		}
 		if estimated < len(actual) {
 			t.Errorf("EstimateSize(kind %d) = %d, actual encoded = %d (UNDERESTIMATE)",
-				v.Kind(), estimated, len(actual))
+				v.Kind, estimated, len(actual))
 		}
 	}
 }

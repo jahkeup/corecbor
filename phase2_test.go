@@ -225,8 +225,8 @@ func TestDecodeFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if v.Kind() != cbor.KindArray {
-		t.Fatalf("expected Array, got kind %d", v.Kind())
+	if v.Kind != cbor.KindArray {
+		t.Fatalf("expected Array, got kind %d", v.Kind)
 	}
 	arr := v.Array()
 	ok := true

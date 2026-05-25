@@ -50,7 +50,7 @@ func DiagnosticValue(v Value, opts ...DiagnosticOption) string {
 }
 
 func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
-	switch v.Kind() {
+	switch v.Kind {
 	case cbor.KindUint:
 		b.WriteString(strconv.FormatUint(v.UintVal(), 10))
 

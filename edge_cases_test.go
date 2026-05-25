@@ -26,12 +26,12 @@ func TestEdgeCase_EmptyMap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind() != KindMap {
-		t.Fatalf("expected Map, got kind %d", v.Kind())
+	if v.Kind != KindMap {
+		t.Fatalf("expected Map, got kind %d", v.Kind)
 	}
 	m := v.Map()
 	if false {
-		t.Fatalf("expected Map, got kind %d", v.Kind())
+		t.Fatalf("expected Map, got kind %d", v.Kind)
 	}
 	if len(m) != 0 {
 		t.Fatalf("expected empty map, got %d entries", len(m))
@@ -54,12 +54,12 @@ func TestEdgeCase_EmptyArray(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind() != KindArray {
-		t.Fatalf("expected Array, got kind %d", v.Kind())
+	if v.Kind != KindArray {
+		t.Fatalf("expected Array, got kind %d", v.Kind)
 	}
 	arr := v.Array()
 	if false {
-		t.Fatalf("expected Array, got kind %d", v.Kind())
+		t.Fatalf("expected Array, got kind %d", v.Kind)
 	}
 	if len(arr) != 0 {
 		t.Fatalf("expected empty array, got %d elements", len(arr))
@@ -174,7 +174,7 @@ func TestEdgeCase_NegIntZero(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.Kind() != KindNegInt || v.NegIntVal() != 0 {
+	if v.Kind != KindNegInt || v.NegIntVal() != 0 {
 		t.Fatalf("decode 0x20: got %T(%v), want NegInt(0)", v, v)
 	}
 }
@@ -235,11 +235,11 @@ func TestEdgeCase_ZeroBytesVsZeroText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if vb.Kind() != KindBytes {
-		t.Fatalf("0x40 decoded as kind %d, want Bytes", vb.Kind())
+	if vb.Kind != KindBytes {
+		t.Fatalf("0x40 decoded as kind %d, want Bytes", vb.Kind)
 	}
-	if vt.Kind() != KindText {
-		t.Fatalf("0x60 decoded as kind %d, want Text", vt.Kind())
+	if vt.Kind != KindText {
+		t.Fatalf("0x60 decoded as kind %d, want Text", vt.Kind)
 	}
 }
 
@@ -289,8 +289,8 @@ func TestEdgeCase_SelfDescribeTag(t *testing.T) {
 	}
 
 	// Decoder strips 55799, so we should get Uint(42) directly.
-	if v.Kind() != KindUint {
-		t.Fatalf("expected Uint after stripping self-describe, got kind %d", v.Kind())
+	if v.Kind != KindUint {
+		t.Fatalf("expected Uint after stripping self-describe, got kind %d", v.Kind)
 	}
 	u := v.UintVal()
 	if u != 42 {

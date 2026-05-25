@@ -76,47 +76,46 @@ type EncodeOpts struct {
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
-	return encode(dst, &v, opts)
+	return encode(dst, &v, &opts)
 }
 
 func EncodeDeterministic(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
 	opts.Deterministic = true
-	return encode(dst, &v, opts)
+	return encode(dst, &v, &opts)
 }
 
-func encode(dst []byte, v *cbor.Value, opts EncodeOpts) ([]byte, error) {
-	if v.IsZero() {
+func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
+	if v.Kind == cbor.KindInvalid {
 		return dst, fmt.Errorf("encode: %w", cbor.ErrNilValue)
 	}
-	switch v.Kind() {
+	switch v.Kind {
 	case cbor.KindUint:
-		return wire.AppendHead(dst, wire.MajorUint, v.UintVal()), nil
+		return wire.AppendHead(dst, wire.MajorUint, v.Num), nil
 	case cbor.KindNegInt:
-		return wire.AppendHead(dst, wire.MajorNegInt, v.NegIntVal()), nil
+		return wire.AppendHead(dst, wire.MajorNegInt, v.Num), nil
 	case cbor.KindBytes:
-		b := v.BytesVal()
-		dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(b)))
-		return append(dst, b...), nil
+		dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(v.Bstr)))
+		return append(dst, v.Bstr...), nil
 	case cbor.KindText:
-		s := v.TextVal()
+		s := v.Str
 		if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(s) {
 			return dst, fmt.Errorf("encode text: %w", cbor.ErrInvalidUTF8)
 		}
 		dst = wire.AppendHead(dst, wire.MajorText, uint64(len(s)))
 		return append(dst, s...), nil
 	case cbor.KindArray:
-		items := v.Array()
+		items := v.Items
 		dst = wire.AppendHead(dst, wire.MajorArray, uint64(len(items)))
 		var err error
 		for i := range items {
 			elem := &items[i]
-			switch elem.Kind() {
+			switch elem.Kind {
 			case cbor.KindUint:
-				dst = wire.AppendHead(dst, wire.MajorUint, elem.UintVal())
+				dst = wire.AppendHead(dst, wire.MajorUint, elem.Num)
 			case cbor.KindNegInt:
-				dst = wire.AppendHead(dst, wire.MajorNegInt, elem.NegIntVal())
+				dst = wire.AppendHead(dst, wire.MajorNegInt, elem.Num)
 			case cbor.KindBool:
-				if elem.BoolVal() {
+				if elem.Num != 0 {
 					dst = append(dst, wire.SimpleTrue)
 				} else {
 					dst = append(dst, wire.SimpleFalse)
@@ -124,16 +123,11 @@ func encode(dst []byte, v *cbor.Value, opts EncodeOpts) ([]byte, error) {
 			case cbor.KindNull:
 				dst = append(dst, wire.SimpleNull)
 			case cbor.KindBytes:
-				b := elem.BytesVal()
-				dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(b)))
-				dst = append(dst, b...)
+				dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(elem.Bstr)))
+				dst = append(dst, elem.Bstr...)
 			case cbor.KindText:
-				s := elem.TextVal()
-				if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(s) {
-					return dst, fmt.Errorf("encode text: %w", cbor.ErrInvalidUTF8)
-				}
-				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(s)))
-				dst = append(dst, s...)
+				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(elem.Str)))
+				dst = append(dst, elem.Str...)
 			default:
 				dst, err = encode(dst, elem, opts)
 				if err != nil {
@@ -143,16 +137,19 @@ func encode(dst []byte, v *cbor.Value, opts EncodeOpts) ([]byte, error) {
 		}
 		return dst, nil
 	case cbor.KindMap:
-		return encodeMap(dst, v.Map(), opts)
+		return encodeMap(dst, v.Pairs, opts)
 	case cbor.KindTag:
-		inner := v.TagInner()
-		if inner.IsZero() {
-			return dst, fmt.Errorf("encode tag %d: inner is %w", v.TagID(), cbor.ErrNilValue)
+		if len(v.Items) == 0 {
+			return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
 		}
-		dst = wire.AppendHead(dst, wire.MajorTag, v.TagID())
-		return encode(dst, &inner, opts)
+		inner := &v.Items[0]
+		if inner.Kind == cbor.KindInvalid {
+			return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
+		}
+		dst = wire.AppendHead(dst, wire.MajorTag, v.Num)
+		return encode(dst, inner, opts)
 	case cbor.KindBool:
-		if v.BoolVal() {
+		if v.Num != 0 {
 			return append(dst, wire.SimpleTrue), nil
 		}
 		return append(dst, wire.SimpleFalse), nil
@@ -161,21 +158,21 @@ func encode(dst []byte, v *cbor.Value, opts EncodeOpts) ([]byte, error) {
 	case cbor.KindUndefined:
 		return append(dst, wire.SimpleUndefined), nil
 	case cbor.KindSimple:
-		sv := v.SimpleVal()
+		sv := uint8(v.Num)
 		if sv < 24 {
 			return append(dst, wire.MajorOther|sv), nil
 		}
 		return append(dst, wire.SimpleOneByte, sv), nil
 	case cbor.KindFloat32:
-		return encodeFloat32(dst, v.Float32Val(), opts)
+		return encodeFloat32(dst, math.Float32frombits(uint32(v.Num)), opts)
 	case cbor.KindFloat64:
-		return encodeFloat64(dst, v.Float64Val(), opts)
+		return encodeFloat64(dst, math.Float64frombits(v.Num), opts)
 	default:
-		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind())
+		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind)
 	}
 }
 
-func encodeFloat32(dst []byte, val float32, opts EncodeOpts) ([]byte, error) {
+func encodeFloat32(dst []byte, val float32, opts *EncodeOpts) ([]byte, error) {
 	f := float64(val)
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return dst, fmt.Errorf("encode float32: %w", cbor.ErrNonFiniteFloat)
@@ -185,7 +182,7 @@ func encodeFloat32(dst []byte, val float32, opts EncodeOpts) ([]byte, error) {
 		return wire.AppendFloat64(dst, f), nil
 	case FloatShortest:
 		if opts.Deterministic {
-			return appendShortestFloat(dst, f, opts), nil
+			return appendShortestFloat(dst, f), nil
 		}
 		return wire.AppendFloat32(dst, val), nil
 	default:
@@ -193,7 +190,7 @@ func encodeFloat32(dst []byte, val float32, opts EncodeOpts) ([]byte, error) {
 	}
 }
 
-func encodeFloat64(dst []byte, val float64, opts EncodeOpts) ([]byte, error) {
+func encodeFloat64(dst []byte, val float64, opts *EncodeOpts) ([]byte, error) {
 	f := val
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return dst, fmt.Errorf("encode float64: %w", cbor.ErrNonFiniteFloat)
@@ -203,7 +200,7 @@ func encodeFloat64(dst []byte, val float64, opts EncodeOpts) ([]byte, error) {
 		return wire.AppendFloat64(dst, f), nil
 	case FloatShortest:
 		if opts.Deterministic {
-			return appendShortestFloat(dst, f, opts), nil
+			return appendShortestFloat(dst, f), nil
 		}
 		return wire.AppendFloat64(dst, f), nil
 	default:
@@ -211,7 +208,7 @@ func encodeFloat64(dst []byte, val float64, opts EncodeOpts) ([]byte, error) {
 	}
 }
 
-func appendShortestFloat(dst []byte, f float64, _ EncodeOpts) []byte {
+func appendShortestFloat(dst []byte, f float64) []byte {
 	if bits, ok := wire.EncodeFloat16(f); ok {
 		return wire.AppendFloat16(dst, bits)
 	}
@@ -221,18 +218,47 @@ func appendShortestFloat(dst []byte, f float64, _ EncodeOpts) []byte {
 	return wire.AppendFloat64(dst, f)
 }
 
-func encodeMap(dst []byte, m []cbor.MapEntry, opts EncodeOpts) ([]byte, error) {
+func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	if !opts.Deterministic || len(m) <= 1 {
 		var err error
 		for i := range m {
-			dst, err = encode(dst, &m[i].Key, opts)
-			if err != nil {
-				return dst, err
+			key := &m[i].Key
+			switch key.Kind {
+			case cbor.KindText:
+				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(key.Str)))
+				dst = append(dst, key.Str...)
+			case cbor.KindUint:
+				dst = wire.AppendHead(dst, wire.MajorUint, key.Num)
+			default:
+				dst, err = encode(dst, key, opts)
+				if err != nil {
+					return dst, err
+				}
 			}
-			dst, err = encode(dst, &m[i].Value, opts)
-			if err != nil {
-				return dst, err
+			val := &m[i].Value
+			switch val.Kind {
+			case cbor.KindUint:
+				dst = wire.AppendHead(dst, wire.MajorUint, val.Num)
+			case cbor.KindText:
+				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(val.Str)))
+				dst = append(dst, val.Str...)
+			case cbor.KindBytes:
+				dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(val.Bstr)))
+				dst = append(dst, val.Bstr...)
+			case cbor.KindBool:
+				if val.Num != 0 {
+					dst = append(dst, wire.SimpleTrue)
+				} else {
+					dst = append(dst, wire.SimpleFalse)
+				}
+			case cbor.KindNull:
+				dst = append(dst, wire.SimpleNull)
+			default:
+				dst, err = encode(dst, val, opts)
+				if err != nil {
+					return dst, err
+				}
 			}
 		}
 		return dst, nil

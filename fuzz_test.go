@@ -181,7 +181,7 @@ func FuzzMapKeyOrderInvariance(f *testing.F) {
 			return
 		}
 		m := v.Map()
-		ok := v.Kind() == KindMap
+		ok := v.Kind == KindMap
 		if !ok || len(m) < 2 {
 			return
 		}
@@ -282,7 +282,7 @@ func FuzzTagPreservation(f *testing.F) {
 		}
 
 		tag := v
-		if v.Kind() != KindTag {
+		if v.Kind != KindTag {
 			return
 		}
 
@@ -297,8 +297,8 @@ func FuzzTagPreservation(f *testing.F) {
 		}
 
 		tag2 := v2
-		if v2.Kind() != KindTag {
-			t.Fatalf("re-decoded value is kind %d, not Tag", v2.Kind())
+		if v2.Kind != KindTag {
+			t.Fatalf("re-decoded value is kind %d, not Tag", v2.Kind)
 		}
 
 		if tag.TagID() != tag2.TagID() {

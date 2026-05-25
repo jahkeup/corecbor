@@ -118,7 +118,7 @@ func validateType(t *testing.T, val Value, wantType string) {
 		return
 	}
 	var gotType string
-	switch val.Kind() {
+	switch val.Kind {
 	case KindUint:
 		gotType = "uint"
 	case KindNegInt:
@@ -152,7 +152,7 @@ func validateType(t *testing.T, val Value, wantType string) {
 func validateStructure(t *testing.T, val Value, expect payloadExpect) {
 	t.Helper()
 	if expect.Length != nil {
-		switch val.Kind() {
+		switch val.Kind {
 		case KindArray:
 			if len(val.Array()) != *expect.Length {
 				t.Errorf("array length = %d, want %d", len(val.Array()), *expect.Length)
@@ -164,8 +164,8 @@ func validateStructure(t *testing.T, val Value, expect payloadExpect) {
 		}
 	}
 	if expect.TagID != nil {
-		if val.Kind() != KindTag {
-			t.Errorf("expected Tag, got kind %d", val.Kind())
+		if val.Kind != KindTag {
+			t.Errorf("expected Tag, got kind %d", val.Kind)
 		} else if int(val.TagID()) != *expect.TagID {
 			t.Errorf("tag ID = %d, want %d", val.TagID(), *expect.TagID)
 		}

@@ -61,13 +61,13 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 	}
 
 	var arr []corecbor.Value
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindTag:
 		if v.TagID() != tagSign1 {
 			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, v.TagID())
 		}
 		a := v.TagInner().Array()
-		ok := v.TagInner().Kind() == corecbor.KindArray
+		ok := v.TagInner().Kind == corecbor.KindArray
 		if !ok {
 			return nil, fmt.Errorf("%w: tag 18 inner is not array", ErrMalformed)
 		}
@@ -82,7 +82,7 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 		return nil, fmt.Errorf("%w: Sign1 array must have 4 elements, got %d", ErrMalformed, len(arr))
 	}
 
-	if arr[0].Kind() != corecbor.KindBytes {
+	if arr[0].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 	protectedBstr := arr[0].BytesVal()
@@ -101,7 +101,7 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 	}
 
 	var payload []byte
-	switch arr[2].Kind() {
+	switch arr[2].Kind {
 	case corecbor.KindBytes:
 		payload = arr[2].BytesVal()
 	case corecbor.KindNull:
@@ -110,7 +110,7 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 		return nil, fmt.Errorf("%w: payload must be bstr or null", ErrMalformed)
 	}
 
-	if arr[3].Kind() != corecbor.KindBytes {
+	if arr[3].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: signature must be bstr", ErrMalformed)
 	}
 	sig := arr[3].BytesVal()
@@ -163,13 +163,13 @@ func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
 	}
 
 	var arr []corecbor.Value
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindTag:
 		if v.TagID() != tagEncrypt0 {
 			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, v.TagID())
 		}
 		a := v.TagInner().Array()
-		ok := v.TagInner().Kind() == corecbor.KindArray
+		ok := v.TagInner().Kind == corecbor.KindArray
 		if !ok {
 			return nil, fmt.Errorf("%w: tag 16 inner is not array", ErrMalformed)
 		}
@@ -184,7 +184,7 @@ func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
 		return nil, fmt.Errorf("%w: Encrypt0 array must have 3 elements, got %d", ErrMalformed, len(arr))
 	}
 
-	if arr[0].Kind() != corecbor.KindBytes {
+	if arr[0].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 	protectedBstr := arr[0].BytesVal()
@@ -203,7 +203,7 @@ func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
 	}
 
 	var ciphertext []byte
-	switch arr[2].Kind() {
+	switch arr[2].Kind {
 	case corecbor.KindBytes:
 		ciphertext = arr[2].BytesVal()
 	case corecbor.KindNull:
@@ -257,13 +257,13 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 	}
 
 	var arr []corecbor.Value
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindTag:
 		if v.TagID() != tagMac0 {
 			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, v.TagID())
 		}
 		a := v.TagInner().Array()
-		ok := v.TagInner().Kind() == corecbor.KindArray
+		ok := v.TagInner().Kind == corecbor.KindArray
 		if !ok {
 			return nil, fmt.Errorf("%w: tag 17 inner is not array", ErrMalformed)
 		}
@@ -278,7 +278,7 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 		return nil, fmt.Errorf("%w: Mac0 array must have 4 elements, got %d", ErrMalformed, len(arr))
 	}
 
-	if arr[0].Kind() != corecbor.KindBytes {
+	if arr[0].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 	protectedBstr := arr[0].BytesVal()
@@ -297,7 +297,7 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 	}
 
 	var payload []byte
-	switch arr[2].Kind() {
+	switch arr[2].Kind {
 	case corecbor.KindBytes:
 		payload = arr[2].BytesVal()
 	case corecbor.KindNull:
@@ -307,7 +307,7 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 	}
 
 	tag := arr[3].BytesVal()
-	ok := arr[3].Kind() == corecbor.KindBytes
+	ok := arr[3].Kind == corecbor.KindBytes
 	if !ok {
 		return nil, fmt.Errorf("%w: tag must be bstr", ErrMalformed)
 	}
@@ -384,13 +384,13 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 	}
 
 	var arr []corecbor.Value
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindTag:
 		if v.TagID() != tagEncrypt {
 			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, v.TagID())
 		}
 		a := v.TagInner().Array()
-		ok := v.TagInner().Kind() == corecbor.KindArray
+		ok := v.TagInner().Kind == corecbor.KindArray
 		if !ok {
 			return nil, fmt.Errorf("%w: tag 96 inner is not array", ErrMalformed)
 		}
@@ -405,7 +405,7 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		return nil, fmt.Errorf("%w: Encrypt array must have 4 elements, got %d", ErrMalformed, len(arr))
 	}
 
-	if arr[0].Kind() != corecbor.KindBytes {
+	if arr[0].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 	protectedBstr := arr[0].BytesVal()
@@ -424,7 +424,7 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 	}
 
 	var ciphertext []byte
-	switch arr[2].Kind() {
+	switch arr[2].Kind {
 	case corecbor.KindBytes:
 		ciphertext = arr[2].BytesVal()
 	case corecbor.KindNull:
@@ -434,7 +434,7 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 	}
 
 	recipientsArr := arr[3].Array()
-	ok := arr[3].Kind() == corecbor.KindArray
+	ok := arr[3].Kind == corecbor.KindArray
 	if !ok {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
@@ -442,13 +442,13 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 	recipients := make([]Recipient, len(recipientsArr))
 	for i, rv := range recipientsArr {
 		rArr := rv.Array()
-		ok := rv.Kind() == corecbor.KindArray
+		ok := rv.Kind == corecbor.KindArray
 		if !ok || len(rArr) != 3 {
 			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
 		}
 
 		rProtBstr := rArr[0].BytesVal()
-		ok = rArr[0].Kind() == corecbor.KindBytes
+		ok = rArr[0].Kind == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
@@ -463,7 +463,7 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		}
 
 		var rCiphertext []byte
-		switch rArr[2].Kind() {
+		switch rArr[2].Kind {
 		case corecbor.KindBytes:
 			rCiphertext = rArr[2].BytesVal()
 		case corecbor.KindNull:
@@ -545,13 +545,13 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 	}
 
 	var arr []corecbor.Value
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindTag:
 		if v.TagID() != tagSign {
 			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, v.TagID())
 		}
 		a := v.TagInner().Array()
-		ok := v.TagInner().Kind() == corecbor.KindArray
+		ok := v.TagInner().Kind == corecbor.KindArray
 		if !ok {
 			return nil, fmt.Errorf("%w: tag 98 inner is not array", ErrMalformed)
 		}
@@ -566,7 +566,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		return nil, fmt.Errorf("%w: Sign array must have 4 elements, got %d", ErrMalformed, len(arr))
 	}
 
-	if arr[0].Kind() != corecbor.KindBytes {
+	if arr[0].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 	protectedBstr := arr[0].BytesVal()
@@ -585,7 +585,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 	}
 
 	var payload []byte
-	switch arr[2].Kind() {
+	switch arr[2].Kind {
 	case corecbor.KindBytes:
 		payload = arr[2].BytesVal()
 	case corecbor.KindNull:
@@ -595,7 +595,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 	}
 
 	sigsArr := arr[3].Array()
-	ok := arr[3].Kind() == corecbor.KindArray
+	ok := arr[3].Kind == corecbor.KindArray
 	if !ok {
 		return nil, fmt.Errorf("%w: signatures must be array", ErrMalformed)
 	}
@@ -603,13 +603,13 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 	signatures := make([]Signature, len(sigsArr))
 	for i, sv := range sigsArr {
 		sArr := sv.Array()
-		ok := sv.Kind() == corecbor.KindArray
+		ok := sv.Kind == corecbor.KindArray
 		if !ok || len(sArr) != 3 {
 			return nil, fmt.Errorf("%w: signature %d must be 3-element array", ErrMalformed, i)
 		}
 
 		sProtBstr := sArr[0].BytesVal()
-		ok = sArr[0].Kind() == corecbor.KindBytes
+		ok = sArr[0].Kind == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: signature %d protected must be bstr", ErrMalformed, i)
 		}
@@ -624,7 +624,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		}
 
 		sigBytes := sArr[2].BytesVal()
-		ok = sArr[2].Kind() == corecbor.KindBytes
+		ok = sArr[2].Kind == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: signature %d value must be bstr", ErrMalformed, i)
 		}
@@ -709,13 +709,13 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 	}
 
 	var arr []corecbor.Value
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindTag:
 		if v.TagID() != tagMac {
 			return nil, fmt.Errorf("%w: unexpected tag %d", ErrMalformed, v.TagID())
 		}
 		a := v.TagInner().Array()
-		ok := v.TagInner().Kind() == corecbor.KindArray
+		ok := v.TagInner().Kind == corecbor.KindArray
 		if !ok {
 			return nil, fmt.Errorf("%w: tag 97 inner is not array", ErrMalformed)
 		}
@@ -730,7 +730,7 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		return nil, fmt.Errorf("%w: Mac array must have 5 elements, got %d", ErrMalformed, len(arr))
 	}
 
-	if arr[0].Kind() != corecbor.KindBytes {
+	if arr[0].Kind != corecbor.KindBytes {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 	protectedBstr := arr[0].BytesVal()
@@ -749,7 +749,7 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 	}
 
 	var payload []byte
-	switch arr[2].Kind() {
+	switch arr[2].Kind {
 	case corecbor.KindBytes:
 		payload = arr[2].BytesVal()
 	case corecbor.KindNull:
@@ -759,13 +759,13 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 	}
 
 	tag := arr[3].BytesVal()
-	ok := arr[3].Kind() == corecbor.KindBytes
+	ok := arr[3].Kind == corecbor.KindBytes
 	if !ok {
 		return nil, fmt.Errorf("%w: tag must be bstr", ErrMalformed)
 	}
 
 	recipientsArr := arr[4].Array()
-	ok = arr[4].Kind() == corecbor.KindArray
+	ok = arr[4].Kind == corecbor.KindArray
 	if !ok {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
@@ -773,13 +773,13 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 	recipients := make([]Recipient, len(recipientsArr))
 	for i, rv := range recipientsArr {
 		rArr := rv.Array()
-		ok := rv.Kind() == corecbor.KindArray
+		ok := rv.Kind == corecbor.KindArray
 		if !ok || len(rArr) != 3 {
 			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
 		}
 
 		rProtBstr := rArr[0].BytesVal()
-		ok = rArr[0].Kind() == corecbor.KindBytes
+		ok = rArr[0].Kind == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
@@ -794,7 +794,7 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		}
 
 		var rCiphertext []byte
-		switch rArr[2].Kind() {
+		switch rArr[2].Kind {
 		case corecbor.KindBytes:
 			rCiphertext = rArr[2].BytesVal()
 		case corecbor.KindNull:

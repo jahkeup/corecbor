@@ -140,7 +140,7 @@ func decodeProtected(data []byte) (*Headers, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, ok := v.Kind() == corecbor.KindMap, v.Kind() == corecbor.KindMap
+	m, ok := v.Kind == corecbor.KindMap, v.Kind == corecbor.KindMap
 	if !ok {
 		return nil, ErrMalformed
 	}
@@ -160,7 +160,7 @@ func decodeUnprotected(v corecbor.Value) (*Headers, error) {
 	if v.IsZero() {
 		return &Headers{}, nil
 	}
-	if v.Kind() != corecbor.KindMap {
+	if v.Kind != corecbor.KindMap {
 		return nil, ErrMalformed
 	}
 	m := v.Map()
@@ -209,7 +209,7 @@ func goToCBOR(v any) corecbor.Value {
 
 // cborToGo converts a corecbor Value to a Go value.
 func cborToGo(v corecbor.Value) any {
-	switch v.Kind() {
+	switch v.Kind {
 	case corecbor.KindUint:
 		return int64(v.UintVal())
 	case corecbor.KindNegInt:

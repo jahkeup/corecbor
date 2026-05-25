@@ -11,7 +11,7 @@ func EstimateSize(v cbor.Value) int {
 	if v.IsZero() {
 		return 0
 	}
-	switch v.Kind() {
+	switch v.Kind {
 	case cbor.KindUint:
 		return headSize(v.UintVal())
 	case cbor.KindNegInt:

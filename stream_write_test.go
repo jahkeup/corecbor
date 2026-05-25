@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright The corecbor Authors
 
+//nolint:errcheck // stream tests validate final output bytes, not intermediate errors
 package corecbor
 
 import (

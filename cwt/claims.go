@@ -129,19 +129,22 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 
 		switch keyInt {
 		case claimIss:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: iss must be text", ErrMalformedClaims)
 			}
 			cs.Issuer = t
 		case claimSub:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: sub must be text", ErrMalformedClaims)
 			}
 			cs.Subject = t
 		case claimAud:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: aud must be text", ErrMalformedClaims)
 			}
@@ -165,7 +168,8 @@ func DecodeClaimsSet(data []byte) (*ClaimsSet, error) {
 			}
 			cs.IssuedAt = ts
 		case claimCti:
-			ok := entry.Value.Kind() == corecbor.KindBytes; b := entry.Value.BytesVal()
+			ok := entry.Value.Kind() == corecbor.KindBytes
+			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedClaims)
 			}
@@ -194,7 +198,7 @@ func numericDate(t time.Time) corecbor.Value {
 		if sec >= 0 {
 			return corecbor.Uint(uint64(sec))
 		}
-		return corecbor.NegInt(uint64(-1-sec))
+		return corecbor.NegInt(uint64(-1 - sec))
 	}
 	return corecbor.Float64(float64(sec) + float64(nsec)/1e9)
 }
@@ -238,12 +242,12 @@ func toValue(v any) (corecbor.Value, error) {
 		if x >= 0 {
 			return corecbor.Uint(uint64(x)), nil
 		}
-		return corecbor.NegInt(uint64(-1-int64(x))), nil
+		return corecbor.NegInt(uint64(-1 - int64(x))), nil
 	case int64:
 		if x >= 0 {
 			return corecbor.Uint(uint64(x)), nil
 		}
-		return corecbor.NegInt(uint64(-1-x)), nil
+		return corecbor.NegInt(uint64(-1 - x)), nil
 	case uint64:
 		return corecbor.Uint(x), nil
 	case float64:
@@ -319,13 +323,15 @@ func decodeCnf(v corecbor.Value) (*Confirmation, error) {
 			}
 			cnf.Key = key
 		case cnfKeyEncrypted:
-			ok := entry.Value.Kind() == corecbor.KindBytes; b := entry.Value.BytesVal()
+			ok := entry.Value.Kind() == corecbor.KindBytes
+			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("encrypted key must be bytes")
 			}
 			cnf.Encrypted = b
 		case cnfKeyByKid:
-			ok := entry.Value.Kind() == corecbor.KindBytes; b := entry.Value.BytesVal()
+			ok := entry.Value.Kind() == corecbor.KindBytes
+			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("kid must be bytes")
 			}

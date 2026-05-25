@@ -221,19 +221,22 @@ func DecodeClaims(data []byte) (*Claims, error) {
 
 		switch keyInt {
 		case 1:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: iss must be text", ErrMalformedEAT)
 			}
 			c.Issuer = t
 		case 2:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: sub must be text", ErrMalformedEAT)
 			}
 			c.Subject = t
 		case 3:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: aud must be text", ErrMalformedEAT)
 			}
@@ -257,7 +260,8 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.IssuedAt = ts
 		case 7:
-			ok := entry.Value.Kind() == corecbor.KindBytes; b := entry.Value.BytesVal()
+			ok := entry.Value.Kind() == corecbor.KindBytes
+			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: cti must be bytes", ErrMalformedEAT)
 			}
@@ -269,13 +273,15 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.Nonce = nonces
 		case claimUEID:
-			ok := entry.Value.Kind() == corecbor.KindBytes; b := entry.Value.BytesVal()
+			ok := entry.Value.Kind() == corecbor.KindBytes
+			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: UEID must be bytes", ErrMalformedEAT)
 			}
 			c.UEID = b
 		case claimOEMId:
-			ok := entry.Value.Kind() == corecbor.KindBytes; b := entry.Value.BytesVal()
+			ok := entry.Value.Kind() == corecbor.KindBytes
+			b := entry.Value.BytesVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: OEMId must be bytes", ErrMalformedEAT)
 			}
@@ -287,7 +293,8 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.SecurityLevel = SecurityLevel(n)
 		case claimSecureBoot:
-			ok := entry.Value.Kind() == corecbor.KindBool; b := entry.Value.BoolVal()
+			ok := entry.Value.Kind() == corecbor.KindBool
+			b := entry.Value.BoolVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: secure-boot must be bool", ErrMalformedEAT)
 			}
@@ -306,19 +313,22 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.Uptime = &n
 		case claimProfile:
-			ok := entry.Value.Kind() == corecbor.KindText; t := entry.Value.TextVal()
+			ok := entry.Value.Kind() == corecbor.KindText
+			t := entry.Value.TextVal()
 			if !ok {
 				return nil, fmt.Errorf("%w: profile must be text", ErrMalformedEAT)
 			}
 			c.Profile = t
 		case claimSWComponents:
-			ok := entry.Value.Kind() == corecbor.KindArray; arr := entry.Value.Array()
+			ok := entry.Value.Kind() == corecbor.KindArray
+			arr := entry.Value.Array()
 			if !ok {
 				return nil, fmt.Errorf("%w: sw-components must be array", ErrMalformedEAT)
 			}
 			swcs := make([]SWComponent, len(arr))
 			for i, elem := range arr {
-				ok := elem.Kind() == corecbor.KindMap; cm := elem.Map()
+				ok := elem.Kind() == corecbor.KindMap
+				cm := elem.Map()
 				if !ok {
 					return nil, fmt.Errorf("%w: sw-component[%d] must be map", ErrMalformedEAT, i)
 				}
@@ -355,13 +365,15 @@ func DecodeClaims(data []byte) (*Claims, error) {
 			}
 			c.SWComponents = swcs
 		case claimSubmods:
-			ok := entry.Value.Kind() == corecbor.KindMap; sm := entry.Value.Map()
+			ok := entry.Value.Kind() == corecbor.KindMap
+			sm := entry.Value.Map()
 			if !ok {
 				return nil, fmt.Errorf("%w: submods must be map", ErrMalformedEAT)
 			}
 			c.Submods = make(map[string]Submod, len(sm))
 			for _, e := range sm {
-				ok := e.Key.Kind() == corecbor.KindText; name := e.Key.TextVal()
+				ok := e.Key.Kind() == corecbor.KindText
+				name := e.Key.TextVal()
 				if !ok {
 					return nil, fmt.Errorf("%w: submod key must be text", ErrMalformedEAT)
 				}

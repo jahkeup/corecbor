@@ -154,7 +154,7 @@ func TestCursorFindMapKeyNotFound(t *testing.T) {
 	)
 	src := encodeCBOR(t, m)
 	c := NewCursor(src, DecodeOpts{})
-	c.EnterMap()
+	c.EnterMap() //nolint:errcheck
 
 	err := c.FindMapKey("z")
 	if !errors.Is(err, ErrKeyNotFound) {
@@ -173,10 +173,10 @@ func TestCursorNestedAccess(t *testing.T) {
 	src := encodeCBOR(t, outer)
 	c := NewCursor(src, DecodeOpts{})
 
-	c.EnterMap()
-	c.FindMapKey("header")
-	c.EnterMap()
-	c.FindMapKey("alg")
+	c.EnterMap()           //nolint:errcheck
+	c.FindMapKey("header") //nolint:errcheck
+	c.EnterMap()           //nolint:errcheck
+	c.FindMapKey("alg")    //nolint:errcheck
 	v, err := c.Decode()
 	if err != nil {
 		t.Fatal(err)
@@ -184,8 +184,8 @@ func TestCursorNestedAccess(t *testing.T) {
 	if v.Kind() != cbor.KindNegInt || v.NegIntVal() != 6 {
 		t.Fatalf("alg = %v, want NegInt(6)", v)
 	}
-	c.ExitMap()
-	c.ExitMap()
+	c.ExitMap() //nolint:errcheck
+	c.ExitMap() //nolint:errcheck
 
 	if c.Offset() != len(src) {
 		t.Fatalf("after nested exit: offset = %d, want %d", c.Offset(), len(src))

@@ -108,7 +108,8 @@ func decodeMessage1(data []byte) (*message1, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding method: %v", ErrMessageFormat, err)
 	}
-	ok := method.Kind() == cbor.KindUint; methodUint := method.UintVal()
+	ok := method.Kind() == cbor.KindUint
+	methodUint := method.UintVal()
 	if !ok {
 		return nil, fmt.Errorf("%w: method must be uint", ErrMessageFormat)
 	}
@@ -125,7 +126,8 @@ func decodeMessage1(data []byte) (*message1, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding G_X: %v", ErrMessageFormat, err)
 	}
-	ok = gx.Kind() == cbor.KindBytes; gxBytes := gx.BytesVal()
+	ok = gx.Kind() == cbor.KindBytes
+	gxBytes := gx.BytesVal()
 	if !ok {
 		return nil, fmt.Errorf("%w: G_X must be bstr", ErrMessageFormat)
 	}
@@ -165,7 +167,8 @@ func decodeMessage2(data []byte) (*message2, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding G_Y: %v", ErrMessageFormat, err)
 	}
-	ok := gy.Kind() == cbor.KindBytes; gyBytes := gy.BytesVal()
+	ok := gy.Kind() == cbor.KindBytes
+	gyBytes := gy.BytesVal()
 	if !ok {
 		return nil, fmt.Errorf("%w: G_Y must be bstr", ErrMessageFormat)
 	}
@@ -181,7 +184,8 @@ func decodeMessage2(data []byte) (*message2, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding ciphertext: %v", ErrMessageFormat, err)
 	}
-	ok = ct.Kind() == cbor.KindBytes; ctBytes := ct.BytesVal()
+	ok = ct.Kind() == cbor.KindBytes
+	ctBytes := ct.BytesVal()
 	if !ok {
 		return nil, fmt.Errorf("%w: ciphertext must be bstr", ErrMessageFormat)
 	}
@@ -204,7 +208,8 @@ func decodeMessage3(data []byte) (*message3, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: decoding ciphertext: %v", ErrMessageFormat, err)
 	}
-	ok := ct.Kind() == cbor.KindBytes; ctBytes := ct.BytesVal()
+	ok := ct.Kind() == cbor.KindBytes
+	ctBytes := ct.BytesVal()
 	if !ok {
 		return nil, fmt.Errorf("%w: ciphertext must be bstr", ErrMessageFormat)
 	}

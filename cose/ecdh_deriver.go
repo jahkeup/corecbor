@@ -157,7 +157,7 @@ func buildHKDFInfo(alg Algorithm, keyLen int) ([]byte, error) {
 		goToCBOR(int64(alg)),
 		corecbor.Bytes(nil),
 		corecbor.Bytes(nil),
-		corecbor.MakeArray(goToCBOR(int64(keyLen * 8))),
+		corecbor.MakeArray(goToCBOR(int64(keyLen*8))),
 	)
 	enc := sharedEncoder
 	return enc.Encode(nil, arr)

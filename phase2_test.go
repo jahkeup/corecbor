@@ -31,12 +31,12 @@ func TestEncodeCanonicalSort(t *testing.T) {
 	enc := New(ModeCanonical)
 
 	m := cbor.MakeMap(
-		MapEntry{Key: cbor.Text("aa"), Value: cbor.Uint(7)},            // encoded key: 0x626161 (3 bytes)
-		MapEntry{Key: cbor.Text("z"), Value: cbor.Uint(6)},             // encoded key: 0x617a (2 bytes)
-		MapEntry{Key: cbor.Uint(100), Value: cbor.Uint(5)},             // encoded key: 0x1864 (2 bytes)
-		MapEntry{Key: cbor.Bool(false), Value: cbor.Uint(4)},           // encoded key: 0xf4 (1 byte)
-		MapEntry{Key: cbor.NegInt(0), Value: cbor.Uint(3)},             // encoded key: 0x20 (1 byte)
-		MapEntry{Key: cbor.Uint(10), Value: cbor.Uint(2)},              // encoded key: 0x0a (1 byte)
+		MapEntry{Key: cbor.Text("aa"), Value: cbor.Uint(7)},                // encoded key: 0x626161 (3 bytes)
+		MapEntry{Key: cbor.Text("z"), Value: cbor.Uint(6)},                 // encoded key: 0x617a (2 bytes)
+		MapEntry{Key: cbor.Uint(100), Value: cbor.Uint(5)},                 // encoded key: 0x1864 (2 bytes)
+		MapEntry{Key: cbor.Bool(false), Value: cbor.Uint(4)},               // encoded key: 0xf4 (1 byte)
+		MapEntry{Key: cbor.NegInt(0), Value: cbor.Uint(3)},                 // encoded key: 0x20 (1 byte)
+		MapEntry{Key: cbor.Uint(10), Value: cbor.Uint(2)},                  // encoded key: 0x0a (1 byte)
 		MapEntry{Key: cbor.MakeArray(cbor.Uint(100)), Value: cbor.Uint(9)}, // encoded key: 0x811864 (3 bytes)
 		MapEntry{Key: cbor.MakeArray(cbor.NegInt(0)), Value: cbor.Uint(8)}, // encoded key: 0x8120 (2 bytes)
 	)

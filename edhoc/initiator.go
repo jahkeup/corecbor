@@ -176,7 +176,8 @@ func (i *Initiator) ProcessMessage4(msg4 []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: decoding message_4: %v", ErrMessageFormat, err)
 	}
-	ok := ct.Kind() == cbor.KindBytes; ctBytes := ct.BytesVal()
+	ok := ct.Kind() == cbor.KindBytes
+	ctBytes := ct.BytesVal()
 	if !ok {
 		return fmt.Errorf("%w: message_4 must be bstr", ErrMessageFormat)
 	}
@@ -244,7 +245,8 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: decoding signature: %v", ErrMessageFormat, err)
 	}
-	ok := sig.Kind() == cbor.KindBytes; sigBytes := sig.BytesVal()
+	ok := sig.Kind() == cbor.KindBytes
+	sigBytes := sig.BytesVal()
 	if !ok {
 		return fmt.Errorf("%w: signature must be bstr", ErrMessageFormat)
 	}
@@ -265,7 +267,8 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 
 	peerPub := i.cfg.PeerPublic
 	if i.cfg.PeerCredential != nil && i.cfg.PeerCredential.Type == CredentialCWT {
-		ok := idCred.Kind() == cbor.KindBytes; cwtBytes := idCred.BytesVal()
+		ok := idCred.Kind() == cbor.KindBytes
+		cwtBytes := idCred.BytesVal()
 		if !ok {
 			return fmt.Errorf("%w: CWT credential ID_CRED must be bstr", ErrMessageFormat)
 		}

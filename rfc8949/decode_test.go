@@ -27,9 +27,16 @@ func TestDecodeUint(t *testing.T) {
 		name string
 		val  uint64
 	}{
-		{"zero", 0}, {"one", 1}, {"23", 23}, {"24", 24},
-		{"255", 255}, {"256", 256}, {"65535", 65535}, {"65536", 65536},
-		{"max32", 0xffffffff}, {"max64", math.MaxUint64},
+		{"zero", 0},
+		{"one", 1},
+		{"23", 23},
+		{"24", 24},
+		{"255", 255},
+		{"256", 256},
+		{"65535", 65535},
+		{"65536", 65536},
+		{"max32", 0xffffffff},
+		{"max64", math.MaxUint64},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -53,8 +60,12 @@ func TestDecodeNegInt(t *testing.T) {
 		name string
 		val  uint64
 	}{
-		{"neg1", 0}, {"neg24", 23}, {"neg25", 24},
-		{"neg256", 255}, {"neg65536", 65535}, {"max", math.MaxUint64},
+		{"neg1", 0},
+		{"neg24", 23},
+		{"neg25", 24},
+		{"neg256", 255},
+		{"neg65536", 65535},
+		{"max", math.MaxUint64},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -633,6 +644,20 @@ func TestDecodeDuplicateMapKeysLargeLastWins(t *testing.T) {
 		}
 	}
 	t.Fatal("k00 not found in decoded map")
+}
+
+func TestDecodeDuplicateMapKeysSmallLastWins(t *testing.T) {
+	// map(3){Uint(0):Text(""), Uint(0):Text(""), Text(""):Text("")}
+	// last-write-wins should collapse to 2 entries
+	src := []byte{0xa3, 0x00, 0x60, 0x00, 0x60, 0x60, 0x60}
+	v, _, err := Decode(src, DecodeOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairs := v.Map()
+	if len(pairs) != 2 {
+		t.Fatalf("expected 2 entries after last-write-wins dedup, got %d", len(pairs))
+	}
 }
 
 func TestDecodeDuplicateMapKeysHashCollision(t *testing.T) {

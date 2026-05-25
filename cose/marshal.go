@@ -31,7 +31,6 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 	}
 
 	unprotectedMap := msg.Unprotected.toCBORMap()
-		
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -137,7 +136,6 @@ func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
 	}
 
 	unprotectedMap := msg.Unprotected.toCBORMap()
-		
 
 	var ciphertextVal corecbor.Value
 	if msg.Ciphertext == nil {
@@ -231,7 +229,6 @@ func MarshalMac0(msg *Mac0) ([]byte, error) {
 	}
 
 	unprotectedMap := msg.Unprotected.toCBORMap()
-		
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -333,7 +330,6 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 	}
 
 	unprotectedMap := msg.Unprotected.toCBORMap()
-		
 
 	var ciphertextVal corecbor.Value
 	if msg.Ciphertext == nil {
@@ -437,7 +433,8 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		return nil, fmt.Errorf("%w: ciphertext must be bstr or null", ErrMalformed)
 	}
 
-	recipientsArr := arr[3].Array(); ok := arr[3].Kind() == corecbor.KindArray
+	recipientsArr := arr[3].Array()
+	ok := arr[3].Kind() == corecbor.KindArray
 	if !ok {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
@@ -445,13 +442,13 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 	recipients := make([]Recipient, len(recipientsArr))
 	for i, rv := range recipientsArr {
 		rArr := rv.Array()
-	ok := rv.Kind() == corecbor.KindArray
+		ok := rv.Kind() == corecbor.KindArray
 		if !ok || len(rArr) != 3 {
 			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
 		}
 
 		rProtBstr := rArr[0].BytesVal()
-	ok = rArr[0].Kind() == corecbor.KindBytes
+		ok = rArr[0].Kind() == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
@@ -500,7 +497,6 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 	}
 
 	unprotectedMap := msg.Unprotected.toCBORMap()
-		
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -598,7 +594,8 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		return nil, fmt.Errorf("%w: payload must be bstr or null", ErrMalformed)
 	}
 
-	sigsArr := arr[3].Array(); ok := arr[3].Kind() == corecbor.KindArray
+	sigsArr := arr[3].Array()
+	ok := arr[3].Kind() == corecbor.KindArray
 	if !ok {
 		return nil, fmt.Errorf("%w: signatures must be array", ErrMalformed)
 	}
@@ -606,13 +603,13 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 	signatures := make([]Signature, len(sigsArr))
 	for i, sv := range sigsArr {
 		sArr := sv.Array()
-	ok := sv.Kind() == corecbor.KindArray
+		ok := sv.Kind() == corecbor.KindArray
 		if !ok || len(sArr) != 3 {
 			return nil, fmt.Errorf("%w: signature %d must be 3-element array", ErrMalformed, i)
 		}
 
 		sProtBstr := sArr[0].BytesVal()
-	ok = sArr[0].Kind() == corecbor.KindBytes
+		ok = sArr[0].Kind() == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: signature %d protected must be bstr", ErrMalformed, i)
 		}
@@ -627,7 +624,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		}
 
 		sigBytes := sArr[2].BytesVal()
-	ok = sArr[2].Kind() == corecbor.KindBytes
+		ok = sArr[2].Kind() == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: signature %d value must be bstr", ErrMalformed, i)
 		}
@@ -657,7 +654,6 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 	}
 
 	unprotectedMap := msg.Unprotected.toCBORMap()
-		
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -768,7 +764,8 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		return nil, fmt.Errorf("%w: tag must be bstr", ErrMalformed)
 	}
 
-	recipientsArr := arr[4].Array(); ok = arr[4].Kind() == corecbor.KindArray
+	recipientsArr := arr[4].Array()
+	ok = arr[4].Kind() == corecbor.KindArray
 	if !ok {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
@@ -776,13 +773,13 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 	recipients := make([]Recipient, len(recipientsArr))
 	for i, rv := range recipientsArr {
 		rArr := rv.Array()
-	ok := rv.Kind() == corecbor.KindArray
+		ok := rv.Kind() == corecbor.KindArray
 		if !ok || len(rArr) != 3 {
 			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
 		}
 
 		rProtBstr := rArr[0].BytesVal()
-	ok = rArr[0].Kind() == corecbor.KindBytes
+		ok = rArr[0].Kind() == corecbor.KindBytes
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}

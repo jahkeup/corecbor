@@ -83,6 +83,14 @@ func WithArena(a *rfc8949.Arena) DecoderOption {
 	return func(c *decodeConfig) { c.opts.Arena = a }
 }
 
+// WithZeroCopy configures the decoder to return byte strings and text
+// strings as views into the source buffer rather than copies. The
+// caller MUST NOT mutate src after decode, and MUST NOT use decoded
+// Values after src is freed or reused.
+func WithZeroCopy() DecoderOption {
+	return func(c *decodeConfig) { c.opts.ZeroCopy = true }
+}
+
 type Decoder struct {
 	cfg decodeConfig
 }

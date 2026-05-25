@@ -52,6 +52,7 @@ type DecodeOpts struct {
 	Budget   *BudgetState
 	Interner *StringInterner
 	Arena    *Arena
+	ZeroCopy bool
 }
 
 type BudgetState struct {
@@ -174,6 +175,9 @@ func decodeBytes(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 	if err := opts.Budget.charge(length); err != nil {
 		return cbor.Value{}, off, err
 	}
+	if opts.ZeroCopy {
+		return cbor.Bytes(src[start:end]), end, nil
+	}
 	buf := make([]byte, length)
 	copy(buf, src[start:end])
 	return cbor.Bytes(buf), end, nil
@@ -241,7 +245,9 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 		return cbor.Value{}, off, err
 	}
 	var s string
-	if opts.Interner != nil {
+	if opts.ZeroCopy {
+		s = zeroCopyString(src, start, end)
+	} else if opts.Interner != nil {
 		s = opts.Interner.Intern(src[start:end])
 	} else {
 		s = string(src[start:end])

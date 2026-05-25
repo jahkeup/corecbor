@@ -11,8 +11,8 @@ import (
 )
 
 type decodeConfig struct {
-	opts             rfc8949.DecodeOpts
-	noInternalArena  bool
+	opts            rfc8949.DecodeOpts
+	noInternalArena bool
 }
 
 type DecoderOption func(*decodeConfig)

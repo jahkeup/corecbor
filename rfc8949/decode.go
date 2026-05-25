@@ -546,9 +546,6 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
 					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, pos)
 				}
-				if opts.RejectNonShortest {
-					// AI < 24 is always shortest for text
-				}
 				if opts.Interner != nil {
 					s = opts.Interner.Intern(src[pos+1 : end])
 				} else if opts.ZeroCopy {

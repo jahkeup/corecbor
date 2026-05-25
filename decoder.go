@@ -76,6 +76,13 @@ func WithStringIntern(si *rfc8949.StringInterner) DecoderOption {
 	return func(c *decodeConfig) { c.opts.Interner = si }
 }
 
+// WithArena configures the decoder to allocate container backing
+// ([]Value for arrays, []MapEntry for maps) from the provided arena
+// instead of the heap. Call arena.Reset() between decode operations.
+func WithArena(a *rfc8949.Arena) DecoderOption {
+	return func(c *decodeConfig) { c.opts.Arena = a }
+}
+
 type Decoder struct {
 	cfg decodeConfig
 }

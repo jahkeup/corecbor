@@ -51,6 +51,7 @@ type DecodeOpts struct {
 
 	Budget   *BudgetState
 	Interner *StringInterner
+	Arena    *Arena
 }
 
 type BudgetState struct {
@@ -305,7 +306,12 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if err := opts.Budget.charge(count * 16); err != nil {
 		return cbor.Value{}, off, err
 	}
-	arr := make([]cbor.Value, count)
+	var arr []cbor.Value
+	if opts.Arena != nil {
+		arr = opts.Arena.AllocValues(count)
+	} else {
+		arr = make([]cbor.Value, count)
+	}
 	pos := off + h.N
 	childDepth := depth + 1
 	if childDepth > opts.maxNesting() {
@@ -451,7 +457,12 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if err := opts.Budget.charge(count * 32); err != nil {
 		return cbor.Value{}, off, err
 	}
-	m := make([]cbor.MapEntry, 0, count)
+	var m []cbor.MapEntry
+	if opts.Arena != nil {
+		m = opts.Arena.AllocPairs(count)[:0]
+	} else {
+		m = make([]cbor.MapEntry, 0, count)
+	}
 	pos := off + h.N
 	for range count {
 		keyOff := pos

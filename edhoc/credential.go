@@ -9,7 +9,6 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"fmt"
-	"math/big"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/cose"
@@ -208,10 +207,18 @@ func extractEC2PublicKey(m map[int64]any) (crypto.PublicKey, error) {
 		return nil, fmt.Errorf("%w: EC2 y must be bytes", ErrMessageFormat)
 	}
 
-	pub := &ecdsa.PublicKey{
-		Curve: curve,
-		X:     new(big.Int).SetBytes(x),
-		Y:     new(big.Int).SetBytes(y),
+	size := (curve.Params().BitSize + 7) / 8
+	if len(x) > size || len(y) > size {
+		return nil, fmt.Errorf("%w: EC2 coordinate longer than %d bytes", ErrMessageFormat, size)
+	}
+	point := make([]byte, 1+2*size)
+	point[0] = 0x04 // SEC 1 uncompressed point
+	copy(point[1+size-len(x):1+size], x)
+	copy(point[1+2*size-len(y):], y)
+
+	pub, err := ecdsa.ParseUncompressedPublicKey(curve, point)
+	if err != nil {
+		return nil, fmt.Errorf("%w: EC2 key: %w", ErrMessageFormat, err)
 	}
 	return pub, nil
 }

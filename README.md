@@ -51,6 +51,7 @@ The contract, design, and process all live under
 ├── eat/                          — EAT entity attestation (RFC 9711, separate module)
 ├── edhoc/                        — EDHOC key exchange (RFC 9528, separate module)
 ├── cmd/                          — CLI tools (cbor-diag, cbor-registry-gen)
+├── tools/                        — pinned dev tools module (golangci-lint)
 ├── testdata/                     — fuzz corpora + compatibility fixtures
 └── engineering-docs/             — see "Documentation" above
 ```
@@ -64,10 +65,17 @@ make fuzz           # run every Fuzz* target for FUZZTIME (default 30s)
 make bench          # all benchmarks
 ```
 
-`gofumpt` ships as a Go tool (`go get -tool` already wired in `go.mod`).
-`golangci-lint` is opportunistic in invocation but strict in findings:
-when it's on PATH, it gates; when it isn't, `make lint` skips with a
-hint. CI installs it; developer machines may skip.
+Both linters ship as Go tools, so `make check` needs nothing beyond a Go
+toolchain:
+
+- `gofumpt` is wired into the root `go.mod` (`go tool gofumpt`).
+- `golangci-lint` is pinned in a separate `tools/go.mod` so its large
+  dependency graph stays out of the library's module graph. Run it
+  directly with `go tool -modfile=tools/go.mod golangci-lint run ./...`;
+  bump it with `go get -modfile=tools/go.mod -tool
+  github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest`.
+
+CI and local runs use the same pinned version.
 
 ## License
 

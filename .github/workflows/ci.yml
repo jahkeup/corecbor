@@ -26,18 +26,17 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: |
+            **/go.sum
 
       - name: Download sub-module dependencies
         run: |
-          for mod in $(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do
+          for mod in $(find . -mindepth 2 -name go.mod -not -path './tools/*' -exec dirname {} \; | sort); do
             (cd "$mod" && go mod download)
           done
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
-          install-only: true
+      - name: Download pinned tools (golangci-lint)
+        run: go mod download -modfile=tools/go.mod
 
       - name: make check
         run: make check

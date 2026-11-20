@@ -6,6 +6,13 @@ SHELL := /bin/bash
 
 GO       := go
 GOFUMPT  := $(GO) tool gofumpt
+# golangci-lint is pinned as a Go tool in a separate tools module so its
+# large dependency graph stays out of the library's go.mod.
+GOLANGCI := $(GO) tool -modfile=$(CURDIR)/tools/go.mod golangci-lint
+
+# Sub-modules (cose, cwt, eat, edhoc). Portable across GNU and BSD find;
+# the tools module holds no packages and is excluded.
+MODULES  := $(shell find . -mindepth 2 -name go.mod -not -path './tools/*' -exec dirname {} \; | sort)
 
 # Default fuzz time per registered target. Override on the command line:
 #   make fuzz FUZZTIME=2m
@@ -34,27 +41,23 @@ fmt-check: ## fail if gofumpt would change anything (CI gate)
 .PHONY: vet
 vet: ## go vet ./... (root + sub-modules)
 	$(GO) vet ./...
-	@for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+	@for mod in $(MODULES); do \
 		(cd "$$mod" && $(GO) vet ./...) || exit 1; \
 	done
 
 .PHONY: lint
-lint: vet ## go vet always; golangci-lint enforced if on PATH (skipped if absent)
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		echo "golangci-lint $$(golangci-lint --version | head -1)"; \
-		golangci-lint run --timeout 5m ./...; \
-		for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
-			echo ">>> lint in $$mod"; \
-			(cd "$$mod" && golangci-lint run --timeout 5m ./...) || exit 1; \
-		done; \
-	else \
-		echo "golangci-lint not on PATH; skipping (install: brew install golangci-lint)"; \
-	fi
+lint: vet ## go vet + golangci-lint (pinned go tool) across root + sub-modules
+	@$(GOLANGCI) --version
+	$(GOLANGCI) run --timeout 5m ./...
+	@for mod in $(MODULES); do \
+		echo ">>> lint in $$mod"; \
+		(cd "$$mod" && $(GOLANGCI) run --timeout 5m ./...) || exit 1; \
+	done
 
 .PHONY: test
 test: ## go test -race ./... (root + sub-modules)
 	$(GO) test -race ./...
-	@for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+	@for mod in $(MODULES); do \
 		echo ">>> tests in $$mod"; \
 		(cd "$$mod" && $(GO) test -race ./...) || exit 1; \
 	done
@@ -62,7 +65,7 @@ test: ## go test -race ./... (root + sub-modules)
 .PHONY: bench
 bench: ## run all benchmarks (root + sub-modules) with -benchmem
 	$(GO) test -run NONE -bench . -benchmem ./...
-	@for mod in $$(find . -mindepth 2 -name go.mod -printf '%h\n' | sort); do \
+	@for mod in $(MODULES); do \
 		echo ">>> benchmarks in $$mod"; \
 		(cd "$$mod" && $(GO) test -run NONE -bench . -benchmem ./...) || exit 1; \
 	done

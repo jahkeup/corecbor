@@ -100,9 +100,12 @@ The strict encoder MUST:
   serialization (RFC 8949 §3.4.3): no leading zero bytes, and values that
   fit 64 bits as major type 0/1. `WithLegacyBignumPassthrough()`
   (Deprecated) restores v0.2 output.
-- Encode strings (major 3) as valid UTF-8. Reject non-UTF-8 input strings
-  with a typed error in strict modes; offer a per-encoder knob
-  (`AllowInvalidUTF8 bool`) to permit them in Permissive mode.
+- Encode strings (major 3) as valid UTF-8. Text that is not valid UTF-8
+  is handled by the encoder's `WithInvalidUTF8` policy (proposal 035),
+  at every position including array elements and map keys: Reject
+  (default, `ErrInvalidUTF8`), Allow (`AllowInvalidUTF8()`, written
+  unchanged, not conformant), Replace (U+FFFD per invalid byte), or
+  Lossless (tag 273 for WTF-8, otherwise a byte string).
 - Encode byte strings (major 2) without modification.
 
 ### 2.3 Encoder MUST NOT

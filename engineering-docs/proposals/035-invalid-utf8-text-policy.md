@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 035 |
 | **Tier** | 1 |
-| **Status** | Accepted |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 021 (D13/D18), 023 (sentinels), 034 |
@@ -133,11 +133,39 @@ added to `cbor/tags.go` (026 lists them for the tag helpers).
 Unchanged from 021 D13 for invalid text strings. Tag 273 renders as
 `273(h'…')`.
 
+## Implementation notes (2026-11-21)
+
+- **Contract defect found and fixed:** the encoder's fast paths wrote
+  text inside arrays and in unsorted or single-entry maps without UTF-8
+  validation, so the default (Reject) encoder accepted invalid text
+  there in every mode (spec §2.3: "Reject non-UTF-8 input strings").
+  Every text string now goes through the policy. No v0.2.2 golden
+  vector changed.
+- `rfc8949.DecodeTextArray` ignored `RejectInvalidUTF8`; it now honors
+  it and Replace.
+- Plumbing: `rfc8949.EncodeOpts.InvalidUTF8` (zero value rejects; the
+  existing `AllowInvalidUTF8`/`SkipUTF8Validation` bools still bypass
+  validation) and `rfc8949.DecodeOpts.ReplaceInvalidUTF8`. Lossless
+  decoding is a reflection-only setting (string targets), so it lives in
+  the root decoder config, not `DecodeOpts`.
+- The policy branch is out of line (`encodeInvalidText`, noinline) and
+  only runs after `utf8.ValidString` fails. Array/map fast paths now
+  call `utf8.ValidString` on valid text (the validation they skipped).
+- An unknown policy value returns `ErrInvalidOption` at encode.
+- Under Lossless decoding, `decodeTagReflect` already strips tags
+  transparently, so any tag around a byte string decodes into a string
+  target, not only 272/273/274 (same as tags around other kinds today).
+- `RejectInvalidUTF8()` is now `WithInvalidUTF8Decoding(InvalidUTF8Reject)`
+  (so a later UTF-8 option overrides it); `AllowInvalidUTF8()` is
+  `WithInvalidUTF8(InvalidUTF8Allow)`. Both keep their v0.2 output.
+
 ## Compatibility selection
 
 | Change | Class | Existing identifiers | Selector |
 |---|---|---|---|
 | Policies, `WithInvalidUTF8`, `WithInvalidUTF8Decoding`, `TextLossless`, `AsText`, tag constants | Additive | `AllowInvalidUTF8()`, `RejectInvalidUTF8()` unchanged in output and meaning | the options are the opt-in |
+| Default encoder rejects invalid text in arrays and unsorted/single-entry maps | Contract defect (spec §2.3) | was written unchecked | `AllowInvalidUTF8()` |
+| `DecodeTextArray` honors `RejectInvalidUTF8` | Contract defect (`RejectInvalidUTF8` godoc) | was ignored | none |
 
 Default encoder (Reject) and decoder (Allow) behavior is unchanged.
 
@@ -177,3 +205,4 @@ Default encoder (Reject) and decoder (Allow) behavior is unchanged.
 | Date | Change | Author |
 |---|---|---|
 | 2026-11-21 | Filed and accepted (maintainer decisions: plain byte string for non-WTF-8 bytes; per-byte replacement) | corecbor maintainers |
+| 2026-11-21 | Status: In-Progress; implementation notes (nested-text validation defect, DecodeTextArray) | corecbor maintainers |

@@ -68,6 +68,25 @@ v0.2.2 and under the new version and diffs the output.
 | `AsTime` returns `ErrTimeRange` for out-of-range or non-finite epochs (021 D5) | `AsTime` | wrapped or garbage times | none |
 | `Unmarshal` into `big.Int` accepts plain integers (024) | `Unmarshal` | type mismatch | n/a (newly accepted input) |
 
+## Text that is not valid UTF-8 (035)
+
+- **Fixed:** the default encoder now rejects invalid UTF-8 at every
+  position. v0.2 checked only top-level text and sorted multi-entry
+  maps; text inside arrays and in unsorted or single-entry maps was
+  written unchecked. If you relied on that, use `AllowInvalidUTF8()`
+  (unchanged output) or pick a policy below.
+- **New, opt-in:** `WithInvalidUTF8(p)` on the encoder and
+  `WithInvalidUTF8Decoding(p)` on the decoder, with
+  `InvalidUTF8Reject`, `InvalidUTF8Allow`, `InvalidUTF8Replace` (one
+  U+FFFD per invalid byte, as `encoding/json` does) and
+  `InvalidUTF8Lossless` (conformant and exact: tag 273 for WTF-8,
+  otherwise a byte string). Per value: `TextLossless(s)` and
+  `AsText(v)`. Valid UTF-8 encodes identically under every policy.
+- If you persist encoded text, choose a policy deliberately and treat it
+  as part of your format: Replace and Lossless write different bytes
+  than Allow for the same invalid input.
+- `rfc8949.DecodeTextArray` now honors `RejectInvalidUTF8`.
+
 ## Errors
 
 - Decoder errors are `*DecodeError` (`errors.As`), with an `Offset` and,

@@ -99,6 +99,17 @@ apicheck: ## exported API vs v0.2.2 via apidiff (proposal 034; needs tags)
 golden-regen: ## regenerate golden vectors from the v0.2.2 tag (proposal 034)
 	tools/golden-regen.sh
 
+.PHONY: registry
+registry: ## refresh registry/ from IANA (writes registry.json, tags_gen.go, names_frozen.txt)
+	$(GO) run ./cmd/cbor-registry-gen -fetch -cache registry/registry.json -frozen registry/names_frozen.txt -out registry/tags_gen.go
+
+.PHONY: registry-check
+registry-check: ## advisory: fetch IANA into a temp dir and diff against registry/ (never a CI gate)
+	@tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	cp registry/registry.json registry/names_frozen.txt "$$tmp/"; \
+	$(GO) run ./cmd/cbor-registry-gen -fetch -cache "$$tmp/registry.json" -frozen "$$tmp/names_frozen.txt" -out "$$tmp/tags_gen.go"; \
+	diff -u registry/tags_gen.go "$$tmp/tags_gen.go" && echo "registry: generated constants up to date" || echo "registry: run 'make registry' to refresh"
+
 .PHONY: check
 check: fmt-check vet lint apicheck test ## CI-gating set: fmt-check + vet + lint + apicheck + test
 

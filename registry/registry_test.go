@@ -31,7 +31,9 @@ func TestLookupTag_Known(t *testing.T) {
 		if !strings.Contains(strings.ToLower(info.Semantics), strings.ToLower(tt.wantSemSub)) {
 			t.Errorf("LookupTag(%d).Semantics = %q, want to contain %q", tt.tag, info.Semantics, tt.wantSemSub)
 		}
-		if !strings.Contains(info.Reference, tt.wantRefSub) {
+		// IANA reformats references over time ("[RFC8949]" became
+		// "[RFC 8949]" in 2026), so compare without spaces.
+		if !strings.Contains(strings.ReplaceAll(info.Reference, " ", ""), tt.wantRefSub) {
 			t.Errorf("LookupTag(%d).Reference = %q, want to contain %q", tt.tag, info.Reference, tt.wantRefSub)
 		}
 	}

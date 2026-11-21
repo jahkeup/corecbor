@@ -12,6 +12,10 @@
 //	# Generate from existing cache (no network):
 //	go run ./cmd/cbor-registry-gen -cache registry/registry.json -out registry/tags_gen.go
 //
+//	# Keep generated names stable (proposal 026): names in the frozen
+//	# list are always used, and new tags are appended to it.
+//	go run ./cmd/cbor-registry-gen -cache registry/registry.json -frozen registry/names_frozen.txt -out registry/tags_gen.go
+//
 //	# Generate subset:
 //	go run ./cmd/cbor-registry-gen -cache registry/registry.json -out registry/tags_gen.go -subset 0,1,2,3,24,55799
 package main
@@ -79,6 +83,7 @@ func main() {
 	pkgName := flag.String("package", "registry", "package name for generated code")
 	subset := flag.String("subset", "", "comma-separated tag numbers to include (default: all)")
 	fetch := flag.Bool("fetch", false, "fetch latest registry from IANA before generating")
+	frozenPath := flag.String("frozen", "", "path to the frozen names list; existing names are kept and new ones appended")
 	flag.Parse()
 
 	if *cachePath == "" {
@@ -137,16 +142,37 @@ func main() {
 		Package: *pkgName,
 		Tags:    make([]templateTag, 0, len(tags)),
 	}
+	frozen := &frozenNames{byTag: map[uint64]string{}, names: map[string]bool{}}
+	if *frozenPath != "" {
+		f, err := readFrozen(*frozenPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error reading frozen names: %v\n", err)
+			os.Exit(1)
+		}
+		frozen = f
+	}
+	present := make(map[uint64]bool, len(tags))
 	seen := make(map[string]bool)
-	for _, t := range tags {
-		name := tagNames[t.Tag]
-		if name == "" {
-			name = deriveName(t.Semantics)
-		}
-		if seen[name] {
-			name = fmt.Sprintf("%s_%d", name, t.Tag)
-		}
+	for name := range frozen.names {
 		seen[name] = true
+	}
+	for _, t := range tags {
+		name, ok := frozen.byTag[t.Tag]
+		if !ok {
+			if unassigned(t.Semantics) {
+				continue
+			}
+			name = tagNames[t.Tag]
+			if name == "" {
+				name = deriveName(t.Semantics)
+			}
+			if seen[name] {
+				name = fmt.Sprintf("%s_%d", name, t.Tag)
+			}
+			seen[name] = true
+			frozen.add(t.Tag, name)
+		}
+		present[t.Tag] = true
 		tmplData.Tags = append(tmplData.Tags, templateTag{
 			Name:      name,
 			Tag:       t.Tag,
@@ -154,6 +180,31 @@ func main() {
 			Semantics: t.Semantics,
 			Reference: t.Reference,
 		})
+	}
+	// A frozen name whose tag left the registry keeps its constant,
+	// marked deprecated.
+	if *subset == "" {
+		withdrawn := cache.FetchedAt
+		if len(withdrawn) >= 10 {
+			withdrawn = withdrawn[:10]
+		}
+		for tag, name := range frozen.byTag {
+			if !present[tag] {
+				tmplData.Tags = append(tmplData.Tags, templateTag{
+					Name:       name,
+					Tag:        tag,
+					Semantics:  "no longer in the IANA registry",
+					Deprecated: "no longer in the IANA registry (" + withdrawn + ")",
+				})
+			}
+		}
+	}
+	sort.Slice(tmplData.Tags, func(i, j int) bool { return tmplData.Tags[i].Tag < tmplData.Tags[j].Tag })
+	if *frozenPath != "" && *subset == "" {
+		if err := frozen.write(*frozenPath); err != nil {
+			fmt.Fprintf(os.Stderr, "error writing frozen names: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	if err := genTemplate.Execute(out, tmplData); err != nil {
@@ -219,11 +270,80 @@ type templateData struct {
 }
 
 type templateTag struct {
-	Name      string
-	Tag       uint64
-	DataItem  string
-	Semantics string
-	Reference string
+	Name       string
+	Tag        uint64
+	DataItem   string
+	Semantics  string
+	Reference  string
+	Deprecated string
+}
+
+// unassigned reports registry rows that don't register a tag (IANA
+// lists free ranges as "Unassigned"). Reserved code points, such as
+// tag 76 in RFC 8746, are registered and get constants.
+func unassigned(semantics string) bool {
+	s := strings.ToLower(strings.TrimSpace(semantics))
+	return s == "unassigned" || strings.HasPrefix(s, "unassigned ")
+}
+
+// frozenNames is the checked-in tag -> constant name list. Generated
+// identifiers are API (proposal 026): once a tag has a name it keeps it.
+type frozenNames struct {
+	header []string
+	byTag  map[uint64]string
+	names  map[string]bool
+}
+
+func readFrozen(path string) (*frozenNames, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	f := &frozenNames{byTag: map[uint64]string{}, names: map[string]bool{}}
+	for i, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "#") {
+			f.header = append(f.header, line)
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return nil, fmt.Errorf("%s:%d: want \"<tag> <name>\"", path, i+1)
+		}
+		tag, err := strconv.ParseUint(fields[0], 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", path, i+1, err)
+		}
+		if _, dup := f.byTag[tag]; dup || f.names[fields[1]] {
+			return nil, fmt.Errorf("%s:%d: duplicate tag or name", path, i+1)
+		}
+		f.add(tag, fields[1])
+	}
+	return f, nil
+}
+
+func (f *frozenNames) add(tag uint64, name string) {
+	f.byTag[tag] = name
+	f.names[name] = true
+}
+
+func (f *frozenNames) write(path string) error {
+	tags := make([]uint64, 0, len(f.byTag))
+	for t := range f.byTag {
+		tags = append(tags, t)
+	}
+	sort.Slice(tags, func(i, j int) bool { return tags[i] < tags[j] })
+	var b strings.Builder
+	for _, h := range f.header {
+		b.WriteString(h + "\n")
+	}
+	for _, t := range tags {
+		fmt.Fprintf(&b, "%d %s\n", t, f.byTag[t])
+	}
+	return os.WriteFile(path, []byte(b.String()), 0o644)
 }
 
 var funcMap = template.FuncMap{
@@ -238,13 +358,20 @@ var funcMap = template.FuncMap{
 	},
 }
 
-var genTemplate = template.Must(template.New("gen").Funcs(funcMap).Parse(`// Code generated by cbor-registry-gen. DO NOT EDIT.
+var genTemplate = template.Must(template.New("gen").Funcs(funcMap).Parse(`// SPDX-License-Identifier: Apache-2.0
+// Copyright The corecbor Authors
+
+// Code generated by cbor-registry-gen. DO NOT EDIT.
 
 package {{.Package}}
 
 const (
 {{- range .Tags}}
 	// Tag{{.Name}} is tag {{.Tag}}: {{oneline .Semantics}}
+{{- if .Deprecated}}
+	//
+	// Deprecated: {{.Deprecated}}.
+{{- end}}
 	Tag{{.Name}} uint64 = {{.Tag}}
 {{end}})
 `))

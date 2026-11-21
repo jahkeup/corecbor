@@ -84,7 +84,7 @@ const (
 	// TagMIME is tag 36: MIME message; see Section 3.4.5.3
 	TagMIME uint64 = 36
 
-	// TagBinaryUUIDRFC9562Section4 is tag 37: Binary UUID ([RFC9562, Section 4])
+	// TagBinaryUUIDRFC9562Section4 is tag 37: Binary UUID ([RFC 9562, Section 4])
 	TagBinaryUUIDRFC9562Section4 uint64 = 37
 
 	// TagLanguageTaggedString is tag 38: Language-tagged string
@@ -138,7 +138,7 @@ const (
 	// TagAMarkerOfALocationInAMapOrAnArrayWhereAD is tag 62: A marker of a location in a map or an array where a decoy is intended to be i...
 	TagAMarkerOfALocationInAMapOrAnArrayWhereAD uint64 = 62
 
-	// TagEncodedCBORSequenceRFC8742 is tag 63: Encoded CBOR Sequence [RFC8742]
+	// TagEncodedCBORSequenceRFC8742 is tag 63: Encoded CBOR Sequence [RFC 8742]
 	TagEncodedCBORSequenceRFC8742 uint64 = 63
 
 	// TagUint8TypedArray is tag 64: uint8 Typed Array
@@ -237,13 +237,13 @@ const (
 	// TagGeographicCoordinateReferenceSystemWKTOr is tag 104: Geographic Coordinate Reference System WKT or EPSG number
 	TagGeographicCoordinateReferenceSystemWKTOr uint64 = 104
 
-	// TagSUITEnvelopeAsDefinedInAppendixAOfRFCIet is tag 107: SUIT_Envelope as defined in Appendix A of [RFC-ietf-suit-manifest-34]
+	// TagSUITEnvelopeAsDefinedInAppendixAOfRFCIet is tag 107: SUIT_Envelope as defined in [Appendix A of RFC-ietf-suit-manifest-34]
 	TagSUITEnvelopeAsDefinedInAppendixAOfRFCIet uint64 = 107
 
 	// TagExpectedConversionToBase16EncodingLowerc is tag 108: Expected conversion to base16 encoding (lowercase)
 	TagExpectedConversionToBase16EncodingLowerc uint64 = 108
 
-	// TagRelativeObjectIdentifierBEREncodingSDNVR is tag 110: relative object identifier (BER encoding); SDNV [RFC6256] sequence
+	// TagRelativeObjectIdentifierBEREncodingSDNVR is tag 110: relative object identifier (BER encoding); SDNV [RFC 6256] sequence
 	TagRelativeObjectIdentifierBEREncodingSDNVR uint64 = 110
 
 	// TagObjectIdentifierBEREncoding is tag 111: object identifier (BER encoding)
@@ -306,7 +306,7 @@ const (
 	// TagExtendedRationalNumber is tag 270: Extended rational number
 	TagExtendedRationalNumber uint64 = 270
 
-	// TagDDoSOpenThreatSignalingDOTSSignalChannel is tag 271: DDoS Open Threat Signaling (DOTS) signal channel object, as defined in [RFC9132]
+	// TagDDoSOpenThreatSignalingDOTSSignalChannel is tag 271: DDoS Open Threat Signaling (DOTS) signal channel object, as defined in [RFC 9...
 	TagDDoSOpenThreatSignalingDOTSSignalChannel uint64 = 271
 
 	// TagNonUTF8CESU8String is tag 272: Non-UTF-8 CESU-8 string
@@ -393,10 +393,10 @@ const (
 	// TagACBORTagThatContainsMinSvnThatIdentifies is tag 553: A CBOR tag that contains min-svn that identifies a security version number th...
 	TagACBORTagThatContainsMinSvnThatIdentifies uint64 = 553
 
-	// TagACBORTagThatContainsAPEMEncodedSubjectPu is tag 554: A CBOR tag that contains a PEM encoded SubjectPublicKeyInfo. See Section 13 o...
+	// TagACBORTagThatContainsAPEMEncodedSubjectPu is tag 554: A CBOR tag that contains a PEM encoded SubjectPublicKeyInfo. See [Section 13 ...
 	TagACBORTagThatContainsAPEMEncodedSubjectPu uint64 = 554
 
-	// TagACBORTagThatContainsAPEMEncodedSubjectPu_555 is tag 555: A CBOR tag that contains a PEM encoded SubjectPublicKeyInfo. See Section 13 o...
+	// TagACBORTagThatContainsAPEMEncodedSubjectPu_555 is tag 555: A CBOR tag that contains a PEM encoded SubjectPublicKeyInfo. See [Section 13 ...
 	TagACBORTagThatContainsAPEMEncodedSubjectPu_555 uint64 = 555
 
 	// TagACBORTagThatContainsAnX509CertificateCha is tag 556: A CBOR tag that contains an X.509 certificate chain created by the concatenat...
@@ -411,7 +411,7 @@ const (
 	// TagConciseEvidenceMap is tag 571: concise-evidence-map
 	TagConciseEvidenceMap uint64 = 571
 
-	// TagUnprotectedCWTClaimsSetRFC9781 is tag 601: Unprotected CWT Claims Set [RFC9781]
+	// TagUnprotectedCWTClaimsSetRFC9781 is tag 601: Unprotected CWT Claims Set [RFC 9781]
 	TagUnprotectedCWTClaimsSetRFC9781 uint64 = 601
 
 	// TagDetachedEATBundle is tag 602: Detached EAT Bundle
@@ -426,7 +426,7 @@ const (
 	// TagPeriod is tag 1003: period
 	TagPeriod uint64 = 1003
 
-	// TagRFC3339FullDateString is tag 1004: [RFC3339] full-date string
+	// TagRFC3339FullDateString is tag 1004: [RFC 3339] full-date string
 	TagRFC3339FullDateString uint64 = 1004
 
 	// TagObjectTypeIdentifier is tag 1010: Object type identifier
@@ -438,7 +438,7 @@ const (
 	// TagIEEEOUICID is tag 1048: IEEE OUI/CID
 	TagIEEEOUICID uint64 = 1048
 
-	// TagSUITManifestAsDefinedInAppendixAOfRFCIet is tag 1070: SUIT_Manifest as defined in Appendix A of [RFC-ietf-suit-manifest-34]
+	// TagSUITManifestAsDefinedInAppendixAOfRFCIet is tag 1070: SUIT_Manifest as defined in [Appendix A of RFC-ietf-suit-manifest-34]
 	TagSUITManifestAsDefinedInAppendixAOfRFCIet uint64 = 1070
 
 	// TagCOSEAlgorithmIdentifierBaseHashValue is tag 18556: [COSE algorithm identifier, Base Hash value]
@@ -480,16 +480,19 @@ const (
 	// TagLogicalOperatorALLEncodesTheLogicalOpera is tag 32872: Logical operator: ALL. Encodes the logical operation (item1&&item2&&item3&&...).
 	TagLogicalOperatorALLEncodesTheLogicalOpera uint64 = 32872
 
+	// TagTLAFunctionAsAnArrayOfArgumentValuePairs is tag 33000: TLA+ function as an array of [argument, value] pairs
+	TagTLAFunctionAsAnArrayOfArgumentValuePairs uint64 = 33000
+
 	// TagUrKnownValueSemanticSignifier is tag 40000: ur:known-value, Semantic signifier
 	TagUrKnownValueSemanticSignifier uint64 = 40000
 
 	// TagUrDigest32ByteSHA256Digest is tag 40001: ur:digest, 32-byte SHA-256 digest
 	TagUrDigest32ByteSHA256Digest uint64 = 40001
 
-	// TagUrEncryptedIETFChaCha20Poly1305RFC8439En is tag 40002: ur:encrypted, IETF ChaCha20-Poly1305 ([RFC8439]) encrypted message
+	// TagUrEncryptedIETFChaCha20Poly1305RFC8439En is tag 40002: ur:encrypted, IETF ChaCha20-Poly1305 ([RFC 8439]) encrypted message
 	TagUrEncryptedIETFChaCha20Poly1305RFC8439En uint64 = 40002
 
-	// TagUrCompressedRFC1951DEFLATECompressedMess is tag 40003: ur:compressed, [RFC1951] DEFLATE-compressed message
+	// TagUrCompressedRFC1951DEFLATECompressedMess is tag 40003: ur:compressed, [RFC 1951] DEFLATE-compressed message
 	TagUrCompressedRFC1951DEFLATECompressedMess uint64 = 40003
 
 	// TagUrRequestTransactionRequestIdentifier is tag 40004: ur:request, Transaction Request identifier
@@ -654,6 +657,15 @@ const (
 	// TagArrayOfComplexNumbersInInterleavedFormCo is tag 43001: Array of complex numbers in interleaved form: complex value k is stored with ...
 	TagArrayOfComplexNumbersInInterleavedFormCo uint64 = 43001
 
+	// TagMetrologicalValueQuantityValueWithUnitOf is tag 44252: Metrological value (quantity value with unit of measure, SI prefix and GUM me...
+	TagMetrologicalValueQuantityValueWithUnitOf uint64 = 44252
+
+	// TagCRC32ISOHDLCDigest is tag 46010: CRC-32/ISO-HDLC digest
+	TagCRC32ISOHDLCDigest uint64 = 46010
+
+	// TagMD5Digest is tag 46011: MD5 digest
+	TagMD5Digest uint64 = 46011
+
 	// TagPlatformVISID is tag 50000: PlatformV_IS_ID
 	TagPlatformVISID uint64 = 50000
 
@@ -696,6 +708,15 @@ const (
 	// TagATagValueOf51997IndicatesThatThePayloadI is tag 51997: A tag value of 51997 indicates that the payload is CBOR-LD.
 	TagATagValueOf51997IndicatesThatThePayloadI uint64 = 51997
 
+	// TagUSOFBlobReference is tag 55003: USOF blob reference
+	TagUSOFBlobReference uint64 = 55003
+
+	// TagUSOFDataTypeReference is tag 55004: USOF data type reference
+	TagUSOFDataTypeReference uint64 = 55004
+
+	// TagUSOFObjectReference is tag 55005: USOF object reference
+	TagUSOFObjectReference uint64 = 55005
+
 	// TagSelfDescribe is tag 55799: Self-described CBOR; see Section 3.4.6
 	TagSelfDescribe uint64 = 55799
 
@@ -735,8 +756,14 @@ const (
 	// TagAlwaysInvalidSeeSection101 is tag 65535: always invalid; see Section 10.1
 	TagAlwaysInvalidSeeSection101 uint64 = 65535
 
+	// TagZeWIFZcashWalletInterchangeFormatDocumen is tag 133133: ZeWIF (Zcash Wallet Interchange Format) document; the tag encloses a two-elem...
+	TagZeWIFZcashWalletInterchangeFormatDocumen uint64 = 133133
+
 	// TagRAINSMessage is tag 15309736: RAINS Message
 	TagRAINSMessage uint64 = 15309736
+
+	// TagUniversalSavesFormatBundle is tag 827539798: Universal Saves Format bundle
+	TagUniversalSavesFormatBundle uint64 = 827539798
 
 	// TagTCGDICEProtectionEnvironmentProfileDescr is tag 1146111423: TCG DICE Protection Environment profile descriptor
 	TagTCGDICEProtectionEnvironmentProfileDescr uint64 = 1146111423
@@ -776,6 +803,9 @@ const (
 
 	// TagERISFSImageHeader is tag 1701996916: ERIS-FS image header
 	TagERISFSImageHeader uint64 = 1701996916
+
+	// TagPromiseGridMessageEnvelope is tag 1735551332: PromiseGrid message envelope
+	TagPromiseGridMessageEnvelope uint64 = 1735551332
 
 	// TagAlwaysInvalidSeeSection101_4294967295 is tag 4294967295: always invalid; see Section 10.1
 	TagAlwaysInvalidSeeSection101_4294967295 uint64 = 4294967295

@@ -141,6 +141,11 @@ func decodeValue(src []byte, off, depth int, opts DecodeOpts, stripSelfDescribe 
 	if h.AI >= 28 && h.AI <= 30 {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
 	}
+	// Indefinite length (AI 31) is not well-formed for integers and tags
+	// (RFC 8949 §3.2.4); ParseHead reports it with Arg 0.
+	if h.AI == wire.AIIndefinite && (h.Major == wire.MajorUint || h.Major == wire.MajorNegInt || h.Major == wire.MajorTag) {
+		return cbor.Value{}, off, fmt.Errorf("%w (indefinite length for major type %d) at offset %d", cbor.ErrReservedAI, h.Major>>5, off)
+	}
 
 	if opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
@@ -321,9 +326,14 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
+	pos := off + h.N
+	childDepth := depth + 1
+	if childDepth > opts.maxNesting() {
+		return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, pos)
+	}
 	// Every element occupies at least one byte, so a count larger than
 	// the available input cannot be satisfied. Fail before allocating.
-	if count > opts.avail(src, off+h.N) {
+	if count > opts.avail(src, pos) {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
 	if err := opts.Budget.charge(count * 16); err != nil {
@@ -334,11 +344,6 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		arr = opts.Arena.AllocValues(count)
 	} else {
 		arr = make([]cbor.Value, count)
-	}
-	pos := off + h.N
-	childDepth := depth + 1
-	if childDepth > opts.maxNesting() {
-		return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, pos)
 	}
 	if count == 0 {
 		return cbor.MakeArrayFromSlice(arr), pos, nil
@@ -810,7 +815,9 @@ func decodeOther(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 		}
 		return cbor.Float64(f), off + h.N, nil
 	case ai == wire.AIIndefinite:
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		// A break is only valid as the terminator of an indefinite-length
+		// item, which the container decoders consume themselves.
+		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrUnexpectedBreak, off)
 	default:
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
 	}

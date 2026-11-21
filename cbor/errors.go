@@ -64,7 +64,8 @@ var (
 	ErrNilValue = errors.New("cbor: nil value in tree")
 
 	// ErrReservedAI indicates the input contains a reserved additional
-	// information value (28, 29, or 30) which is not well-formed.
+	// information value (28, 29, or 30), or indefinite length (31) on an
+	// integer or tag head; neither is well-formed (RFC 8949 §3.2.4).
 	ErrReservedAI = errors.New("cbor: reserved additional information value")
 
 	// ErrMemoryBudgetExceeded indicates cumulative decode allocations
@@ -74,4 +75,18 @@ var (
 	// ErrTimeRange indicates a tag 0/1 time value is outside the range
 	// representable by time.Time, or a float epoch is NaN or ±Inf.
 	ErrTimeRange = errors.New("cbor: time value out of range")
+
+	// ErrNotDeterministic indicates output or input that does not follow
+	// the deterministic encoding rules of the selected mode.
+	ErrNotDeterministic = errors.New("cbor: not deterministically encoded")
+
+	// ErrReservedSimple indicates an attempt to encode simple value 24
+	// through 31, whose one-byte-argument encodings RFC 8949 §3.3 says
+	// MUST NOT be used.
+	ErrReservedSimple = errors.New("cbor: reserved simple value")
+
+	// ErrUnexpectedBreak indicates a "break" stop code (0xff) where a
+	// data item was expected, outside an indefinite-length item
+	// (RFC 8949 §3.2.1).
+	ErrUnexpectedBreak = errors.New("cbor: unexpected break stop code")
 )

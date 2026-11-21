@@ -162,6 +162,9 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 		if sv < 24 {
 			return append(dst, wire.MajorOther|sv), nil
 		}
+		if sv < 32 {
+			return dst, fmt.Errorf("encode simple(%d): %w", sv, cbor.ErrReservedSimple)
+		}
 		return append(dst, wire.SimpleOneByte, sv), nil
 	case cbor.KindFloat32:
 		return encodeFloat32(dst, math.Float32frombits(uint32(v.Num)), opts)
@@ -297,6 +300,11 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 
 	keyBuf := ss.keyBuf
 	entries := ss.entries
+	// RFC 8949 §5.6: a map with duplicate keys is not valid CBOR, and the
+	// §4.2.1 ordering is undefined for it. A comparison sort must compare
+	// every pair that ends up adjacent, so equal encodings always reach
+	// the comparator; noting them there costs no extra pass.
+	dup := false
 	slices.SortFunc(entries, func(a, b sortEntry) int {
 		ea := keyBuf[a.keyStart:a.keyEnd]
 		eb := keyBuf[b.keyStart:b.keyEnd]
@@ -308,8 +316,20 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 		if len(ea) > 0 && len(eb) > 0 && ea[0] != eb[0] {
 			return int(ea[0]) - int(eb[0])
 		}
-		return bytes.Compare(ea, eb)
+		c := bytes.Compare(ea, eb)
+		if c == 0 && a.index != b.index {
+			dup = true
+		}
+		return c
 	})
+	if dup {
+		if pooled {
+			sortStatePool.Put(ss)
+		} else {
+			opts.SortCache.put()
+		}
+		return dst, fmt.Errorf("encode map: %w", cbor.ErrDuplicateMapKey)
+	}
 
 	var err error
 	for _, se := range entries {

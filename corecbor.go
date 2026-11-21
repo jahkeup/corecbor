@@ -84,6 +84,9 @@ var (
 	ErrReservedAI          = cbor.ErrReservedAI
 	ErrNonStringKey        = cbor.ErrNonStringKey
 	ErrTimeRange           = cbor.ErrTimeRange
+	ErrNotDeterministic    = cbor.ErrNotDeterministic
+	ErrReservedSimple      = cbor.ErrReservedSimple
+	ErrUnexpectedBreak     = cbor.ErrUnexpectedBreak
 )
 
 func AsTime(t Value) (time.Time, error)    { return cbor.AsTime(t) }

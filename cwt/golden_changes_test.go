@@ -9,4 +9,8 @@ package cwt_test
 // entry in the same change that alters the behavior.
 var goldenChanges = map[string]string{
 	"cwt/validate/negative-leeway": "proposal 021 D17: negative Leeway returns ErrInvalidValidator instead of tightening the window",
+
+	// v0.2.2 emitted a map with key 1 twice (not valid CBOR, RFC 8949
+	// §5.6). Proposal 031 tracks rejecting the shadowing claim earlier.
+	"cwt/encode/private-shadows-iss": "proposal 021 D15: deterministic encoding rejects duplicate map keys",
 }

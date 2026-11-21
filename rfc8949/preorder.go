@@ -6,6 +6,7 @@ package rfc8949
 import (
 	"bytes"
 	"cmp"
+	"fmt"
 	"slices"
 
 	"github.com/jahkeup/corecbor/cbor"
@@ -39,6 +40,12 @@ func PrecomputeMapOrder(keys []cbor.Value, sortMode SortMode, opts EncodeOpts) (
 		}
 		return bytes.Compare(a.encoded, b.encoded)
 	})
+
+	for i := 1; i < len(entries); i++ {
+		if bytes.Equal(entries[i-1].encoded, entries[i].encoded) {
+			return nil, fmt.Errorf("precompute map order: %w", cbor.ErrDuplicateMapKey)
+		}
+	}
 
 	order := &MapKeyOrder{
 		encodedKeys: make([][]byte, len(entries)),

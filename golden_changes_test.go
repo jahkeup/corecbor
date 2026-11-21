@@ -50,6 +50,23 @@ var goldenChanges = map[string]string{
 	"root/diag-indicators/text-invalid-utf8":  "proposal 021 D13: invalid UTF-8 text rendered as annotated bytes",
 	"root/diag-compact/text-invalid-utf8":     "proposal 021 D13: invalid UTF-8 text rendered as annotated bytes",
 
+	"root/encode/permissive/simple-24":         "proposal 021 D14: simple values 24-31 are not well-formed (RFC 8949 §3.3); ErrReservedSimple",
+	"root/encode/core-deterministic/simple-24": "proposal 021 D14: simple values 24-31 are not well-formed (RFC 8949 §3.3); ErrReservedSimple",
+	"root/encode/canonical/simple-24":          "proposal 021 D14: simple values 24-31 are not well-formed (RFC 8949 §3.3); ErrReservedSimple",
+	"root/encode/ctap2/simple-24":              "proposal 021 D14: simple values 24-31 are not well-formed (RFC 8949 §3.3); ErrReservedSimple",
+
+	"root/encode/core-deterministic/map-duplicate-key": "proposal 021 D15: deterministic modes reject duplicate map keys (RFC 8949 §5.6)",
+	"root/encode/canonical/map-duplicate-key":          "proposal 021 D15: deterministic modes reject duplicate map keys (RFC 8949 §5.6)",
+	"root/encode/ctap2/map-duplicate-key":              "proposal 021 D15: deterministic modes reject duplicate map keys (RFC 8949 §5.6)",
+
+	"root/decode/forgiving/break-outside": "proposal 021 D16: a stray break is ErrUnexpectedBreak, not ErrTruncated",
+	"root/decode/strict/break-outside":    "proposal 021 D16: a stray break is ErrUnexpectedBreak, not ErrTruncated",
+	"root/diag/break-outside":             "proposal 021 D16: a stray break is ErrUnexpectedBreak, not ErrTruncated",
+	"root/diag-indicators/break-outside":  "proposal 021 D16: a stray break is ErrUnexpectedBreak, not ErrTruncated",
+	"root/diag-compact/break-outside":     "proposal 021 D16: a stray break is ErrUnexpectedBreak, not ErrTruncated",
+	"root/sequence/decode-bad-tail":       "proposal 021 D16: a stray break in a sequence is ErrUnexpectedBreak, not ErrTruncated",
+	"root/stream/iterator":                "proposal 021 D16: a stray break ends Stream with an error instead of as a clean end",
+
 	// Proposal 022 — raw byte preservation.
 	"root/unmarshal/rawmessage-unsorted-map": "proposal 022: RawMessage receives the original bytes",
 }

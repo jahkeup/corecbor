@@ -56,6 +56,10 @@ type SortMode int
 const (
 	SortBytewiseLex SortMode = iota
 	SortLengthFirst
+	// SortNone keeps map entries in insertion order while the other
+	// deterministic rules (shortest floats, bignum normalization) still
+	// apply. Used by the Experimental ModePreferredPlus.
+	SortNone
 )
 
 type FloatMode int
@@ -74,6 +78,14 @@ type EncodeOpts struct {
 	AllowInvalidUTF8     bool
 	SkipUTF8Validation   bool
 	SortCache            *SortStateCache
+
+	// LegacyBignumPassthrough emits tag 2/3 contents as supplied in
+	// deterministic modes, as v0.2.2 did, instead of stripping leading
+	// zeros and reducing values that fit major type 0/1 (RFC 8949
+	// §3.4.3).
+	//
+	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
+	LegacyBignumPassthrough bool
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
@@ -150,6 +162,10 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 		if inner.Kind == cbor.KindInvalid {
 			return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
 		}
+		if (v.Num == cbor.TagUnsignedBignum || v.Num == cbor.TagNegativeBignum) &&
+			inner.Kind == cbor.KindBytes && opts.Deterministic && !opts.LegacyBignumPassthrough {
+			return appendPreferredBignum(dst, v.Num, inner.Bstr), nil
+		}
 		dst = wire.AppendHead(dst, wire.MajorTag, v.Num)
 		return encode(dst, inner, opts)
 	case cbor.KindBool:
@@ -195,6 +211,32 @@ func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
 	return append(dst, v.Bstr...), nil
 }
 
+// appendPreferredBignum writes tag 2/3 content in RFC 8949 §3.4.3
+// preferred serialization: leading zero bytes dropped, and a value that
+// fits 64 bits written as major type 0 (tag 2) or 1 (tag 3).
+func appendPreferredBignum(dst []byte, tag uint64, b []byte) []byte {
+	for len(b) > 0 && b[0] == 0 {
+		b = b[1:]
+	}
+	if len(b) <= 8 {
+		var n uint64
+		for _, c := range b {
+			n = n<<8 | uint64(c)
+		}
+		if tag == cbor.TagUnsignedBignum {
+			return wire.AppendHead(dst, wire.MajorUint, n)
+		}
+		return wire.AppendHead(dst, wire.MajorNegInt, n)
+	}
+	dst = wire.AppendHead(dst, wire.MajorTag, tag)
+	dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(b)))
+	return append(dst, b...)
+}
+
+// canonicalNaN64 is the binary64 quiet NaN CTAP2 (FloatForce64) emits
+// for every NaN, the double-width form of f97e00 (spec §2.2).
+const canonicalNaN64 = 0x7ff8000000000000
+
 func encodeFloat32(dst []byte, val float32, opts *EncodeOpts) ([]byte, error) {
 	f := float64(val)
 	if !opts.AllowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
@@ -202,6 +244,9 @@ func encodeFloat32(dst []byte, val float32, opts *EncodeOpts) ([]byte, error) {
 	}
 	switch opts.FloatMode {
 	case FloatForce64:
+		if math.IsNaN(f) {
+			return wire.AppendFloat64(dst, math.Float64frombits(canonicalNaN64)), nil
+		}
 		return wire.AppendFloat64(dst, f), nil
 	case FloatShortest:
 		if opts.Deterministic {
@@ -220,6 +265,9 @@ func encodeFloat64(dst []byte, val float64, opts *EncodeOpts) ([]byte, error) {
 	}
 	switch opts.FloatMode {
 	case FloatForce64:
+		if math.IsNaN(f) {
+			return wire.AppendFloat64(dst, math.Float64frombits(canonicalNaN64)), nil
+		}
 		return wire.AppendFloat64(dst, f), nil
 	case FloatShortest:
 		if opts.Deterministic {
@@ -243,7 +291,7 @@ func appendShortestFloat(dst []byte, f float64) []byte {
 
 func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
-	if !opts.Deterministic || len(m) <= 1 {
+	if !opts.Deterministic || len(m) <= 1 || opts.SortMode == SortNone {
 		var err error
 		for i := range m {
 			key := &m[i].Key

@@ -110,4 +110,15 @@ var (
 	// data item was expected, outside an indefinite-length item
 	// (RFC 8949 §3.2.1).
 	ErrUnexpectedBreak = errors.New("cbor: unexpected break stop code")
+
+	// ErrNotPreferred indicates input that violates preferred
+	// serialization (RFC 8949 §4.1, §3.4.3) in a checking decoder.
+	// Where a per-knob sentinel also applies (ErrNonShortest,
+	// ErrIndefiniteLength) the error wraps both.
+	ErrNotPreferred = errors.New("cbor: input not in preferred serialization")
+
+	// ErrInvalidOption indicates decoder or encoder options that
+	// contradict each other (for example KeepDuplicateMapKeys together
+	// with RejectDuplicateMapKeys).
+	ErrInvalidOption = errors.New("cbor: conflicting options")
 )

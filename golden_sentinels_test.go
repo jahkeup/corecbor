@@ -16,5 +16,11 @@ func init() {
 		rootSentinels,
 		g.Sentinel{Name: "ErrTypeMismatch", Err: cc.ErrTypeMismatch},
 		g.Sentinel{Name: "ErrInvalidKind", Err: cc.ErrInvalidKind},
+		g.Sentinel{Name: "ErrTimeRange", Err: cc.ErrTimeRange},
+		g.Sentinel{Name: "ErrNotDeterministic", Err: cc.ErrNotDeterministic},
+		g.Sentinel{Name: "ErrReservedSimple", Err: cc.ErrReservedSimple},
+		g.Sentinel{Name: "ErrUnexpectedBreak", Err: cc.ErrUnexpectedBreak},
+		g.Sentinel{Name: "ErrNotPreferred", Err: cc.ErrNotPreferred},
+		g.Sentinel{Name: "ErrInvalidOption", Err: cc.ErrInvalidOption},
 	)
 }

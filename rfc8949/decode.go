@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"sync"
 	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
@@ -16,18 +15,6 @@ import (
 )
 
 const dedupThreshold = 16
-
-type keyDedup struct {
-	seen map[uint64][]int
-}
-
-var keyDedupPool = sync.Pool{
-	New: func() any { return &keyDedup{seen: make(map[uint64][]int, 32)} },
-}
-
-func (kd *keyDedup) reset() {
-	clear(kd.seen)
-}
 
 func fnv1a(b []byte) uint64 {
 	h := uint64(14695981039346656037)
@@ -65,6 +52,39 @@ type DecodeOpts struct {
 	Interner *StringInterner
 	Arena    *Arena
 	ZeroCopy bool
+
+	// KeyIdentity selects when two map keys are the same key for
+	// duplicate handling (proposal 024). The zero value is
+	// KeyIdentityValue (RFC 8949 §5.6.1 data model).
+	KeyIdentity KeyIdentity
+	// KeepDuplicateMapKeys keeps every map entry in input order instead
+	// of resolving repeats last-write-wins. It conflicts with
+	// RejectDuplicateMapKeys (ErrInvalidOption).
+	KeepDuplicateMapKeys bool
+	// LegacyFloatKeyEquality compares float map keys as v0.2.2 did
+	// (same Kind and ==) instead of per RFC 8949 erratum 8589.
+	//
+	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
+	LegacyFloatKeyEquality bool
+
+	// Checking decoder (proposal 024). These run after a successful
+	// decode, over the item's bytes.
+	//
+	// RequirePreferred rejects input not in RFC 8949 §4.1 preferred
+	// serialization: non-shortest arguments, floats not in the shortest
+	// width that preserves the value (NaN payload included), indefinite
+	// lengths, and tag 2/3 bignums with leading zeros or that fit major
+	// type 0/1 (§3.4.3). Errors wrap ErrNotPreferred.
+	RequirePreferred bool
+	// RequireSortedMapKeys rejects maps whose keys are not in strictly
+	// increasing bytewise-lexicographic order of their encodings (RFC
+	// 8949 §4.2.1), which also rejects duplicates. Errors wrap
+	// ErrNotDeterministic.
+	RequireSortedMapKeys bool
+	// RequireCanonicalNaN rejects any NaN other than f97e00
+	// (draft-ietf-cbor-serialization-13 §4; Experimental). Errors wrap
+	// ErrNotPreferred.
+	RequireCanonicalNaN bool
 
 	// reserve is the number of input bytes that enclosing containers
 	// still need for their own pending items. A nested container may
@@ -136,9 +156,17 @@ func (o DecodeOpts) maxBytes() int {
 }
 
 func Decode(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
+	if opts.KeepDuplicateMapKeys && opts.RejectDuplicateMapKeys {
+		return cbor.Value{}, 0, decodeErrDetail(cbor.ErrInvalidOption, 0, ": KeepDuplicateMapKeys with RejectDuplicateMapKeys")
+	}
 	v, n, err := decodeValue(src, 0, 0, opts, true)
 	if err != nil && opts.ErrorPath {
 		err = withPath(err, "$")
+	}
+	if err == nil && (opts.RequirePreferred || opts.RequireSortedMapKeys || opts.RequireCanonicalNaN) {
+		if err := checkSerialization(src[:n], opts); err != nil {
+			return cbor.Value{}, 0, err
+		}
 	}
 	return v, n, err
 }
@@ -627,12 +655,8 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 
-	var dedup *keyDedup
-	if count > dedupThreshold {
-		dedup = keyDedupPool.Get().(*keyDedup)
-		dedup.reset()
-		defer keyDedupPool.Put(dedup)
-	}
+	ks := getKeySet(count, &opts)
+	defer putKeySet(ks)
 
 	if err := opts.Budget.charge(count*32, off); err != nil {
 		return cbor.Value{}, off, err
@@ -699,7 +723,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 			return cbor.Value{}, next, keyPath(err, opts, k)
 		}
 		pos = next
-		m, err = mapInsert(m, k, v, keyOff, encodedKey, dedup, opts)
+		m, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
 		if err != nil {
 			return cbor.Value{}, keyOff, err
 		}
@@ -712,6 +736,9 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
 	var m []cbor.MapEntry
+	// Indefinite maps keep the v0.2 linear scan for value identity.
+	ks := getKeySet(0, &opts)
+	defer putKeySet(ks)
 	pos := off
 	for {
 		if pos >= len(src) {
@@ -747,90 +774,10 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 			return cbor.Value{}, next, keyPath(err, opts, k)
 		}
 		pos = next
-		m, err = mapInsert(m, k, v, keyOff, encodedKey, nil, opts)
+		m, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
 		if err != nil {
 			return cbor.Value{}, keyOff, err
 		}
-	}
-}
-
-func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []byte, dedup *keyDedup, opts DecodeOpts) ([]cbor.MapEntry, error) {
-	if opts.RejectDuplicateMapKeys {
-		if dedup != nil {
-			h := fnv1a(encodedKey)
-			for _, idx := range dedup.seen[h] {
-				if valuesEqual(m[idx].Key, key) {
-					return m, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
-				}
-			}
-			dedup.seen[h] = append(dedup.seen[h], len(m))
-		} else {
-			for _, entry := range m {
-				if valuesEqual(entry.Key, key) {
-					return m, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
-				}
-			}
-		}
-		m = append(m, cbor.MapEntry{Key: key, Value: val})
-		return m, nil
-	}
-	if dedup != nil {
-		h := fnv1a(encodedKey)
-		for _, idx := range dedup.seen[h] {
-			if valuesEqual(m[idx].Key, key) {
-				m[idx].Value = val
-				return m, nil
-			}
-		}
-		dedup.seen[h] = append(dedup.seen[h], len(m))
-	} else {
-		for i, entry := range m {
-			if valuesEqual(entry.Key, key) {
-				m[i].Value = val
-				return m, nil
-			}
-		}
-	}
-	m = append(m, cbor.MapEntry{Key: key, Value: val})
-	return m, nil
-}
-
-func valuesEqual(a, b cbor.Value) bool {
-	if a.Kind != b.Kind {
-		return false
-	}
-	switch a.Kind {
-	case cbor.KindUint:
-		return a.UintVal() == b.UintVal()
-	case cbor.KindNegInt:
-		return a.NegIntVal() == b.NegIntVal()
-	case cbor.KindBytes:
-		ab, bb := a.BytesVal(), b.BytesVal()
-		if len(ab) != len(bb) {
-			return false
-		}
-		for i := range ab {
-			if ab[i] != bb[i] {
-				return false
-			}
-		}
-		return true
-	case cbor.KindText:
-		return a.TextVal() == b.TextVal()
-	case cbor.KindBool:
-		return a.BoolVal() == b.BoolVal()
-	case cbor.KindNull:
-		return true
-	case cbor.KindUndefined:
-		return true
-	case cbor.KindSimple:
-		return a.SimpleVal() == b.SimpleVal()
-	case cbor.KindFloat32:
-		return a.Float32Val() == b.Float32Val()
-	case cbor.KindFloat64:
-		return a.Float64Val() == b.Float64Val()
-	default:
-		return false
 	}
 }
 

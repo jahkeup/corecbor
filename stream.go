@@ -215,7 +215,9 @@ func (s *StreamEncoder) endCapture() {
 // Stream returns a new StreamEncoder that writes to w.
 func (e *Encoder) Stream(w io.Writer) *StreamEncoder {
 	opts := e.encodeOpts()
-	return &StreamEncoder{w: w, out: w, enc: e, deterministic: opts.Deterministic, sortMode: opts.SortMode}
+	// Key order is verified only for modes that sort map keys.
+	sorted := opts.Deterministic && opts.SortMode != rfc8949.SortNone
+	return &StreamEncoder{w: w, out: w, enc: e, deterministic: sorted, sortMode: opts.SortMode}
 }
 
 // BeginArray starts a CBOR array. Pass n >= 0 for a definite-length array,

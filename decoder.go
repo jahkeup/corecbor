@@ -89,6 +89,88 @@ func RejectNullMapKeys() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectNullMapKeys = true }
 }
 
+// KeyIdentity selects when two map keys are the same key for duplicate
+// handling: KeyIdentityValue (RFC 8949 §5.6.1 data model, the default)
+// or KeyIdentityEncoded (identical encoded bytes).
+type KeyIdentity = rfc8949.KeyIdentity
+
+const (
+	// KeyIdentityValue compares keys in the CBOR data model (RFC 8949
+	// §5.6.1 + erratum 8589): 01 and 1800 are the same key, as are
+	// f93c00 and fa3f800000; integer 1 and float 1.0 are not. Default.
+	KeyIdentityValue = rfc8949.KeyIdentityValue
+	// KeyIdentityEncoded treats keys as the same only when their encoded
+	// bytes are identical: 01 and 1800 are different keys.
+	KeyIdentityEncoded = rfc8949.KeyIdentityEncoded
+)
+
+// WithMapKeyIdentity selects key identity for duplicate detection.
+// It applies to every duplicate policy: last-write-wins (default),
+// RejectDuplicateMapKeys, and KeepDuplicateMapKeys (which keeps all).
+// Every map size uses the same rule.
+func WithMapKeyIdentity(k KeyIdentity) DecoderOption {
+	return func(c *decodeConfig) { c.opts.KeyIdentity = k }
+}
+
+// KeepDuplicateMapKeys keeps every map entry, in input order, instead
+// of resolving repeated keys last-write-wins. Use a Value or
+// []MapEntry target to see them: Unmarshal into a Go map still assigns
+// the last one last. Combining it with RejectDuplicateMapKeys makes
+// every decode fail with ErrInvalidOption.
+func KeepDuplicateMapKeys() DecoderOption {
+	return func(c *decodeConfig) { c.opts.KeepDuplicateMapKeys = true }
+}
+
+// WithLegacyFloatKeyEquality compares float map keys as v0.2.2 did
+// (same kind and ==, so NaN keys never repeat and 1.0 at different
+// widths are different keys) instead of per RFC 8949 §5.6.1 and
+// erratum 8589.
+//
+// Deprecated: v0.2 compatibility only (proposal 024); removed no
+// earlier than v0.32.0.
+func WithLegacyFloatKeyEquality() DecoderOption {
+	return func(c *decodeConfig) { c.opts.LegacyFloatKeyEquality = true }
+}
+
+// CompatV02Decoding applies every decoder selector needed to reproduce
+// v0.2.x results: currently WithLegacyFloatKeyEquality (proposal 034).
+//
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+func CompatV02Decoding() DecoderOption {
+	return func(c *decodeConfig) { c.opts.LegacyFloatKeyEquality = true }
+}
+
+// RequireDeterministic rejects input that is not RFC 8949 §4.2.1 Core
+// Deterministic: non-preferred serialization (§4.1, §3.4.3: shortest
+// arguments and float widths, definite lengths, preferred bignums) and
+// maps whose keys are not in strictly increasing bytewise-lex order of
+// their encodings (which also rejects duplicates). It is based on the
+// published RFC only; combine with RequirePreferredPlus for the draft's
+// additional NaN rule. Errors wrap ErrNotDeterministic, or
+// ErrNotPreferred for serialization violations (together with
+// ErrNonShortest or ErrIndefiniteLength where they apply).
+func RequireDeterministic() DecoderOption {
+	return func(c *decodeConfig) {
+		c.opts.RequirePreferred = true
+		c.opts.RequireSortedMapKeys = true
+	}
+}
+
+// RequirePreferredPlus is Experimental: it implements the checking
+// decoder of draft-ietf-cbor-serialization-13 (§4, Appendix G) and is
+// provisional until the draft is published (proposal 034, Draft class).
+// It rejects input that is not preferred-plus serialized: non-shortest
+// arguments (including float width: a value encodable exactly in a
+// narrower float must use it), indefinite lengths, NaN other than
+// f97e00, and bignums with leading zeros or that fit major 0/1. Errors
+// wrap ErrNotPreferred.
+func RequirePreferredPlus() DecoderOption {
+	return func(c *decodeConfig) {
+		c.opts.RequirePreferred = true
+		c.opts.RequireCanonicalNaN = true
+	}
+}
+
 func WithMaxNestingDepth(n int) DecoderOption {
 	return func(c *decodeConfig) { c.opts.MaxNestingDepth = n }
 }
@@ -183,6 +265,15 @@ func StrictDecoder(opts ...DecoderOption) *Decoder {
 		d.arena = rfc8949.NewArena(256, 64)
 	}
 	return d
+}
+
+// DeterministicDecoder returns StrictDecoder plus RequireDeterministic:
+// a decoder that accepts only RFC 8949 §4.2.1 Core Deterministic input.
+// Use it where re-encoding must reproduce the received bytes, such as
+// inputs bound into signatures or AAD. StrictDecoder itself keeps its
+// documented knob list and still accepts unsorted maps.
+func DeterministicDecoder(opts ...DecoderOption) *Decoder {
+	return StrictDecoder(append([]DecoderOption{RequireDeterministic()}, opts...)...)
 }
 
 // Cursor is a forward-only reader over a CBOR byte slice that reads

@@ -25,7 +25,10 @@ func DecodeFloat16(bits uint16) float64 {
 		if mant == 0 {
 			val = math.Inf(1)
 		} else {
-			val = math.NaN()
+			// Keep the sign and payload: zero-extend the 10-bit
+			// significand into binary64 (RFC 8949 §5.6.1 / erratum
+			// 8589 compare NaNs by sign and significand).
+			return math.Float64frombits(uint64(bits>>15)<<63 | 0x7ff<<52 | uint64(mant)<<42)
 		}
 	default:
 		val = math.Ldexp(float64(mant)+1024, exp-25)

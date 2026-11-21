@@ -93,12 +93,22 @@ var (
 	ErrUnexpectedBreak     = cbor.ErrUnexpectedBreak
 	ErrTypeMismatch        = cbor.ErrTypeMismatch
 	ErrInvalidKind         = cbor.ErrInvalidKind
+	ErrNotPreferred        = cbor.ErrNotPreferred
+	ErrInvalidOption       = cbor.ErrInvalidOption
 )
 
-func AsTime(t Value) (time.Time, error)    { return cbor.AsTime(t) }
-func TimeTo(t time.Time) Value             { return cbor.TimeTo(t) }
-func TimeToFloat(t time.Time) Value        { return cbor.TimeToFloat(t) }
-func TimeToString(t time.Time) Value       { return cbor.TimeToString(t) }
-func AsBigInt(t Value) (*big.Int, error)   { return cbor.AsBigInt(t) }
-func BigIntTo(n *big.Int) Value            { return cbor.BigIntTo(n) }
-func AsNestedCBOR(t Value) ([]byte, error) { return cbor.AsNestedCBOR(t) }
+func AsTime(t Value) (time.Time, error)  { return cbor.AsTime(t) }
+func TimeTo(t time.Time) Value           { return cbor.TimeTo(t) }
+func TimeToFloat(t time.Time) Value      { return cbor.TimeToFloat(t) }
+func TimeToString(t time.Time) Value     { return cbor.TimeToString(t) }
+func AsBigInt(t Value) (*big.Int, error) { return cbor.AsBigInt(t) }
+func BigIntTo(n *big.Int) Value          { return cbor.BigIntTo(n) }
+
+// BigIntToPreferred returns the RFC 8949 §3.4.3 preferred form of n
+// (an integer when it fits 64 bits); see cbor.BigIntToPreferred.
+func BigIntToPreferred(n *big.Int) Value { return cbor.BigIntToPreferred(n) }
+
+// AsBigIntAny accepts an integer as Uint/NegInt or tag 2/3; see
+// cbor.AsBigIntAny.
+func AsBigIntAny(v Value) (*big.Int, error) { return cbor.AsBigIntAny(v) }
+func AsNestedCBOR(t Value) ([]byte, error)  { return cbor.AsNestedCBOR(t) }

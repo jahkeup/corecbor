@@ -18,11 +18,24 @@ const (
 	ModeCoreDeterministic Mode = iota
 	ModeCanonical         Mode = iota
 	ModeCTAP2             Mode = iota
+
+	// ModePreferredPlus is Experimental: it implements the preferred-plus
+	// serialization of draft-ietf-cbor-serialization-13 §4 (shortest
+	// arguments and floats, NaN as f97e00, preferred bignums, definite
+	// lengths) while keeping map entries in insertion order. The name and
+	// rules are provisional until the draft is published as an RFC
+	// (proposal 034, Draft class). Go maps marshaled in this mode follow
+	// Go's map iteration order and are therefore not deterministic.
+	ModePreferredPlus Mode = iota
 )
+
+// maxMode is the highest valid Mode.
+const maxMode = ModePreferredPlus
 
 type encodeConfig struct {
 	allowNonFiniteFloats bool
 	allowInvalidUTF8     bool
+	legacyBignum         bool
 	bufferPool           *sync.Pool
 }
 
@@ -34,6 +47,26 @@ func AllowNonFiniteFloats() Option {
 
 func AllowInvalidUTF8() Option {
 	return func(c *encodeConfig) { c.allowInvalidUTF8 = true }
+}
+
+// WithLegacyBignumPassthrough makes deterministic modes emit tag 2/3
+// bignum contents as supplied, as v0.2.2 did. By default deterministic
+// modes write the RFC 8949 §3.4.3 preferred form: leading zeros
+// stripped, and values that fit 64 bits as plain integers.
+//
+// Deprecated: v0.2 compatibility only (proposal 024); removed no
+// earlier than v0.32.0.
+func WithLegacyBignumPassthrough() Option {
+	return func(c *encodeConfig) { c.legacyBignum = true }
+}
+
+// CompatV02 applies every encoder selector needed to reproduce v0.2.x
+// output: currently WithLegacyBignumPassthrough. It exists to unblock
+// upgrades, not as a long-term mode (proposal 034).
+//
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+func CompatV02() Option {
+	return func(c *encodeConfig) { c.legacyBignum = true }
 }
 
 // WithBufferPool makes Encode build output in a scratch buffer taken
@@ -75,7 +108,7 @@ func NewShared(mode Mode, opts ...Option) *Encoder {
 }
 
 func (e *Encoder) Encode(dst []byte, v cbor.Value) ([]byte, error) {
-	if e.mode < ModePermissive || e.mode > ModeCTAP2 {
+	if e.mode < ModePermissive || e.mode > maxMode {
 		return dst, fmt.Errorf("%w: %d", cbor.ErrInvalidMode, e.mode)
 	}
 	opts := e.encodeOpts()
@@ -104,6 +137,8 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 	opts := rfc8949.EncodeOpts{
 		AllowNonFiniteFloats: e.cfg.allowNonFiniteFloats,
 		AllowInvalidUTF8:     e.cfg.allowInvalidUTF8,
+
+		LegacyBignumPassthrough: e.cfg.legacyBignum, //nolint:staticcheck // plumbing for the deprecated WithLegacyBignumPassthrough selector
 	}
 	if !e.shared {
 		opts.SortCache = &e.sortCache
@@ -123,6 +158,10 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 		opts.Deterministic = true
 		opts.SortMode = rfc8949.SortLengthFirst
 		opts.FloatMode = rfc8949.FloatForce64
+	case ModePreferredPlus:
+		opts.Deterministic = true
+		opts.SortMode = rfc8949.SortNone
+		opts.FloatMode = rfc8949.FloatShortest
 	}
 	return opts
 }

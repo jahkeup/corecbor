@@ -395,11 +395,14 @@ func decodeTime(val cbor.Value, target reflect.Value) error {
 	return nil
 }
 
+// decodeBigInt accepts a tag 2/3 bignum or, since deterministic modes
+// write small bignums as plain integers (RFC 8949 §3.4.3, proposal 024),
+// a major type 0/1 integer.
 func decodeBigInt(val cbor.Value, target reflect.Value) error {
-	if val.Kind != cbor.KindTag {
-		return typeMismatch(val.Kind, "non-Tag", bigIntType)
+	if val.Kind != cbor.KindTag && val.Kind != cbor.KindUint && val.Kind != cbor.KindNegInt {
+		return typeMismatch(val.Kind, "non-integer", bigIntType)
 	}
-	bi, err := cbor.AsBigInt(val)
+	bi, err := cbor.AsBigIntAny(val)
 	if err != nil {
 		return err
 	}
@@ -408,10 +411,10 @@ func decodeBigInt(val cbor.Value, target reflect.Value) error {
 }
 
 func decodeBigIntPtr(val cbor.Value, target reflect.Value) error {
-	if val.Kind != cbor.KindTag {
-		return typeMismatch(val.Kind, "non-Tag", bigIntPtrType)
+	if val.Kind != cbor.KindTag && val.Kind != cbor.KindUint && val.Kind != cbor.KindNegInt {
+		return typeMismatch(val.Kind, "non-integer", bigIntPtrType)
 	}
-	bi, err := cbor.AsBigInt(val)
+	bi, err := cbor.AsBigIntAny(val)
 	if err != nil {
 		return err
 	}

@@ -132,6 +132,43 @@ func BigIntTo(n *big.Int) Value {
 	return MakeTag(TagNegativeBignum, Bytes(v.Bytes()))
 }
 
+// BigIntToPreferred returns the RFC 8949 §3.4.3 preferred
+// representation of n: Uint or NegInt when n fits in 64 bits,
+// otherwise Tag(2|3, Bytes) with no leading zeros. A nil n returns Null.
+func BigIntToPreferred(n *big.Int) Value {
+	if n == nil {
+		return Null()
+	}
+	if n.Sign() >= 0 {
+		if n.IsUint64() {
+			return Uint(n.Uint64())
+		}
+		return MakeTag(TagUnsignedBignum, Bytes(n.Bytes()))
+	}
+	v := new(big.Int).Abs(n)
+	v.Sub(v, big.NewInt(1))
+	if v.IsUint64() {
+		return NegInt(v.Uint64())
+	}
+	return MakeTag(TagNegativeBignum, Bytes(v.Bytes()))
+}
+
+// AsBigIntAny interprets an integer in either form RFC 8949 allows:
+// major type 0/1 (Uint, NegInt) or a tag 2/3 bignum. AsBigInt accepts
+// only the tag form.
+func AsBigIntAny(v Value) (*big.Int, error) {
+	switch v.Kind {
+	case KindUint:
+		return new(big.Int).SetUint64(v.UintVal()), nil
+	case KindNegInt:
+		n := new(big.Int).SetUint64(v.NegIntVal())
+		n.Add(n, big.NewInt(1))
+		return n.Neg(n), nil
+	default:
+		return AsBigInt(v)
+	}
+}
+
 func AsNestedCBOR(t Value) ([]byte, error) {
 	if t.Kind != KindTag {
 		return nil, mismatchf("cbor: expected Tag value, got kind %d", t.Kind)

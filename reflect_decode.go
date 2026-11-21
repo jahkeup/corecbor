@@ -6,21 +6,39 @@ package corecbor
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"strconv"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/rfc8949"
 )
 
-func unmarshalValue(val cbor.Value, v any) error {
+// unmarshalState carries per-call reflection settings.
+type unmarshalState struct {
+	// clone is set when decoded Values may alias decoder-owned storage
+	// (an arena) or the source buffer (zero-copy). Anything stored into
+	// the caller's target as a cbor.Value is then deep-copied.
+	clone bool
+}
+
+func unmarshalValue(val cbor.Value, v any, clone bool) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return ErrNotPointer
 	}
-	return valueToGo(val, rv.Elem())
+	u := unmarshalState{clone: clone}
+	return u.valueToGo(val, rv.Elem())
 }
 
-func valueToGo(val cbor.Value, target reflect.Value) error {
+func (u unmarshalState) own(v cbor.Value) cbor.Value {
+	if u.clone {
+		return v.Clone()
+	}
+	return v
+}
+
+func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	if !target.CanSet() {
 		return fmt.Errorf("cbor: cannot set target of type %s", target.Type())
 	}
@@ -33,7 +51,7 @@ func valueToGo(val cbor.Value, target reflect.Value) error {
 		if target.IsNil() {
 			target.Set(reflect.New(target.Type().Elem()))
 		}
-		return valueToGo(val, target.Elem())
+		return u.valueToGo(val, target.Elem())
 	}
 
 	if target.CanAddr() {
@@ -53,18 +71,16 @@ func valueToGo(val cbor.Value, target reflect.Value) error {
 	}
 
 	if target.Type() == valueType {
-		target.Set(reflect.ValueOf(val))
+		target.Set(reflect.ValueOf(u.own(val)))
 		return nil
 	}
 
 	if target.Kind() == reflect.Interface {
-		goVal := valueToAny(val)
-		if goVal == nil {
-			target.Set(reflect.Zero(target.Type()))
-		} else {
-			target.Set(reflect.ValueOf(goVal))
+		goVal, err := u.valueToAny(val)
+		if err != nil {
+			return err
 		}
-		return nil
+		return setInterface(goVal, target)
 	}
 
 	switch val.Kind {
@@ -95,11 +111,11 @@ func valueToGo(val cbor.Value, target reflect.Value) error {
 	case cbor.KindFloat64:
 		return setFloat(val.Float64Val(), target)
 	case cbor.KindArray:
-		return decodeArray(val.Array(), target)
+		return u.decodeArray(val.Array(), target)
 	case cbor.KindMap:
-		return decodeMapReflect(val.Map(), target)
+		return u.decodeMapReflect(val.Map(), target)
 	case cbor.KindTag:
-		return decodeTagReflect(val, target)
+		return u.decodeTagReflect(val, target)
 	case cbor.KindNull:
 		target.SetZero()
 		return nil
@@ -109,6 +125,21 @@ func valueToGo(val cbor.Value, target reflect.Value) error {
 	default:
 		return fmt.Errorf("cbor: unsupported Value kind %d for target %s", val.Kind, target.Type())
 	}
+}
+
+// setInterface stores goVal in an interface-typed target, failing
+// instead of panicking when goVal's type doesn't implement it.
+func setInterface(goVal any, target reflect.Value) error {
+	if goVal == nil {
+		target.Set(reflect.Zero(target.Type()))
+		return nil
+	}
+	rv := reflect.ValueOf(goVal)
+	if !rv.Type().AssignableTo(target.Type()) {
+		return typeMismatchf("cannot decode %s into Go type %s", rv.Type(), target.Type())
+	}
+	target.Set(rv)
+	return nil
 }
 
 func callUnmarshaler(u Unmarshaler, val cbor.Value) error {
@@ -207,7 +238,7 @@ func setFloat(f float64, target reflect.Value) error {
 	}
 }
 
-func decodeArray(arr []cbor.Value, target reflect.Value) error {
+func (u unmarshalState) decodeArray(arr []cbor.Value, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Slice:
 		if target.IsNil() || target.Cap() < len(arr) {
@@ -216,14 +247,14 @@ func decodeArray(arr []cbor.Value, target reflect.Value) error {
 			target.SetLen(len(arr))
 		}
 		for i, elem := range arr {
-			if err := valueToGo(elem, target.Index(i)); err != nil {
+			if err := u.valueToGo(elem, target.Index(i)); err != nil {
 				return err
 			}
 		}
 		return nil
 	case reflect.Array:
 		for i := range min(len(arr), target.Len()) {
-			if err := valueToGo(arr[i], target.Index(i)); err != nil {
+			if err := u.valueToGo(arr[i], target.Index(i)); err != nil {
 				return err
 			}
 		}
@@ -233,18 +264,18 @@ func decodeArray(arr []cbor.Value, target reflect.Value) error {
 	}
 }
 
-func decodeMapReflect(m []cbor.MapEntry, target reflect.Value) error {
+func (u unmarshalState) decodeMapReflect(m []cbor.MapEntry, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Map:
-		return decodeMapToMap(m, target)
+		return u.decodeMapToMap(m, target)
 	case reflect.Struct:
-		return decodeMapToStruct(m, target)
+		return u.decodeMapToStruct(m, target)
 	default:
 		return typeMismatch("Map", target.Type())
 	}
 }
 
-func decodeMapToMap(m []cbor.MapEntry, target reflect.Value) error {
+func (u unmarshalState) decodeMapToMap(m []cbor.MapEntry, target reflect.Value) error {
 	if target.IsNil() {
 		target.Set(reflect.MakeMapWithSize(target.Type(), len(m)))
 	}
@@ -253,11 +284,23 @@ func decodeMapToMap(m []cbor.MapEntry, target reflect.Value) error {
 
 	for _, entry := range m {
 		kv := reflect.New(keyType).Elem()
-		if err := valueToGo(entry.Key, kv); err != nil {
+		if keyType.Kind() == reflect.Interface {
+			// Interface-typed keys need a hashable dynamic value.
+			k, err := u.keyToAny(entry.Key)
+			if err != nil {
+				return err
+			}
+			if err := setInterface(k, kv); err != nil {
+				return err
+			}
+		} else if err := u.valueToGo(entry.Key, kv); err != nil {
 			return err
 		}
+		if !kv.Comparable() {
+			return typeMismatchf("map key of type %s is not comparable", kv.Type())
+		}
 		vv := reflect.New(valType).Elem()
-		if err := valueToGo(entry.Value, vv); err != nil {
+		if err := u.valueToGo(entry.Value, vv); err != nil {
 			return err
 		}
 		target.SetMapIndex(kv, vv)
@@ -265,46 +308,45 @@ func decodeMapToMap(m []cbor.MapEntry, target reflect.Value) error {
 	return nil
 }
 
-func decodeMapToStruct(m []cbor.MapEntry, target reflect.Value) error {
+func (u unmarshalState) decodeMapToStruct(m []cbor.MapEntry, target reflect.Value) error {
 	fields := getStructFields(target.Type())
-	fieldMap := make(map[string]fieldInfo, len(fields))
-	intKeyMap := make(map[int64]fieldInfo)
-	for _, fi := range fields {
-		if fi.hasInt {
-			intKeyMap[fi.intKey] = fi
-		} else {
-			fieldMap[fi.name] = fi
-		}
-	}
 
 	for _, entry := range m {
-		var fi fieldInfo
-		var found bool
+		idx, found := -1, false
 
 		switch entry.Key.Kind {
 		case cbor.KindText:
 			k := entry.Key.TextVal()
-			fi, found = fieldMap[k]
+			idx, found = fields.byName[k]
 			if !found {
 				if n, err := strconv.ParseInt(k, 10, 64); err == nil {
-					fi, found = intKeyMap[n]
+					idx, found = fields.byInt[n]
 				}
 			}
 		case cbor.KindUint:
-			fi, found = intKeyMap[int64(entry.Key.UintVal())]
+			// Keys beyond int64 can't name an integer-keyed field; they
+			// must not wrap around onto a negative one.
+			if entry.Key.UintVal() <= math.MaxInt64 {
+				idx, found = fields.byInt[int64(entry.Key.UintVal())]
+			}
 			if !found {
-				fi, found = fieldMap[strconv.FormatUint(entry.Key.UintVal(), 10)]
+				idx, found = fields.byName[strconv.FormatUint(entry.Key.UintVal(), 10)]
 			}
 		case cbor.KindNegInt:
-			neg := -1 - int64(entry.Key.NegIntVal())
-			fi, found = intKeyMap[neg]
+			if entry.Key.NegIntVal() <= math.MaxInt64 {
+				idx, found = fields.byInt[-1-int64(entry.Key.NegIntVal())]
+			}
 		}
 
 		if !found {
 			continue
 		}
 
-		fv := target.Field(fi.index)
+		fi := &fields.list[idx]
+		fv, err := fieldByIndexAlloc(target, fi.index)
+		if err != nil {
+			return err
+		}
 		val := entry.Value
 		if fi.hasTag {
 			if val.Kind != cbor.KindTag {
@@ -315,14 +357,14 @@ func decodeMapToStruct(m []cbor.MapEntry, target reflect.Value) error {
 			}
 			val = val.TagInner()
 		}
-		if err := valueToGo(val, fv); err != nil {
+		if err := u.valueToGo(val, fv); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func decodeTagReflect(t cbor.Value, target reflect.Value) error {
+func (u unmarshalState) decodeTagReflect(t cbor.Value, target reflect.Value) error {
 	if target.Type() == timeType && (t.TagID() == cbor.TagEpochDateTime || t.TagID() == cbor.TagDateTimeString) {
 		return decodeTime(t, target)
 	}
@@ -332,7 +374,7 @@ func decodeTagReflect(t cbor.Value, target reflect.Value) error {
 	if target.Type() == bigIntPtrType && (t.TagID() == cbor.TagUnsignedBignum || t.TagID() == cbor.TagNegativeBignum) {
 		return decodeBigIntPtr(t, target)
 	}
-	return valueToGo(t.TagInner(), target)
+	return u.valueToGo(t.TagInner(), target)
 }
 
 func decodeTime(val cbor.Value, target reflect.Value) error {
@@ -371,32 +413,43 @@ func decodeBigIntPtr(val cbor.Value, target reflect.Value) error {
 	return nil
 }
 
-func valueToAny(val cbor.Value) any {
+// valueToAny converts val to the Go value stored in an interface
+// target. Negative integers below math.MinInt64 become *big.Int; tags
+// stay cbor.Value.
+func (u unmarshalState) valueToAny(val cbor.Value) (any, error) {
 	switch val.Kind {
 	case cbor.KindUint:
-		return val.UintVal()
+		return val.UintVal(), nil
 	case cbor.KindNegInt:
-		return -1 - int64(val.NegIntVal())
+		if val.NegIntVal() > math.MaxInt64 {
+			n := new(big.Int).SetUint64(val.NegIntVal())
+			return n.Neg(n.Add(n, big.NewInt(1))), nil
+		}
+		return -1 - int64(val.NegIntVal()), nil
 	case cbor.KindBool:
-		return val.BoolVal()
+		return val.BoolVal(), nil
 	case cbor.KindText:
-		return val.TextVal()
+		return val.TextVal(), nil
 	case cbor.KindBytes:
 		b := val.BytesVal()
 		cp := make([]byte, len(b))
 		copy(cp, b)
-		return cp
+		return cp, nil
 	case cbor.KindFloat32:
-		return float64(val.Float32Val())
+		return float64(val.Float32Val()), nil
 	case cbor.KindFloat64:
-		return val.Float64Val()
+		return val.Float64Val(), nil
 	case cbor.KindArray:
 		items := val.Array()
 		out := make([]any, len(items))
 		for i, elem := range items {
-			out[i] = valueToAny(elem)
+			v, err := u.valueToAny(elem)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = v
 		}
-		return out
+		return out, nil
 	case cbor.KindMap:
 		pairs := val.Map()
 		allText := true
@@ -409,28 +462,74 @@ func valueToAny(val cbor.Value) any {
 		if allText {
 			out := make(map[string]any, len(pairs))
 			for _, entry := range pairs {
-				out[entry.Key.TextVal()] = valueToAny(entry.Value)
+				v, err := u.valueToAny(entry.Value)
+				if err != nil {
+					return nil, err
+				}
+				out[entry.Key.TextVal()] = v
 			}
-			return out
+			return out, nil
 		}
 		out := make(map[any]any, len(pairs))
 		for _, entry := range pairs {
-			out[valueToAny(entry.Key)] = valueToAny(entry.Value)
+			k, err := u.keyToAny(entry.Key)
+			if err != nil {
+				return nil, err
+			}
+			v, err := u.valueToAny(entry.Value)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = v
 		}
-		return out
+		return out, nil
 	case cbor.KindTag:
-		return val
-	case cbor.KindNull:
-		return nil
-	case cbor.KindUndefined:
-		return nil
+		return u.own(val), nil
 	default:
-		return nil
+		// Null, Undefined and unassigned simple values.
+		return nil, nil
 	}
+}
+
+// keyEncodeOpts is the Core Deterministic encoding used for EncodedKey.
+var keyEncodeOpts = rfc8949.EncodeOpts{
+	Deterministic:        true,
+	SortMode:             rfc8949.SortBytewiseLex,
+	FloatMode:            rfc8949.FloatShortest,
+	AllowNonFiniteFloats: true,
+	AllowInvalidUTF8:     true,
+}
+
+// keyToAny converts a non-text map key to a value usable as a Go map
+// key. Kinds whose natural Go form isn't hashable (byte strings,
+// containers, tags) and negative integers below math.MinInt64 map to
+// cbor.ByteKey or cbor.EncodedKey; every other kind converts exactly as
+// valueToAny does.
+func (u unmarshalState) keyToAny(k cbor.Value) (any, error) {
+	switch k.Kind {
+	case cbor.KindBytes:
+		return cbor.ByteKey(k.BytesVal()), nil
+	case cbor.KindArray, cbor.KindMap, cbor.KindTag:
+	case cbor.KindNegInt:
+		if k.NegIntVal() <= math.MaxInt64 {
+			return u.valueToAny(k)
+		}
+	default:
+		return u.valueToAny(k)
+	}
+	enc, err := rfc8949.Encode(nil, k, keyEncodeOpts)
+	if err != nil {
+		return nil, fmt.Errorf("cbor: encoding map key for map[any]any: %w", err)
+	}
+	return cbor.EncodedKey(enc), nil
 }
 
 func typeMismatch(cborType string, goType reflect.Type) error {
 	return fmt.Errorf("cbor: cannot decode %s into Go type %s", cborType, goType)
+}
+
+func typeMismatchf(format string, args ...any) error {
+	return fmt.Errorf("cbor: "+format, args...)
 }
 
 func min(a, b int) int {

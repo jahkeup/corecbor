@@ -3,7 +3,10 @@
 
 package corecbor
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 // Marshaler is the interface implemented by types that can marshal
 // themselves into a valid CBOR encoding.
@@ -27,22 +30,34 @@ var ErrNotPointer = errors.New("cbor: unmarshal requires a pointer argument")
 // ErrUnsupportedType indicates a Go type that cannot be marshaled to CBOR.
 var ErrUnsupportedType = errors.New("cbor: unsupported type")
 
-// defaultEncoder is the package-level encoder for Marshal (CoreDeterministic).
-var defaultEncoder = New(ModeCoreDeterministic)
+// defaultEncoder is the package-level encoder for Marshal
+// (CoreDeterministic). It is shared across goroutines, so it must come
+// from NewShared.
+var defaultEncoder = NewShared(ModeCoreDeterministic)
 
-// defaultDecoder is the package-level decoder for Unmarshal (forgiving).
-var defaultDecoder = NewDecoder()
+// defaultDecoder serves package-level helpers that don't use the
+// internal arena (DecodeSequence). It has no per-call mutable state.
+var defaultDecoder = NewDecoder(WithoutInternalArena())
+
+// decoderPool hands each package-level Unmarshal call its own
+// arena-backed Decoder, so concurrent calls never share an arena.
+var decoderPool = sync.Pool{New: func() any { return NewDecoder() }}
 
 // Marshal encodes v into CBOR using CoreDeterministic mode.
 // It builds a Value tree from v via reflection, then encodes it.
+// Marshal is safe for concurrent use.
 func Marshal(v any) ([]byte, error) {
 	return defaultEncoder.Marshal(v)
 }
 
 // Unmarshal decodes CBOR data into v, which must be a non-nil pointer.
 // It uses a forgiving decoder (accepts all well-formed CBOR).
+// Unmarshal is safe for concurrent use, and everything it stores in v
+// is independent of data and of any decoder storage.
 func Unmarshal(data []byte, v any) error {
-	return defaultDecoder.Unmarshal(data, v)
+	d := decoderPool.Get().(*Decoder)
+	defer decoderPool.Put(d)
+	return d.Unmarshal(data, v)
 }
 
 // Marshal encodes v into CBOR using the encoder's mode settings.
@@ -61,5 +76,6 @@ func (d *Decoder) Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return err
 	}
-	return unmarshalValue(val, v)
+	clone := d.arena != nil || d.cfg.opts.Arena != nil || d.cfg.opts.ZeroCopy
+	return unmarshalValue(val, v, clone)
 }

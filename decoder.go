@@ -101,6 +101,12 @@ func WithoutInternalArena() DecoderOption {
 	return func(c *decodeConfig) { c.noInternalArena = true }
 }
 
+// Decoder decodes CBOR. A Decoder with its internal arena (the default)
+// is NOT safe for concurrent use, and the Values returned by Decode are
+// valid only until the next Decode on the same Decoder. Construct with
+// WithoutInternalArena() for a Decoder whose results outlive the call.
+// Decoder.Unmarshal always stores values independent of the arena, and
+// package-level Unmarshal is safe for concurrent use.
 type Decoder struct {
 	cfg   decodeConfig
 	arena *rfc8949.Arena // internal, auto-managed (nil when disabled)

@@ -70,4 +70,8 @@ var (
 	// ErrMemoryBudgetExceeded indicates cumulative decode allocations
 	// exceeded the configured memory budget.
 	ErrMemoryBudgetExceeded = errors.New("cbor: memory budget exceeded")
+
+	// ErrTimeRange indicates a tag 0/1 time value is outside the range
+	// representable by time.Time, or a float epoch is NaN or ±Inf.
+	ErrTimeRange = errors.New("cbor: time value out of range")
 )

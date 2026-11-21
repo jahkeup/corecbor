@@ -36,6 +36,9 @@ func AllowInvalidUTF8() Option {
 	return func(c *encodeConfig) { c.allowInvalidUTF8 = true }
 }
 
+// WithBufferPool makes Encode build output in a scratch buffer taken
+// from p, which should hold *[]byte values. A nil or mistyped value from
+// p is replaced with a fresh buffer instead of panicking.
 func WithBufferPool(p *sync.Pool) Option {
 	return func(c *encodeConfig) { c.bufferPool = p }
 }
@@ -48,7 +51,9 @@ type Encoder struct {
 }
 
 // New returns an Encoder with a goroutine-local sort cache. The returned
-// encoder is NOT safe for concurrent use from multiple goroutines.
+// encoder is NOT safe for concurrent use from multiple goroutines; use
+// NewShared for encoders shared across goroutines. Package-level
+// Marshal is safe for concurrent use.
 func New(mode Mode, opts ...Option) *Encoder {
 	cfg := encodeConfig{}
 	for _, o := range opts {
@@ -75,7 +80,11 @@ func (e *Encoder) Encode(dst []byte, v cbor.Value) ([]byte, error) {
 	}
 	opts := e.encodeOpts()
 	if e.cfg.bufferPool != nil {
-		bp := e.cfg.bufferPool.Get().(*[]byte)
+		bp, ok := e.cfg.bufferPool.Get().(*[]byte)
+		if !ok || bp == nil {
+			b := make([]byte, 0, 512)
+			bp = &b
+		}
 		buf := (*bp)[:0]
 		buf, err := rfc8949.Encode(buf, v, opts)
 		if err != nil {

@@ -72,9 +72,13 @@ surface).
 ### D1 — Concurrency contract
 
 - Construct `defaultEncoder` with `NewShared(ModeCoreDeterministic)`.
-- Construct `defaultDecoder` with `NewDecoder(WithoutInternalArena())`.
-  Package-level `Unmarshal` must be goroutine-safe, which matches the
-  contract callers already expect from `encoding/json`.
+- Package-level `Unmarshal` must be goroutine-safe, which matches the
+  contract callers already expect from `encoding/json`. *As
+  implemented:* each call takes an arena-backed `*Decoder` from a
+  `sync.Pool`, so concurrent calls never share an arena and the default
+  path keeps 020's arena performance. `defaultDecoder` (used by
+  `DecodeSequence`, which doesn't touch the arena) is built with
+  `WithoutInternalArena()`.
 - Add a godoc concurrency section to `Encoder` and `Decoder`:
 
 ```go
@@ -112,7 +116,8 @@ keys:
 | Uint / NegInt / Bool / Text / Float | as today |
 | Bytes | `string(bytes)` wrapped as `cbor.ByteKey` (new named string type) |
 | Array / Map / Tag | the key's Core Deterministic encoding, wrapped as `cbor.EncodedKey` (new named string type) |
-| Null / Undefined | `cbor.Value` (comparable once Items/Pairs are nil) |
+| Null / Undefined / simple | `nil`, unchanged from v0.2.2 (already hashable; `cbor.Value` isn't comparable because it holds slices) |
+| NegInt below `math.MinInt64` | `cbor.EncodedKey` (as a value it decodes to `*big.Int`, D7) |
 
 ```go
 // ByteKey is used as a Go map key when a CBOR map key is a byte string.
@@ -137,6 +142,11 @@ Replace `fieldInfo.index int` with `index []int` and read fields with
 2. Among fields at the same depth, a tagged field wins over an
    untagged one.
 3. Any remaining tie drops all the conflicting fields.
+
+A tag that only sets options (`cbor:",omitempty"`) keeps the default
+field name. v0.2.2 used the empty string as the key, contradicting
+proposal 008's tag table. An embedded struct with a name in its tag is
+a regular named field, not flattened (`encoding/json` rule).
 
 Embedded pointers to structs are supported. On encode, a nil embedded
 pointer omits its fields. On decode, it is allocated. Results are
@@ -451,3 +461,4 @@ the pool, which the D2 fix guarantees.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Add D10–D17 from v0.2.2 golden-vector capture; clarify D4 promotion rules | corecbor maintainers |
+| 2026-11-20 | Implementation notes: D1 decoder pool; D3 null/simple keys unchanged; D4 option-only tags keep the field name | corecbor maintainers |

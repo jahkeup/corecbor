@@ -5,6 +5,7 @@ package cbor
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 )
@@ -19,7 +20,10 @@ const (
 	TagSelfDescribe   uint64 = 55799
 )
 
-// AsTime interprets a Tag Value with ID 0 or 1 as a time.Time.
+// AsTime interprets a Tag Value with ID 0 or 1 as a time.Time. It
+// returns an error wrapping ErrTimeRange if the encoded instant is
+// outside the range representable by time.Time, or if a float epoch is
+// NaN or ±Inf.
 func AsTime(t Value) (time.Time, error) {
 	if t.Kind != KindTag {
 		return time.Time{}, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
@@ -35,15 +39,20 @@ func AsTime(t Value) (time.Time, error) {
 		inner := t.TagInner()
 		switch inner.Kind {
 		case KindUint:
+			if inner.UintVal() > math.MaxInt64 {
+				return time.Time{}, fmt.Errorf("%w: epoch %d", ErrTimeRange, inner.UintVal())
+			}
 			return time.Unix(int64(inner.UintVal()), 0).UTC(), nil
 		case KindNegInt:
+			if inner.NegIntVal() > math.MaxInt64 {
+				return time.Time{}, fmt.Errorf("%w: epoch -1-%d", ErrTimeRange, inner.NegIntVal())
+			}
 			sec := -1 - int64(inner.NegIntVal())
 			return time.Unix(sec, 0).UTC(), nil
 		case KindFloat32:
-			f := float64(inner.Float32Val())
-			return time.Unix(0, int64(f*1e9)).UTC(), nil
+			return floatEpoch(float64(inner.Float32Val()))
 		case KindFloat64:
-			return time.Unix(0, int64(inner.Float64Val()*1e9)).UTC(), nil
+			return floatEpoch(inner.Float64Val())
 		default:
 			return time.Time{}, fmt.Errorf("cbor: tag 1 inner must be Uint/NegInt/Float, got kind %d", inner.Kind)
 		}
@@ -52,8 +61,27 @@ func AsTime(t Value) (time.Time, error) {
 	}
 }
 
+// floatEpoch converts float epoch seconds to a time.Time, splitting
+// whole and fractional seconds so large values don't overflow when
+// scaled to nanoseconds.
+func floatEpoch(f float64) (time.Time, error) {
+	// -2^63 is exactly representable as a float64; 2^63 is not an int64.
+	if math.IsNaN(f) || f < math.MinInt64 || f >= math.MaxInt64 {
+		return time.Time{}, fmt.Errorf("%w: epoch %g", ErrTimeRange, f)
+	}
+	sec, frac := math.Modf(f)
+	return time.Unix(int64(sec), int64(frac*1e9)).UTC(), nil
+}
+
+// TimeTo encodes t as tag 1 with an integer epoch-seconds argument
+// (major type 0 at or after the epoch, major type 1 before it).
+// Sub-second precision is truncated; use TimeToFloat to retain it.
 func TimeTo(t time.Time) Value {
-	return MakeTag(TagEpochDateTime, Uint(uint64(t.Unix())))
+	sec := t.Unix()
+	if sec >= 0 {
+		return MakeTag(TagEpochDateTime, Uint(uint64(sec)))
+	}
+	return MakeTag(TagEpochDateTime, NegInt(uint64(-1-sec)))
 }
 
 func TimeToFloat(t time.Time) Value {
@@ -91,7 +119,11 @@ func AsBigInt(t Value) (*big.Int, error) {
 	}
 }
 
+// BigIntTo encodes n as tag 2 or 3. A nil n encodes as Null.
 func BigIntTo(n *big.Int) Value {
+	if n == nil {
+		return Null()
+	}
 	if n.Sign() >= 0 {
 		return MakeTag(TagUnsignedBignum, Bytes(n.Bytes()))
 	}

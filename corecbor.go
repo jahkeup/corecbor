@@ -14,6 +14,9 @@ type (
 	Value    = cbor.Value
 	MapEntry = cbor.MapEntry
 	Kind     = cbor.Kind
+
+	ByteKey    = cbor.ByteKey
+	EncodedKey = cbor.EncodedKey
 )
 
 const (
@@ -80,6 +83,7 @@ var (
 	ErrNilValue            = cbor.ErrNilValue
 	ErrReservedAI          = cbor.ErrReservedAI
 	ErrNonStringKey        = cbor.ErrNonStringKey
+	ErrTimeRange           = cbor.ErrTimeRange
 )
 
 func AsTime(t Value) (time.Time, error)    { return cbor.AsTime(t) }

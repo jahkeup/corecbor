@@ -9,8 +9,6 @@ import (
 	"math"
 	"math/big"
 	"reflect"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jahkeup/corecbor/cbor"
@@ -191,11 +189,7 @@ func timeToValue(t time.Time) cbor.Value {
 	if t.Nanosecond() != 0 {
 		return cbor.TimeToFloat(t)
 	}
-	sec := t.Unix()
-	if sec >= 0 {
-		return cbor.MakeTag(cbor.TagEpochDateTime, cbor.Uint(uint64(sec)))
-	}
-	return cbor.MakeTag(cbor.TagEpochDateTime, cbor.NegInt(uint64(-1-sec)))
+	return cbor.TimeTo(t)
 }
 
 func sliceToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
@@ -228,23 +222,16 @@ func mapToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	return cbor.MakeMapFromSlice(entries), nil
 }
 
-type fieldInfo struct {
-	index  int
-	name   string
-	intKey int64
-	hasInt bool
-	omit   bool
-	tagID  uint64
-	hasTag bool
-}
-
 func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
-	rt := rv.Type()
-	fields := getStructFields(rt)
+	fields := getStructFields(rv.Type()).list
 	entries := make([]cbor.MapEntry, 0, len(fields))
 
-	for _, fi := range fields {
-		fv := rv.Field(fi.index)
+	for i := range fields {
+		fi := &fields[i]
+		fv, ok := fieldByIndex(rv, fi.index)
+		if !ok {
+			continue // nil embedded pointer: its fields are absent
+		}
 		if fi.omit && isZero(fv) {
 			continue
 		}
@@ -273,55 +260,6 @@ func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error
 	}
 
 	return cbor.MakeMapFromSlice(entries), nil
-}
-
-func getStructFields(rt reflect.Type) []fieldInfo {
-	var fields []fieldInfo
-	for i := range rt.NumField() {
-		f := rt.Field(i)
-		if !f.IsExported() {
-			continue
-		}
-		if f.Anonymous {
-			if f.Type.Kind() == reflect.Struct {
-				embedded := getStructFields(f.Type)
-				for _, ef := range embedded {
-					ef.index = i
-					fields = append(fields, ef)
-				}
-			}
-			continue
-		}
-
-		tag := f.Tag.Get("cbor")
-		if tag == "-" {
-			continue
-		}
-
-		fi := fieldInfo{index: i}
-		if tag == "" {
-			fi.name = strings.ToLower(f.Name)
-		} else {
-			parts := strings.Split(tag, ",")
-			fi.name = parts[0]
-			for _, opt := range parts[1:] {
-				if opt == "omitempty" {
-					fi.omit = true
-				} else if strings.HasPrefix(opt, "tag=") {
-					if n, err := strconv.ParseUint(opt[4:], 10, 64); err == nil {
-						fi.tagID = n
-						fi.hasTag = true
-					}
-				}
-			}
-			if n, err := strconv.ParseInt(fi.name, 10, 64); err == nil {
-				fi.intKey = n
-				fi.hasInt = true
-			}
-		}
-		fields = append(fields, fi)
-	}
-	return fields
 }
 
 func isZero(rv reflect.Value) bool {

@@ -92,6 +92,18 @@ func algorithmConstants() map[string]Algorithm {
 		"AlgECDH_ES_HKDF_256":                AlgECDH_ES_HKDF_256,
 		"AlgPBES2_HS256_A128KW":              AlgPBES2_HS256_A128KW,
 		"AlgHPKEBaseP256SHA256AES128GCM":     AlgHPKEBaseP256SHA256AES128GCM,
+		"AlgPS256":                           AlgPS256,
+		"AlgPS384":                           AlgPS384,
+		"AlgPS512":                           AlgPS512,
+		"AlgRS256":                           AlgRS256,
+		"AlgRS384":                           AlgRS384,
+		"AlgRS512":                           AlgRS512,
+		"AlgSHA1":                            AlgSHA1,
+		"AlgSHA256_64":                       AlgSHA256_64,
+		"AlgSHA256":                          AlgSHA256,
+		"AlgSHA512_256":                      AlgSHA512_256,
+		"AlgSHA384":                          AlgSHA384,
+		"AlgSHA512":                          AlgSHA512,
 		"AlgHPKE_Base_P256_SHA256_AES128GCM": AlgHPKE_Base_P256_SHA256_AES128GCM,
 	}
 }

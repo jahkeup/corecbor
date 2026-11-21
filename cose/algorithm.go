@@ -46,6 +46,27 @@ const (
 
 	// HPKE base mode with DHKEM(P-256), HKDF-SHA256, AES-128-GCM (RFC 9180)
 	AlgHPKEBaseP256SHA256AES128GCM Algorithm = 35
+
+	// RSASSA-PSS (RFC 8230 §2). Verification only; the key must be at
+	// least 2048 bits.
+	AlgPS256 Algorithm = -37
+	AlgPS384 Algorithm = -38
+	AlgPS512 Algorithm = -39
+
+	// RSASSA-PKCS1-v1_5 (RFC 8812 §2). Not Recommended by IANA; a
+	// Verifier accepts these only when listed in WithAllowedAlgorithms.
+	AlgRS256 Algorithm = -257
+	AlgRS384 Algorithm = -258
+	AlgRS512 Algorithm = -259
+
+	// Hash algorithms (RFC 9054), used by COSE_CertHash (x5t, RFC 9360).
+	// SHA-1 and SHA-256/64 are registered as "Filter Only".
+	AlgSHA1       Algorithm = -14
+	AlgSHA256_64  Algorithm = -15
+	AlgSHA256     Algorithm = -16
+	AlgSHA512_256 Algorithm = -17
+	AlgSHA384     Algorithm = -43
+	AlgSHA512     Algorithm = -44
 )
 
 func (a Algorithm) String() string {
@@ -86,6 +107,30 @@ func (a Algorithm) String() string {
 		return "PBES2-HS256+A128KW"
 	case AlgHPKEBaseP256SHA256AES128GCM:
 		return "HPKE-Base-P256-SHA256-AES128GCM"
+	case AlgPS256:
+		return "PS256"
+	case AlgPS384:
+		return "PS384"
+	case AlgPS512:
+		return "PS512"
+	case AlgRS256:
+		return "RS256"
+	case AlgRS384:
+		return "RS384"
+	case AlgRS512:
+		return "RS512"
+	case AlgSHA1:
+		return "SHA-1"
+	case AlgSHA256_64:
+		return "SHA-256/64"
+	case AlgSHA256:
+		return "SHA-256"
+	case AlgSHA512_256:
+		return "SHA-512/256"
+	case AlgSHA384:
+		return "SHA-384"
+	case AlgSHA512:
+		return "SHA-512"
 	default:
 		return "unknown"
 	}

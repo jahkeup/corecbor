@@ -4,28 +4,48 @@
 package cose
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jahkeup/corecbor"
 )
 
+// SignMulti signs payload into a COSE_Sign with one signature per
+// signer. Each signature carries its signer's headers. opts apply to the
+// message body: WithProtectedHeaders and WithUnprotectedHeaders set the
+// body headers, and WithSignerExternalData sets the external AAD for
+// every signature (otherwise each signer's own is used). v0.2.2 accepted
+// and ignored opts; calls without opts are unchanged.
 func SignMulti(payload []byte, signers []*Signer, opts ...SignerOption) (*Sign, error) {
 	if len(signers) == 0 {
 		return nil, fmt.Errorf("%w: at least one signer required", ErrInvalidKey)
 	}
+	var body Signer
+	for _, o := range opts {
+		o(&body)
+	}
+	if err := checkBucketOverlap(body.protected, body.unprotected); err != nil {
+		return nil, err
+	}
+	if _, err := headerParamsToMap(body.unprotected); err != nil {
+		return nil, err
+	}
 
 	msg := &Sign{
-		Payload:    payload,
-		Signatures: make([]Signature, len(signers)),
+		Protected:   Headers{params: body.protected},
+		Unprotected: Headers{params: body.unprotected},
+		Payload:     payload,
+		Signatures:  make([]Signature, len(signers)),
 	}
 
 	bodyProtectedBytes, err := msg.Protected.encodeProtected()
 	if err != nil {
 		return nil, err
 	}
+	msg.Protected.raw = bodyProtectedBytes
 
 	for i, signer := range signers {
-		sig, err := computeSignature(signer, bodyProtectedBytes, payload)
+		sig, err := computeSignature(signer, bodyProtectedBytes, payload, body.external)
 		if err != nil {
 			return nil, fmt.Errorf("signer %d: %w", i, err)
 		}
@@ -33,6 +53,33 @@ func SignMulti(payload []byte, signers []*Signer, opts ...SignerOption) (*Sign, 
 	}
 
 	return msg, nil
+}
+
+// SignMultiDetached is SignMulti with a detached payload: the
+// signatures cover payload and the returned message's Payload is nil.
+// Verify it with VerifyMultiDetached.
+func SignMultiDetached(payload []byte, signers []*Signer, opts ...SignerOption) (*Sign, error) {
+	if payload == nil {
+		payload = []byte{}
+	}
+	msg, err := SignMulti(payload, signers, opts...)
+	if err != nil {
+		return nil, err
+	}
+	msg.Payload = nil
+	return msg, nil
+}
+
+// VerifyMultiDetached is VerifyMulti for a message whose payload is
+// detached: payload is the content the signatures cover, and
+// msg.Payload is ignored.
+func VerifyMultiDetached(msg *Sign, payload []byte, verifiers []*Verifier, policy ...VerifyPolicy) ([]int, error) {
+	if payload == nil {
+		payload = []byte{}
+	}
+	m := *msg
+	m.Payload = payload
+	return VerifyMulti(&m, verifiers, policy...)
 }
 
 // VerifyPolicy says which signatures of a COSE_Sign must verify.
@@ -86,7 +133,8 @@ func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]in
 				policyErr = err
 				continue
 			}
-			if err := v.checkLayer(&sig.Protected, &sig.Unprotected); err != nil {
+			alg, err := v.checkLayer(&sig.Protected, &sig.Unprotected)
+			if err != nil {
 				policyErr = err
 				continue
 			}
@@ -98,7 +146,7 @@ func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]in
 			if err != nil {
 				continue
 			}
-			if v.verifyBytes(toBeSigned, sig.Signature) == nil {
+			if v.verifyBytes(alg, toBeSigned, sig.Signature) == nil {
 				verified = append(verified, i)
 				break
 			}
@@ -124,7 +172,7 @@ func (s *Sign) AddSignature(signer *Signer) error {
 		return err
 	}
 
-	sig, err := computeSignature(signer, bodyProtectedBytes, s.Payload)
+	sig, err := computeSignature(signer, bodyProtectedBytes, s.Payload, nil)
 	if err != nil {
 		return err
 	}
@@ -133,21 +181,23 @@ func (s *Sign) AddSignature(signer *Signer) error {
 	return nil
 }
 
-func computeSignature(signer *Signer, bodyProtectedBytes, payload []byte) (*Signature, error) {
-	sig := &Signature{}
-	sig.Protected.SetAlgorithm(signer.alg)
+// computeSignature signs one COSE_Signature with the signer's headers.
+// external overrides the signer's own external AAD when non-nil.
+func computeSignature(signer *Signer, bodyProtectedBytes, payload, external []byte) (*Signature, error) {
+	if external == nil {
+		external = signer.external
+	}
+	sig := &Signature{
+		Protected:   Headers{params: signer.protected, raw: signer.protectedBytes},
+		Unprotected: Headers{params: signer.unprotected},
+	}
 
-	sigProtectedBytes, err := sig.Protected.encodeProtected()
+	toBeSigned, err := encodeMultiSigStructure(signer.enc, bodyProtectedBytes, signer.protectedBytes, external, payload)
 	if err != nil {
 		return nil, err
 	}
 
-	toBeSigned, err := encodeMultiSigStructure(signer.enc, bodyProtectedBytes, sigProtectedBytes, signer.external, payload)
-	if err != nil {
-		return nil, err
-	}
-
-	raw, err := signer.signBytes(toBeSigned)
+	raw, err := signer.signBytes(context.Background(), toBeSigned)
 	if err != nil {
 		return nil, err
 	}

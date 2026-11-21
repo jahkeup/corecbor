@@ -4,6 +4,7 @@
 package cose
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -110,7 +111,7 @@ func signWithHeaders(t *testing.T, s *Signer, prot, unprot Headers, payload []by
 	if err != nil {
 		t.Fatal(err)
 	}
-	sig, err := s.signBytes(tbs)
+	sig, err := s.signBytes(context.Background(), tbs)
 	if err != nil {
 		t.Fatal(err)
 	}

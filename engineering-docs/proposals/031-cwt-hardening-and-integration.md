@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 031 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 003 (CWT), 012 (cnf), 021 (core safety), 022 (raw-byte preservation), 023 (strict decode policy), 027 (COSE verification hardening), 028 (COSE header / key API), 034 (compatibility policy) |
@@ -593,9 +593,71 @@ field. Rejected under 034; `Audiences` is added beside `Audience`.
 
 - RFC 9200 §5.10.1 audience semantics. Confirm the RFC says array
   `aud` membership rather than exact-set match.
+  **Resolved:** RFC 9200 §5.10.1 is the authorization-information
+  endpoint and does not define array `aud`. RFC 8392 §3.1.3 makes `aud`
+  a single StringOrURI; the array form and its membership semantics
+  come from RFC 7519 §4.1.3 (JWT), which ACE and EAT deployments carry
+  over. Accepting arrays is therefore a deliberate superset of RFC
+  8392; `Validator.Audience` matches by membership.
 - Whether `exi` (40) must be enforced against a stored first-seen time.
   That needs RS-side state, which may be out of scope for a stateless
   validator.
+  **Resolved:** RFC 9200 §5.10.3 requires the RS to record when it
+  first received each token and to track expired token identifiers.
+  That is per-deployment state, so `Validator` does not enforce `exi`;
+  it is decoded into `ClaimsSet.Exi` for the caller's store.
+
+### Implementation notes (2026-11-21)
+
+- **KeyResolver:** `VerifyOptions.Keys` is `cose.KeyResolver`
+  (proposal 028), not the cwt-local `KeyResolver` sketched above. It
+  returns `[]*cose.Key`, so each key's `alg` and `key_ops` apply, and
+  `cose.WithAllowedAlgorithms` carries `AllowedAlgorithms`. Resolver
+  failures wrap `ErrKeyResolution`.
+- **MAC/decrypt algorithm choice:** `VerifyMACToken` and `OpenToken`
+  take raw key bytes with no algorithm, so the algorithm comes from the
+  protected header and must be in `AllowedAlgorithms`. The default list
+  is the full-length HMACs (5, 6, 7) and AES-GCM (1, 2, 3); HMAC 256/64
+  must be listed explicitly, which closes the header-chosen truncation
+  downgrade 027 closed for multi-recipient MACs. RFC 8392 A.4 (HMAC
+  256/64) verifies with `AllowedAlgorithms: {AlgHMAC256_64}`.
+- **`Seal`** generates a 12-byte IV and writes it to the unprotected IV
+  header itself; it does not depend on 029. AES-CCM (RFC 8392 A.5+)
+  arrives with 029.
+- **Nested CWT** (`cty` 61 or `"application/cwt"`) is supported for
+  COSE_Sign1 inside COSE_Sign1, validated at the innermost level;
+  `Token.Nested` holds the inner token. `MaxNesting`: 0 means 1,
+  negative forbids nesting. MAC/Encrypt0 outer layers with a CWT `cty`
+  return `ErrUnexpectedType`.
+- **`Private` is not yet marked `// Deprecated:`.** `edhoc/credential.go`
+  still reads `claims.Private[cnf]` as a fallback (dead under 031:
+  `cnf` always decodes into `Confirmation`), and deprecating the field
+  would fail `make check` (staticcheck SA1019) in a module this change
+  doesn't own. Add the marker when that read is removed (033 follow-up).
+  `Confirmation.Encrypted`, `Encrypt`, `Decrypt` and
+  `DecodeOptions.AllowDuplicateClaims` are deprecated as specified.
+- **Encode collisions:** a claim emitted from more than one place (a
+  modeled field, `Private`, `PrivateClaims`) is accepted when the
+  values are equal and rejected otherwise. v0.2.2 also let `Private`
+  carry a registered key when the modeled field was empty; that still
+  works.
+- **ACE claims with the wrong CBOR type** (e.g. integer `scope`) leave
+  the typed field nil and stay in `Private` and `PrivateClaims`,
+  rather than failing the decode, so v0.2.2 inputs keep decoding.
+- **Encoding a symmetric `cnf` key** emits it as is; asymmetric keys are
+  reduced to their public parameters (as v0.2.2 did), so a private key
+  passed by mistake doesn't leak. RFC 8747 §3.3 requires symmetric keys
+  to travel in an encrypted CWT or an Encrypted_COSE_Key; that is the
+  caller's responsibility.
+- **Byte stability of float NumericDates:** a float epoch passes
+  through `time.Time` nanoseconds, which a float64 can't always
+  represent, so encode → decode → encode can move a sub-second date by
+  a nanosecond (unchanged from v0.2.2). `FuzzDecodeClaimsSet` checks
+  that re-encoded output decodes, not byte stability.
+- **Decode budget:** 8 MiB per claims decode.
+- **Vectors:** RFC 8392 Appendix A.3 (ES256; tagged 18, tag 61 wrapped,
+  untagged) and A.4 (HMAC 256/64 in tag 61) verify through `Verify`,
+  `VerifyMAC`, `VerifyToken` and `VerifyMACToken`.
 
 ### Watch items (do not implement yet)
 
@@ -626,3 +688,4 @@ field. Rejected under 034; `Audiences` is added beside `Audience`.
 | 2026-11-20 | Initial draft from 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | Implemented (phases A–D on feat/031-cwt); RFC 9200 audience and exi questions resolved; implementation notes | corecbor maintainers |

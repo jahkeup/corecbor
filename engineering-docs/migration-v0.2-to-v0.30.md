@@ -196,6 +196,37 @@ unchanged): `VerifyMulti(..., ...VerifyPolicy)`,
 - `Validator.Validate` returns `ErrInvalidValidator` for a negative
   `Leeway` (021 D17); it used to tighten the validity window silently.
 
+Existing identifiers keep their meaning (034). Changes to them (031):
+
+| Change | Old behavior | Restore with |
+|---|---|---|
+| A token is rejected **on or after** `exp` (RFC 8392 §3.1.4) by every `Validator` | `now == exp` accepted | none (`Leeway` covers clock skew) |
+| `nil.Validate(c)` returns `ErrInvalidValidator` | panicked | none |
+| `DecodeClaimsSet` never panics; claims keyed by a byte string, array, map or an integer outside int64 go to the new `PrivateClaims` only | panicked; an out-of-range negint key decoded as `iss` | none |
+| Duplicate claim keys are rejected (RFC 8392 §7.2); decode memory is bounded (8 MiB) | last one won | `DecodeClaimsSetWith(data, DecodeOptions{AllowDuplicateClaims: true})` (deprecated) |
+| NumericDates beyond int64, NaN or ±Inf are rejected | wrapped to unrelated times (`nbf` failed open) | none |
+| `Verify`, `VerifyMAC`, `Decrypt` accept an outer CWT tag 61 | rejected | n/a |
+| `aud` may be an array (RFC 9200); it decodes into `Audiences` (`Audience` stays the single-string form) | rejected | n/a |
+| `cnf`: one method per claim (RFC 8747 §3.1); OKP keys need `crv` (X25519 is no longer read as Ed25519); oversize EC2 coordinates rejected; symmetric keys and COSE_Encrypt0/COSE_Encrypt in member 2 accepted | several methods kept; OKP assumed Ed25519; oversize truncated | none |
+| `Encode` rejects a claim set twice with different values (e.g. `Issuer` and `Private[int64(1)]`) | emitted duplicate keys | n/a |
+
+New, recommended:
+
+- `cwt.NewValidator()` — exp required, future `iat` rejected, 60 s
+  leeway; plus `Issuers`, `MaxAge`, `RequireIssuedAt`,
+  `RejectFutureIssuedAt` on `Validator`.
+- `VerifyToken(ctx, data, VerifyOptions{Keys: …})`, `VerifyMACToken`,
+  `OpenToken`: verify, decode strictly and validate in one call;
+  `typ`/`cty` checks; nested CWTs. `VerifyMACToken`/`OpenToken` accept
+  only full-length HMACs / AES-GCM unless `AllowedAlgorithms` lists
+  more (HMAC 256/64 must be listed explicitly).
+- `Seal` (IV written to the IV header) replaces the deprecated
+  `Encrypt`/`Decrypt`, whose caller-supplied nonce isn't transmitted.
+- `ClaimKey`, `PrivateClaims` (prefer over `Private`), `NumericDate`,
+  `Scope`/`ACEProfile`/`CNonce`/`Exi` (RFC 9200), `ClaimsFromHeaders` /
+  `SetClaimsHeader` (RFC 9597, label 15), `DecodeUCCS` (RFC 9781),
+  `Confirmation.EncryptedKey` (deprecates `Encrypted`) and `Match`.
+
 ## edhoc (033)
 
 The package implements RFC 9528 by default and reproduces the RFC 9529

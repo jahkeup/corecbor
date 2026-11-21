@@ -5,6 +5,7 @@ package rfc8949
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"sync"
 
@@ -297,18 +298,59 @@ func (ks *keySet) add(idx int, key cbor.Value, enc []byte, opts *DecodeOpts) {
 // mapInsert adds key/val to m under the configured duplicate policy:
 // keep every entry (KeepDuplicateMapKeys), reject a repeat
 // (RejectDuplicateMapKeys), or last-write-wins (default: the repeated
-// key keeps its first position and takes the new value).
-func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []byte, ks *keySet, opts DecodeOpts) ([]cbor.MapEntry, error) {
+// key keeps its first position and takes the new value). It returns the
+// index of the entry that now holds val.
+func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []byte, ks *keySet, opts DecodeOpts) ([]cbor.MapEntry, int, error) {
 	if opts.KeepDuplicateMapKeys {
-		return append(m, cbor.MapEntry{Key: key, Value: val}), nil
+		return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
 	}
 	if idx := ks.find(m, key, encodedKey, &opts); idx >= 0 {
 		if opts.RejectDuplicateMapKeys {
-			return m, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
+			return m, idx, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
 		}
 		m[idx].Value = val
-		return m, nil
+		return m, idx, nil
 	}
 	ks.add(len(m), key, encodedKey, &opts)
-	return append(m, cbor.MapEntry{Key: key, Value: val}), nil
+	return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
+}
+
+// EntrySpan locates one entry of a decoded map in the source bytes: the
+// key as it first appeared and the value that was kept for it (the last
+// one written, under last-write-wins).
+type EntrySpan struct {
+	KeyStart, KeyEnd     int
+	ValueStart, ValueEnd int
+}
+
+// recordSpan records that entry idx was written from the key at
+// keyOff..valOff and the value at valOff..valEnd. A repeat key keeps the
+// first key span and takes the new value span.
+func recordSpan(rec *[]EntrySpan, idx, keyOff, valOff, valEnd int) {
+	if idx == len(*rec) {
+		*rec = append(*rec, EntrySpan{KeyStart: keyOff, KeyEnd: valOff, ValueStart: valOff, ValueEnd: valEnd})
+		return
+	}
+	(*rec)[idx].ValueStart, (*rec)[idx].ValueEnd = valOff, valEnd
+}
+
+// MapEntrySpans decodes the map at the start of src with opts and
+// returns it together with the source span of each of its entries, in
+// the decoded order. The spans reflect exactly how this decoder resolves
+// repeated keys under opts (key identity and duplicate policy), so a
+// caller that walks the bytes — for example to hand an Unmarshaler its
+// item's original bytes — stays aligned with the decoded Value. src must
+// begin with a map head; it is decoded as a nested item (a leading
+// self-describe tag is not stripped).
+func MapEntrySpans(src []byte, opts DecodeOpts) (cbor.Value, []EntrySpan, error) {
+	var spans []EntrySpan
+	opts.spans = &spans
+	v, _, err := decodeValue(src, 0, 0, opts, false)
+	if err != nil {
+		return cbor.Value{}, nil, err
+	}
+	if v.Kind != cbor.KindMap {
+		return cbor.Value{}, nil, fmt.Errorf("%w: MapEntrySpans: item is kind %d, not a map", ErrTypeMismatch, v.Kind)
+	}
+	return v, spans, nil
 }

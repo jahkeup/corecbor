@@ -350,3 +350,46 @@ func TestHalfNaNPayloadPreserved(t *testing.T) {
 		t.Errorf("canonical NaN = %s", got)
 	}
 }
+
+// The raw-span path (Unmarshalers, proposal 022) merges repeated keys
+// exactly as the decoder does under the configured key identity and
+// duplicate policy. A NaN-keyed Go map makes any disagreement visible:
+// every NaN key is a distinct Go map entry.
+func TestRawPathFollowsKeyIdentity(t *testing.T) {
+	cases := []struct {
+		name string
+		hex  string
+		opts []DecoderOption
+		want int // Go map entries
+	}{
+		{"value-identity-nan", "a2f97e004101f97e004102", nil, 1},
+		{"value-identity-nan-widths", "a2f97e004101fa7fc000004102", nil, 1},
+		{"value-identity-distinct-nan", "a2f97e004101f97e014102", nil, 2},
+		{"keep", "a2f97e004101f97e004102", []DecoderOption{KeepDuplicateMapKeys()}, 2},
+		{"encoded-identity-widths", "a2f97e004101fa7fc000004102", []DecoderOption{WithMapKeyIdentity(KeyIdentityEncoded)}, 2},
+		{"indefinite", "bff97e004101f97e004102ff", nil, 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dec := NewDecoder(tc.opts...)
+			var raw map[float64]RawMessage
+			if err := dec.Unmarshal(mustHex(t, tc.hex), &raw); err != nil {
+				t.Fatal(err)
+			}
+			var plain map[float64][]byte
+			if err := dec.Unmarshal(mustHex(t, tc.hex), &plain); err != nil {
+				t.Fatal(err)
+			}
+			if len(raw) != tc.want || len(plain) != tc.want {
+				t.Fatalf("entries: raw %d, Value path %d, want %d", len(raw), len(plain), tc.want)
+			}
+			if tc.want == 1 {
+				for _, v := range raw {
+					if hex.EncodeToString(v) != "4102" {
+						t.Fatalf("merged value = %x, want last write 4102", []byte(v))
+					}
+				}
+			}
+		})
+	}
+}

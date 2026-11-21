@@ -4,7 +4,6 @@
 package corecbor
 
 import (
-	"bytes"
 	"reflect"
 	"sync"
 
@@ -234,49 +233,6 @@ func (r rawState) rawArray(span []byte, val cbor.Value, target reflect.Value) er
 	return nil
 }
 
-// scalarKey identifies a scalar map key for duplicate merging. Two keys
-// with equal scalarKeys are the keys the decoder merges: same kind and
-// payload, floats compared with == (so -0 equals +0 and NaN never
-// matches, since a NaN field makes the Go map key unequal to itself).
-type scalarKey struct {
-	kind cbor.Kind
-	num  uint64
-	f    float64
-	s    string
-}
-
-func toScalarKey(v cbor.Value) (scalarKey, bool) {
-	switch v.Kind {
-	case cbor.KindUint, cbor.KindNegInt, cbor.KindBool, cbor.KindSimple:
-		return scalarKey{kind: v.Kind, num: v.Num}, true
-	case cbor.KindNull, cbor.KindUndefined:
-		return scalarKey{kind: v.Kind}, true
-	case cbor.KindBytes:
-		return scalarKey{kind: v.Kind, s: string(v.Bstr)}, true
-	case cbor.KindText:
-		return scalarKey{kind: v.Kind, s: v.Str}, true
-	case cbor.KindFloat32:
-		return scalarKey{kind: v.Kind, f: float64(v.Float32Val())}, true
-	case cbor.KindFloat64:
-		return scalarKey{kind: v.Kind, f: v.Float64Val()}, true
-	default:
-		return scalarKey{}, false
-	}
-}
-
-// sameKey reports whether a and b are the identical key (bit-for-bit
-// for scalars, same kind otherwise); used to confirm that merged pairs
-// line up with the decoded map.
-func sameKey(a, b cbor.Value) bool {
-	if a.Kind != b.Kind {
-		return false
-	}
-	if _, scalar := toScalarKey(a); !scalar {
-		return true
-	}
-	return a.Num == b.Num && a.Str == b.Str && bytes.Equal(a.Bstr, b.Bstr)
-}
-
 // mapTarget assigns one map entry to a Go map or struct target.
 type mapTarget struct {
 	target         reflect.Value
@@ -341,70 +297,22 @@ func (r rawState) rawMap(span []byte, val cbor.Value, target reflect.Value) erro
 		}
 		return nil
 	}
-	return r.rawMapMerged(c, n, val, mt)
+	return r.rawMapMerged(span, mt)
 }
 
-// rawMapMerged handles maps whose duplicate keys the decoder merged
-// (or indefinite-length maps): it decodes each key and merges
-// duplicates the way the forgiving decoder does (the first key keeps
-// its position and takes the last value; containers and tags are never
-// merged), then assigns the merged entries in order.
-func (r rawState) rawMapMerged(c *rfc8949.Cursor, n int, val cbor.Value, mt mapTarget) error {
-	if n > 0 {
-		n *= 2
-	}
-	kv, err := r.items(c, n)
+// rawMapMerged handles maps whose repeated keys the decoder merged, or
+// indefinite-length maps. It asks the decoder for each resulting
+// entry's source spans (rfc8949.MapEntrySpans), so merging follows
+// exactly the configured key identity and duplicate policy (proposal
+// 024) instead of being re-derived here.
+func (r rawState) rawMapMerged(span []byte, mt mapTarget) error {
+	m, spans, err := rfc8949.MapEntrySpans(span, r.opts)
 	if err != nil {
 		return err
 	}
-	type pair struct {
-		key            cbor.Value
-		keySpan, vSpan []byte
-	}
-	pairs := make([]pair, 0, len(kv)/2)
-	var seen map[scalarKey]int
-	if len(kv)/2 > 16 {
-		seen = make(map[scalarKey]int, len(kv)/2)
-	}
-	for i := 0; i < len(kv); i += 2 {
-		key, err := r.decodeItem(kv[i])
-		if err != nil {
-			return err
-		}
-		if sk, ok := toScalarKey(key); ok {
-			j, dup := -1, false
-			if seen != nil {
-				j, dup = seen[sk]
-			} else {
-				for k := range pairs {
-					if pk, ok := toScalarKey(pairs[k].key); ok && pk == sk {
-						j, dup = k, true
-						break
-					}
-				}
-			}
-			if dup {
-				pairs[j].vSpan = kv[i+1]
-				continue
-			}
-			if seen != nil {
-				seen[sk] = len(pairs)
-			}
-		}
-		pairs = append(pairs, pair{key: key, keySpan: kv[i], vSpan: kv[i+1]})
-	}
-	// The decoder's merge can differ (it buckets large maps by encoded
-	// key bytes), so only borrow decoded values when they line up.
-	aligned := val.Kind == cbor.KindMap && len(val.Pairs) == len(pairs)
-	for i := 0; aligned && i < len(pairs); i++ {
-		aligned = sameKey(pairs[i].key, val.Pairs[i].Key)
-	}
-	for i, p := range pairs {
-		var v cbor.Value
-		if aligned {
-			v = val.Pairs[i].Value
-		}
-		if err := r.assign(mt, p.key, p.keySpan, p.vSpan, v); err != nil {
+	for i, s := range spans {
+		p := &m.Pairs[i]
+		if err := r.assign(mt, p.Key, span[s.KeyStart:s.KeyEnd], span[s.ValueStart:s.ValueEnd], p.Value); err != nil {
 			return err
 		}
 	}

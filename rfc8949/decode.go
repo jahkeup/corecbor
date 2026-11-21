@@ -86,6 +86,10 @@ type DecodeOpts struct {
 	// ErrNotPreferred.
 	RequireCanonicalNaN bool
 
+	// spans, when non-nil, receives the entry spans of the next map
+	// decoded (MapEntrySpans). Maps clear it before decoding children.
+	spans *[]EntrySpan
+
 	// reserve is the number of input bytes that enclosing containers
 	// still need for their own pending items. A nested container may
 	// only claim the bytes beyond it, which bounds total preallocation
@@ -655,6 +659,10 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 
+	// Span recording (MapEntrySpans) applies to this map only.
+	rec := opts.spans
+	opts.spans = nil
+
 	ks := getKeySet(count, &opts)
 	defer putKeySet(ks)
 
@@ -716,6 +724,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 				return cbor.Value{}, keyOff, decodeErr(cbor.ErrNullMapKey, keyOff)
 			}
 		}
+		valOff := pos
 		co := opts
 		co.reserve += rest
 		v, next, err := decodeValue(src, pos, depth+1, co, false)
@@ -723,9 +732,13 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 			return cbor.Value{}, next, keyPath(err, opts, k)
 		}
 		pos = next
-		m, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
+		var idx int
+		m, idx, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
 		if err != nil {
 			return cbor.Value{}, keyOff, err
+		}
+		if rec != nil {
+			recordSpan(rec, idx, keyOff, valOff, pos)
 		}
 	}
 	return cbor.MakeMapFromSlice(m), pos, nil
@@ -736,6 +749,8 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
 	var m []cbor.MapEntry
+	rec := opts.spans
+	opts.spans = nil
 	// Indefinite maps keep the v0.2 linear scan for value identity.
 	ks := getKeySet(0, &opts)
 	defer putKeySet(ks)
@@ -767,6 +782,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 				return cbor.Value{}, keyOff, decodeErr(cbor.ErrNullMapKey, keyOff)
 			}
 		}
+		valOff := pos
 		vOpts := opts
 		vOpts.reserve++ // break code
 		v, next, err := decodeValue(src, pos, depth+1, vOpts, false)
@@ -774,9 +790,13 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 			return cbor.Value{}, next, keyPath(err, opts, k)
 		}
 		pos = next
-		m, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
+		var idx int
+		m, idx, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
 		if err != nil {
 			return cbor.Value{}, keyOff, err
+		}
+		if rec != nil {
+			recordSpan(rec, idx, keyOff, valOff, pos)
 		}
 	}
 }

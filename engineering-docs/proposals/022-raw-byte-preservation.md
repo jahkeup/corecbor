@@ -33,10 +33,9 @@ This proposal adds:
 
 1. `Decoder.DecodePrefix` and `Decoder.DecodeRaw`, which return the
    exact source slice of the item they decode.
-2. Pass-through of the original bytes to `RawMessage` and `RawTag`
-   during reflective decode (their documented contract), and to any
-   other `Unmarshaler` when the caller opts in with
-   `WithVerbatimUnmarshalerInput()`.
+2. Pass-through of the original bytes to every `Unmarshaler` during
+   reflective decode, including `RawMessage` and `RawTag`, as
+   `encoding/json` does for `json.Unmarshaler`.
 3. Promotion of `rfc8949.Cursor` to a root-level `Cursor` type.
 
 Acceptance: `Unmarshal` into a struct with a `RawMessage` field
@@ -132,23 +131,20 @@ without copying.
 
 - `Decoder.Unmarshal` switches from "decode a whole Value, then
   reflect" to a reflection walk over a `Cursor`. At each struct field
-  or element whose target type is `RawMessage` or `RawTag`, it calls
-  `Cursor.Raw()` and passes those bytes through unchanged. Everywhere
-  else it decodes a `Value` and reuses today's `valueToGo`.
-- **Other `Unmarshaler` implementations keep their v0.2.2 input by
-  default** (the item re-encoded in Core Deterministic mode), because no
-  documented contract promises them the original bytes and 034 keeps
-  existing semantics where no contract or standard decides. A new
-  decoder option opts them into the original bytes:
-
-  ```go
-  // WithVerbatimUnmarshalerInput passes every Unmarshaler the item's
-  // bytes exactly as they appear in the input, as encoding/json does
-  // for json.Unmarshaler. Without it, Unmarshalers other than
-  // RawMessage and RawTag receive the item re-encoded in Core
-  // Deterministic mode (the v0.2 behavior).
-  func WithVerbatimUnmarshalerInput() DecoderOption
-  ```
+  or element whose target type implements `Unmarshaler` (including
+  `RawMessage` and `RawTag`), it calls `Cursor.Raw()` and passes those
+  bytes through unchanged. Everywhere else it decodes a `Value` and
+  reuses today's `valueToGo`.
+- **Every `Unmarshaler` receives the original bytes.** The interface
+  documents that `UnmarshalCBOR` receives "a CBOR encoding of
+  themselves" (`marshal.go:14-18`), meaning the encoding that was
+  decoded, not a canonicalized substitute. Re-encoding in Core
+  Deterministic mode silently changes map order, integer widths,
+  float widths and indefinite lengths, so any `Unmarshaler` that
+  verifies or hashes its input fails on third-party bytes. Maintainers
+  classified this as a contract defect (2026-11-20). There is no legacy
+  selector; if callers need re-encoded input, support is added later
+  under a new opt-in identifier.
 - `RawMessage.UnmarshalCBOR` already copies its input (`raw.go:28`),
   so the original bytes survive the arena reset.
 - `RawTag.UnmarshalCBOR` parses only the tag head with `wire.ParseHead`
@@ -157,9 +153,9 @@ without copying.
   well-formed item by running `Cursor.Skip` over it with the decoder's
   knobs.
 - `callUnmarshaler` (`reflect_decode.go:112`) keeps its re-encoding
-  path for non-raw `Unmarshaler`s without `WithVerbatimUnmarshalerInput`,
-  and for `valueToGo` callers holding a bare `Value` (`UnmarshalValue`,
-  see Open questions). Its godoc states that it canonicalizes.
+  path only where no source bytes exist: `valueToGo` callers holding a
+  bare `Value` (`UnmarshalValue`, see Open questions). Its godoc states
+  that it canonicalizes in that case.
 
 The marshal side is symmetric: `marshalerToValue`
 (`reflect_encode.go:189`) decodes `MarshalCBOR` output and re-encodes
@@ -191,10 +187,11 @@ always copies.
   through `RawMessage`. Nobody should, given the type's name and godoc
   ("Passes through marshal/unmarshal without re-encoding", proposal
   014 TL;DR).
-- **Unmarshaler input.** Unchanged by default: non-raw `Unmarshaler`
-  implementations still receive the Core Deterministic re-encoding, as
-  in v0.2.2. With `WithVerbatimUnmarshalerInput()` they receive the
-  input as transmitted, and strictness knobs apply to those bytes.
+- **Unmarshaler input.** Every `Unmarshaler` now receives the item's
+  bytes exactly as transmitted, and the decoder's strictness knobs apply
+  to those bytes before the call. Implementations that relied on
+  receiving canonical bytes must canonicalize themselves (decode, then
+  `New(ModeCoreDeterministic).Encode`).
 - **Additive surface.** `DecodePrefix`, `DecodeRaw` and `Cursor` are
   new and don't change existing behavior.
 
@@ -220,7 +217,7 @@ implementations keep their v0.2.2 behavior unless the caller opts in.
 |---|---|---|---|---|
 | `RawMessage`/`RawTag` content on decode is the exact input bytes | Contract defect | proposal 014 (`014-raw-message-and-tag-wrapping.md:23-24`, `:136-143`: "captured as-is", "without modification") | original bytes | none (014's own contract; callers wanting canonical bytes decode then `Encode` with a deterministic `Encoder`) |
 | `RawMessage`/`RawTag` spliced verbatim on Permissive-mode encode | Contract defect | `014-raw-message-and-tag-wrapping.md:142` ("emitted directly (no re-encoding)") | verbatim in Permissive; deterministic modes still canonicalize (§2.1) | none |
-| Other `Unmarshaler`s receive original bytes | Additive (opt-in) | — (no contract; 034 precedence step 3 keeps existing behavior) | unchanged: Core Deterministic re-encode | `WithVerbatimUnmarshalerInput() DecoderOption` (recommended for signature-carrying types; not deprecated) |
+| Every `Unmarshaler` receives original bytes | Contract defect | `marshal.go:14-18` ("unmarshal a CBOR encoding of themselves"); maintainer decision 2026-11-20 | original bytes | none (re-encoded input may be added later as a new opt-in) |
 | Other `Marshaler`s in Permissive mode | unchanged | — | decoded then re-encoded, as v0.2.2 | n/a |
 | `DecodePrefix`, `DecodeRaw`, root `Cursor` alias, `Cursor.Raw/DecodeRaw/Bytes` | Additive | — | n/a | n/a |
 
@@ -236,7 +233,7 @@ No `...Option` parameters are appended to existing functions. The root
 | `RawMessage` field preserves `a2 6162 01 6161 02` exactly | `TestRawMessagePreservesUnsorted` | Yes |
 | `RawMessage` preserves non-shortest ints (`18 01`) and indefinite arrays (`9f 01 ff`) | `TestRawMessagePreservesQuirks` | Yes |
 | `RawTag{ID:24}` content equals the input bytes after the tag head | `TestRawTagNoReencode` | Yes |
-| A `RawMessage`/`RawTag` field, and any `Unmarshaler` field under `WithVerbatimUnmarshalerInput()`, receives the exact input slice (checked by `bytes.Equal` against the field's span) | `TestUnmarshalerReceivesOriginalBytes` | Yes |
+| Any `Unmarshaler` field, including `RawMessage`/`RawTag`, receives the exact input slice (checked by `bytes.Equal` against the field's span) | `TestUnmarshalerReceivesOriginalBytes` | Yes |
 | `DecodePrefix(cose_key ‖ ext)` returns `rest == ext` | `TestDecodePrefixWebAuthnAuthData` using a real CTAP2 fixture in `testdata/` | Yes |
 | `DecodeRaw` returns `raw == src` and fails with `ErrTrailingBytes` on extra bytes | `TestDecodeRaw` | Yes |
 | `Cursor.Bytes()` on `h'a10126'` returns `a1 01 26` with 0 allocations | `TestCursorBytesZeroAlloc` (`testing.AllocsPerRun`) | Yes |
@@ -246,7 +243,7 @@ No `...Option` parameters are appended to existing functions. The root
 | v0.2.2 `RawMessage` outputs for the unsorted-map and non-shortest fixtures are captured in `testdata/legacy-v0.2.2/` and the migration guide shows before/after | golden test + doc review | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
-| A non-raw `Unmarshaler` receives Core-Deterministic re-encoded bytes by default and the original bytes under `WithVerbatimUnmarshalerInput()` | `TestUnmarshalerInputDefault`, `TestUnmarshalerInputVerbatim` | Yes |
+| A non-raw `Unmarshaler` receives the original bytes for non-canonical input (unsorted map, non-shortest int, indefinite length) | `TestUnmarshalerInputVerbatim` | Yes |
 
 ---
 
@@ -255,7 +252,7 @@ No `...Option` parameters are appended to existing functions. The root
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
 | 1 | `DecodePrefix`, `DecodeRaw`, root `Cursor` with `Raw`/`DecodeRaw`/`Bytes` | Pending | API rows pass |
-| 2 | Cursor-driven `Unmarshal` with raw pass-through for `RawMessage`/`RawTag`, and for `Unmarshaler` under `WithVerbatimUnmarshalerInput()` | Pending | Reflection rows pass, perf rows pass |
+| 2 | Cursor-driven `Unmarshal` with raw pass-through for every `Unmarshaler` | Pending | Reflection rows pass, perf rows pass |
 | 3 | Permissive-mode verbatim splice for `Marshaler` output | Pending | `TestMarshalerVerbatimPermissive` |
 
 Phase 1 alone unblocks 027 (COSE protected headers).
@@ -319,8 +316,8 @@ and the 104-byte `Value` (proposal 020) doesn't grow.
 ## Open questions
 
 1. Should `UnmarshalValue(v Value, target any) error` be exported for
-   callers who already hold a `Value`? It would document the
-   canonicalizing behavior for `Unmarshaler` targets.
+   callers who already hold a `Value`? It has no source bytes, so it
+   would document canonicalizing behavior for `Unmarshaler` targets.
 2. Should `DecodePrefix` on a `Stream` (`stream.go:235`) expose raw
    spans too? It needs a buffered-reader span API, so it's deferred.
 
@@ -342,3 +339,4 @@ and the 104-byte `Value` (proposal 020) doesn't grow.
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-20 | Every `Unmarshaler` receives original bytes (contract defect, maintainer decision); `WithVerbatimUnmarshalerInput` dropped | corecbor maintainers |

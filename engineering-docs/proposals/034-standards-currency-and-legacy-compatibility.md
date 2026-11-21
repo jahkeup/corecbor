@@ -251,7 +251,7 @@ details.
 | COSE alg binding, `crit`, duplicate labels (027) | Contract defect (RFC 9052 §3, §3.1) | enforced | `WithLegacyAlgorithmFromKey()`, `WithLegacyIgnoreCritical()` — never bundled |
 | `VerifyMulti` fail-open, `VerifyMACMulti` header-chosen truncation, PBES2 count cap, empty HMAC keys (027) | Safety defect | fixed | none; short (non-empty) HMAC keys still accepted, `WithStrictMACKeyLength()` opt-in |
 | Reflection field-name casing (025) | No standard; existing behavior | lowercase (unchanged) | `WithGoFieldNames()`, `WithCaseInsensitiveFieldNames()` opt-in |
-| `RawMessage`/`RawTag` vs other `Unmarshaler`s (022) | Contract defect for raw types only | raw types get original bytes; other `Unmarshaler`s keep v0.2 input | `WithVerbatimUnmarshalerInput()` opt-in |
+| Every `Unmarshaler` receives original bytes, not a re-encoding (022) | Contract defect (`marshal.go:14-18`; maintainer decision) | original bytes | none; re-encoded input may be added later as a new opt-in |
 | COSE algorithm emission (029) | Superseded contract (RFC 9864) | `NewSigner` emits `-7`/`-8` as documented; `AlgES256`/`AlgEdDSA` deprecated; verifiers accept both | `WithFullySpecifiedAlgorithms()` (recommended), `AlgESP256`, `AlgEd25519`, … |
 | PBES2 / HPKE code-point collisions (029) | Contract defect (claims RFC 9053 / IANA ids) / Draft | new non-colliding constants beside deprecated old ones (e.g. `AlgPrivatePBES2_HS256_A128KW`); emission switched; existing `HPKEKey` unchanged and deprecated | `WithLegacyPBES2Labels()`, `WithLegacyECDHES()`, `WithDraftHPKE27()` |
 | CWT `exp` required, issuer/audience, iat checks (031) | Superseded contract | zero-value `Validator` unchanged | `cwt.NewValidator()` with standards defaults (recommended) |

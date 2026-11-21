@@ -11,8 +11,9 @@ GOFUMPT  := $(GO) tool gofumpt
 GOLANGCI := $(GO) tool -modfile=$(CURDIR)/tools/go.mod golangci-lint
 
 # Sub-modules (cose, cwt, eat, edhoc). Portable across GNU and BSD find;
-# the tools module holds no packages and is excluded.
-MODULES  := $(shell find . -mindepth 2 -name go.mod -not -path './tools/*' -exec dirname {} \; | sort)
+# the tools module holds no packages and is excluded, as are hidden
+# directories (e.g. editor/agent worktrees under .claude/).
+MODULES  := $(shell find . -mindepth 2 -name go.mod -not -path './tools/*' -not -path './.*' -exec dirname {} \; | sort)
 
 # Default fuzz time per registered target. Override on the command line:
 #   make fuzz FUZZTIME=2m
@@ -24,12 +25,14 @@ help: ## show this help
 	      /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 .PHONY: fmt
+GOFILES   = $(shell find . -name '*.go' -not -path './.*' -not -path '*/testdata/*')
+
 fmt: ## gofumpt -w across the tree
-	$(GOFUMPT) -w .
+	$(GOFUMPT) -w $(GOFILES)
 
 .PHONY: fmt-check
 fmt-check: ## fail if gofumpt would change anything (CI gate)
-	@diff_files=$$($(GOFUMPT) -l .); \
+	@diff_files=$$($(GOFUMPT) -l $(GOFILES)); \
 	if [ -n "$$diff_files" ]; then \
 		echo "ERROR: gofumpt formatting violations in:"; \
 		echo "$$diff_files" | sed 's/^/  /'; \

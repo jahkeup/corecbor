@@ -26,6 +26,8 @@ The files are checked in for three reasons:
 | `rfc9562.txt` | Universally Unique IDentifiers (UUIDs) | Proposed Standard | Tag-1 timestamp / UUIDv7 interplay for COSE consumers. |
 | `rfc7049.txt` | Concise Binary Object Representation (CBOR) | Obsoleted by 8949 | Superseded but cited for "Canonical CBOR" mode (encoder-decoder-spec §2.1). |
 | `rfc9052.txt` | CBOR Object Signing and Encryption (COSE) | Internet Standard | Downstream consumer; not in scope but referenced for tag-preservation requirements. |
+| `rfc9528.txt` | Ephemeral Diffie-Hellman Over COSE (EDHOC) | Proposed Standard | The `edhoc` module's protocol (proposal 033). |
+| `rfc9529.txt` | Traces of Ephemeral Diffie-Hellman Over COSE (EDHOC) | Informational | Golden test vectors; `edhoc/rfc9529_test.go` parses this file directly (proposal 033). |
 
 ## Refresh procedure
 
@@ -34,7 +36,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

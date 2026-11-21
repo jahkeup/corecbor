@@ -49,7 +49,7 @@ The contract, design, and process all live under
 ├── cose/                         — COSE sign/encrypt/MAC (RFC 9052, separate module)
 ├── cwt/                          — CWT claims + validation (RFC 8392, separate module)
 ├── eat/                          — EAT entity attestation (RFC 9711, separate module)
-├── edhoc/                        — EDHOC key exchange (RFC 9528, separate module)
+├── edhoc/                        — EDHOC key exchange (RFC 9528, separate module; experimental until proposal 033 closes)
 ├── cmd/                          — CLI tools (cbor-diag, cbor-registry-gen)
 ├── tools/                        — pinned dev tools module (golangci-lint)
 ├── testdata/                     — fuzz corpora + compatibility fixtures

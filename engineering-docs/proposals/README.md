@@ -17,7 +17,6 @@ proposal lifecycle.
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 | [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
 | [020](020-default-decode-recovery.md) | 1 | Draft | Default-path decode recovery and residual throughput fixes | corecbor maintainers | 016, 018, 019 | 2026-05-24 |
-| [023](023-strict-decode-policy-and-errors.md) | 1 | In-Progress | Strict decode policy (tag allowlist) and structured errors | corecbor maintainers | 001, 034 | 2026-11-20 |
 | [024](024-serialization-profiles-alignment.md) | 1 | Draft | Align encoder modes and checking decoders with CBOR Serialization | corecbor maintainers | 001, 021, 023 | 2026-11-20 |
 | [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
 | [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
@@ -33,6 +32,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [023](023-strict-decode-policy-and-errors.md) | 1 | Closed | Strict decode policy (tag allowlist) and structured errors | corecbor maintainers | 2026-11-21 | StrictDecoder matches spec §3.2; WithAllowedTags/TagsModeled/TagsWellKnown; *DecodeError with offset (+ optional path), *UnmarshalTypeError; err113 enforces sentinel wrapping. |
 | [027](027-cose-verification-hardening.md) | 3 | Closed | COSE verification hardening | corecbor maintainers | 2026-11-21 | Verify over received protected bytes; fail-closed multi-verify; alg binding, crit, duplicate labels; typed headers, decode limits; cose fuzz in CI. |
 | [022](022-raw-byte-preservation.md) | 1 | Closed | Raw byte preservation through decode | corecbor maintainers | 2026-11-20 | DecodePrefix/DecodeRaw/Cursor; every Unmarshaler gets original bytes; Permissive RawMessage/RawTag splice; Cursor rejects what Decode rejects. apicheck clean. |
 | [021](021-core-codec-safety-fixes.md) | 1 | Closed | Core codec safety fixes | corecbor maintainers | 2026-11-20 | D1–D19: concurrency, arena aliasing, panics on untrusted input, embedded structs, time/bignum, stream encoder, DecodeFrom, wire well-formedness, diagnostics. apicheck clean; golden changes allowlisted. |

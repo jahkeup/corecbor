@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 023 |
 | **Tier** | 1 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001, 034 (compatibility policy) |
@@ -409,3 +409,4 @@ that can decode COSE and CWT.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Status: In-Progress — Phases 1–3 implemented; implementation notes added | corecbor maintainers |
+| 2026-11-21 | Status: Closed (Phases 1–3 on main; CI green incl. fuzz, run 44881508706) | corecbor maintainers |

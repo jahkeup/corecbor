@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # make apicheck compares against the v0.2.2 tag (proposal 034).
+          fetch-depth: 0
 
       - uses: actions/setup-go@v6
         with:

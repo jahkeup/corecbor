@@ -90,8 +90,16 @@ fuzz: ## run every registered Fuzz* target for FUZZTIME (default 30s)
 tidy: ## go mod tidy
 	$(GO) mod tidy
 
+.PHONY: apicheck
+apicheck: ## exported API vs v0.2.2 via apidiff (proposal 034; needs tags)
+	tools/apicheck.sh
+
+.PHONY: golden-regen
+golden-regen: ## regenerate golden vectors from the v0.2.2 tag (proposal 034)
+	tools/golden-regen.sh
+
 .PHONY: check
-check: fmt-check vet lint test ## CI-gating set: fmt-check + vet + lint + test
+check: fmt-check vet lint apicheck test ## CI-gating set: fmt-check + vet + lint + apicheck + test
 
 .PHONY: compat
 compat: ## run cross-library compatibility tests (including user-provided payloads)

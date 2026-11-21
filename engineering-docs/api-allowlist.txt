@@ -1,0 +1,16 @@
+# API compatibility allowlist for `make apicheck` (proposal 034).
+#
+# `make apicheck` compares every module's exported API against v0.2.2
+# with apidiff and fails on any incompatible change not listed here.
+#
+# Proposal 034 rule: exported identifiers present in v0.2.2 are stable in
+# signature and semantics. Do not remove, rename, or retype them, and do
+# not add methods to exported interfaces. The only accepted incompatible
+# change is appending a variadic `...Option` parameter to an existing
+# function, and only when a call with no options behaves exactly as
+# before (apart from defect fixes listed in the same proposal). Every
+# entry here must also appear in engineering-docs/migration-v0.2-to-v0.30.md.
+#
+# Format: one entry per line, "<module path>: <apidiff line>", copied from
+# the apicheck output, e.g.
+#   github.com/jahkeup/corecbor/eat: DecodeClaims: changed from func([]byte) (*Claims, error) to func([]byte, ...Option) (*Claims, error)

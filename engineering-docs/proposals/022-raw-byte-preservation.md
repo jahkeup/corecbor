@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 022 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 014 (RawMessage/RawTag), 018 (Cursor, zero-copy), 020 (internal arena), 021 (D2 aliasing fix), 034 (compatibility policy) |
@@ -206,6 +206,62 @@ No new sentinels. The `Cursor` methods return existing ones:
 
 ---
 
+## Implementation notes (2026-11-20)
+
+- **Byte walk alongside the decoded Value, not a cursor-only
+  Unmarshal.** `Decoder.Unmarshal` still decodes the whole input first,
+  so every strictness and limit error is exactly as before. Only when
+  the target type can reach an `Unmarshaler` (computed per
+  `reflect.Type` and cached; interface targets never can) does it walk
+  the source bytes, in step with the decoded `Value`: array items and
+  tag content line up one-to-one, and map entries line up whenever the
+  decoder merged no duplicates. Leaves come from the decoded `Value`;
+  only `Unmarshaler`s see bytes. All other targets keep the v0.2 path
+  unchanged (`BenchmarkUnmarshalStruct` is flat).
+- **Duplicate keys.** When the decoder merged duplicate keys (forgiving
+  mode: first key's position, last value), the walk merges the same
+  way (scalar keys by kind and payload, floats by `==`; containers and
+  tags never merge) and, if the result still lines up with the decoded
+  map, uses its values; otherwise it decodes spans itself with
+  `rfc8949.DecodeNested`.
+- **Found while doing this (not fixed here):** the decoder buckets
+  maps with more than 16 entries by the *encoded* key bytes
+  (`fnv1a(encodedKey)` in `mapInsert`), so equal keys with different
+  encodings (`01` vs `1800`, definite vs chunked text) are merged in
+  small maps but not in large ones, and `RejectDuplicateMapKeys`
+  misses them in large maps. That's a decoder key-equality defect for
+  024. The walk is robust to it (`TestUnmarshalerLargeMapMisalignedDuplicates`).
+- **Self-describe tags.** Leading 55799 tags on the top-level item are
+  stripped before handing bytes to an `Unmarshaler`, as `Decode` does;
+  nested ones are kept (they are part of the item).
+- **Phase 3 splice** uses an internal `Value` kind
+  (`internal/rawvalue`) that only exists between reflection and
+  encoding. The encoder checks it in the switch's `default` arm so the
+  kind switch stays a dense jump table (a `case 0xff` cost
+  `EncodeScalars` ~19%). Raw bytes are still validated as one complete
+  item before splicing.
+- **`Cursor.skipItem`** is now a structural validator matching `Decode`
+  (reserved AI 28–30, AI 31 on major 0/1/6, stray breaks, two-byte
+  simple < 32, nesting limit, `MaxArrayLength`/`MaxByteStringLength`,
+  and declared lengths bounded by available input via the same
+  `reserve` accounting as `Decode`). It still doesn't apply content
+  knobs (UTF-8, duplicates, tags, floats, non-shortest);
+  `Cursor.Decode` does. `FuzzRawSpanRoundTrip` checks Skip and Decode
+  agree on success, length and error class for arbitrary input.
+- **New exported identifiers** (additive; `apicheck` clean):
+  `Decoder.DecodePrefix`, `Decoder.DecodeRaw`, `Decoder.Cursor`, type
+  alias `Cursor`, `rfc8949.Cursor.{Raw,DecodeRaw,Bytes}`,
+  `rfc8949.DecodeNested`.
+- **Performance.** `BenchmarkUnmarshalStruct` (no `Unmarshaler`):
+  unchanged. `BenchmarkUnmarshalStructRawMessage`: ~13% slower than
+  v0.2's decode-then-re-encode, the cost of the structural pass that
+  finds spans; allocations are lower (23 vs 26 per op). This misses
+  the non-gating "within 10%" target in the Performance table; closing
+  it would need the decoder to record item offsets.
+- **`TestDecodePrefixWebAuthnAuthData`** uses a synthetic fixture in
+  the real authenticator-data layout, not bytes captured from a
+  device.
+
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
@@ -340,3 +396,4 @@ and the 104-byte `Value` (proposal 020) doesn't grow.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Every `Unmarshaler` receives original bytes (contract defect, maintainer decision); `WithVerbatimUnmarshalerInput` dropped | corecbor maintainers |
+| 2026-11-20 | Status: In-Progress; Phases 1–3 implemented, Cursor skip hardened; implementation notes | corecbor maintainers |

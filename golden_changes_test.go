@@ -24,6 +24,32 @@ var goldenChanges = map[string]string{
 	"root/stream/nested-overflow":             "proposal 021 D6: nested containers count against the parent",
 	"root/stream/deterministic-unsorted-map":  "proposal 021 D6: deterministic streams reject out-of-order map keys",
 
+	// 021 D11: -2^64 renders as -18446744073709551616, not -0.
+	"root/decode/forgiving/negint-min": "proposal 021 D11: NegInt formatted with unsigned arithmetic",
+	"root/decode/strict/negint-min":    "proposal 021 D11: NegInt formatted with unsigned arithmetic",
+	"root/diag/negint-min":             "proposal 021 D11: NegInt formatted with unsigned arithmetic",
+	"root/diag-indicators/negint-min":  "proposal 021 D11: NegInt formatted with unsigned arithmetic",
+	"root/diag-compact/negint-min":     "proposal 021 D11: NegInt formatted with unsigned arithmetic",
+
+	// 021 D12: DiagIndicators renders RFC 8949 §8.1 indicators from the
+	// source bytes. The byte view also shows every map entry as encoded,
+	// so duplicate keys appear twice (the decoded Value keeps the last).
+	"root/diag-indicators/nonshortest-0":         "proposal 021 D12: encoding indicator _0",
+	"root/diag-indicators/nonshortest-1-u16":     "proposal 021 D12: encoding indicator _1",
+	"root/diag-indicators/float32-1-nonshortest": "proposal 021 D12: float encoding indicator _2",
+	"root/diag-indicators/bytes-indef":           "proposal 021 D12: indefinite-length byte string chunks",
+	"root/diag-indicators/text-indef":            "proposal 021 D12: indefinite-length text string chunks",
+	"root/diag-indicators/array-indef":           "proposal 021 D12: indefinite-length array indicator",
+	"root/diag-indicators/map-indef":             "proposal 021 D12: indefinite-length map indicator",
+	"root/diag-indicators/map-dup-key":           "proposal 021 D12: byte view shows each encoded map entry",
+	"root/diag-indicators/map-dup-float-width":   "proposal 021 D12: float encoding indicator _2 on key",
+
+	// 021 D13: invalid UTF-8 text renders as annotated bytes.
+	"root/decode/forgiving/text-invalid-utf8": "proposal 021 D13: invalid UTF-8 text rendered as annotated bytes",
+	"root/diag/text-invalid-utf8":             "proposal 021 D13: invalid UTF-8 text rendered as annotated bytes",
+	"root/diag-indicators/text-invalid-utf8":  "proposal 021 D13: invalid UTF-8 text rendered as annotated bytes",
+	"root/diag-compact/text-invalid-utf8":     "proposal 021 D13: invalid UTF-8 text rendered as annotated bytes",
+
 	// Proposal 022 — raw byte preservation.
 	"root/unmarshal/rawmessage-unsorted-map": "proposal 022: RawMessage receives the original bytes",
 }

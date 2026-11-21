@@ -19,11 +19,15 @@ func main() {
 	hexInput := flag.Bool("hex", false, "input is hex-encoded text")
 	compact := flag.Bool("compact", false, "no whitespace")
 	sequence := flag.Bool("sequence", false, "treat as CBOR sequence")
+	indicators := flag.Bool("indicators", false, "show RFC 8949 §8.1 encoding indicators (_ for indefinite length, _0.._3 for non-shortest)")
 	flag.Parse()
 
 	var opts []corecbor.DiagnosticOption
 	if *compact {
 		opts = append(opts, corecbor.DiagCompact())
+	}
+	if *indicators {
+		opts = append(opts, corecbor.DiagIndicators())
 	}
 
 	data, err := readInput(flag.Args())
@@ -49,12 +53,18 @@ func main() {
 	if *sequence {
 		decOpts := rfc8949.DecodeOpts{}
 		for len(data) > 0 {
-			v, n, decErr := rfc8949.Decode(data, decOpts)
+			_, n, decErr := rfc8949.Decode(data, decOpts)
 			if decErr != nil {
 				fmt.Fprintf(os.Stderr, "cbor-diag: %v\n", decErr)
 				os.Exit(1)
 			}
-			fmt.Println(corecbor.DiagnosticValue(v, opts...))
+			// Render from the item's bytes so -indicators applies.
+			s, diagErr := corecbor.Diagnostic(data[:n], opts...)
+			if diagErr != nil {
+				fmt.Fprintf(os.Stderr, "cbor-diag: %v\n", diagErr)
+				os.Exit(1)
+			}
+			fmt.Println(s)
 			data = data[n:]
 		}
 	} else {

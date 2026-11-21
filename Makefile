@@ -74,16 +74,17 @@ bench: ## run all benchmarks (root + sub-modules) with -benchmem
 	done
 
 .PHONY: fuzz
-fuzz: ## run every registered Fuzz* target for FUZZTIME (default 30s)
-	@targets=$$(grep -rEho 'func Fuzz[A-Z][A-Za-z0-9_]+' --include='*_test.go' . | awk '{print $$2}' | sort -u); \
-	if [ -z "$$targets" ]; then \
+fuzz: ## run every registered Fuzz* target for FUZZTIME (default 30s), root + sub-modules
+	@pairs=$$(find . -name '*_test.go' -not -path './.*' -not -path '*/testdata/*' -print0 | \
+		xargs -0 grep -HEo 'func Fuzz[A-Z][A-Za-z0-9_]+' | \
+		sed -E 's|^(.*)/[^/]*:func (Fuzz[A-Za-z0-9_]+)$$|\1 \2|' | sort -u); \
+	if [ -z "$$pairs" ]; then \
 		echo "no Fuzz* targets registered yet"; \
 		exit 0; \
 	fi; \
-	for t in $$targets; do \
-		echo ">>> $$t (fuzztime=$(FUZZTIME))"; \
-		pkg=$$(grep -rEl "func $$t" --include='*_test.go' . | head -1 | xargs dirname); \
-		$(GO) test -run NONE -fuzz "^$$t$$" -fuzztime $(FUZZTIME) "$$pkg" || exit 1; \
+	echo "$$pairs" | while read -r dir t; do \
+		echo ">>> $$dir $$t (fuzztime=$(FUZZTIME))"; \
+		(cd "$$dir" && $(GO) test -run NONE -fuzz "^$$t$$" -fuzztime $(FUZZTIME) .) || exit 1; \
 	done
 
 .PHONY: tidy

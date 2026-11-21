@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 024 |
 | **Tier** | 1 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001, 021 (`ErrNotDeterministic` user), 023 (`DecodeError`), 034 (compatibility policy) |
@@ -535,3 +535,4 @@ lifecycle. That is a separate proposal.
 | 2026-11-20 | Map key identity (value vs encoded) and duplicate policy (last-wins / reject / keep) as explicit caller choices; fix small/large-map split (maintainer decision) | corecbor maintainers |
 | 2026-11-20 | Status: In-Progress; Phases 1, 1b, 2, 3, 4 implemented; implementation notes | corecbor maintainers |
 | 2026-11-21 | Accepted perf trade-off (maintainer decision): strict decode of maps >16 entries ~+15% (DecodeStrictLargeMap100/1000), DecodeNestedMapStrict ~+5.5% vs pre-024 main, from data-model key identity at every map size; default/forgiving paths flat. Follow-up: reduce per-key cost in the strict hashed path (find/mapInsert, DecodeOpts size) | corecbor maintainers |
+| 2026-11-21 | Status: Closed (Phases 1–4 on main; CI green incl. fuzz, run 44927816052). Open follow-ups: strict large-map perf (accepted trade-off above); Draft identifiers finalized when draft-ietf-cbor-serialization publishes (034 lifecycle) | corecbor maintainers |

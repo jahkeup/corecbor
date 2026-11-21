@@ -236,10 +236,11 @@ No new sentinels. The `Cursor` methods return existing ones:
   nested ones are kept (they are part of the item).
 - **Phase 3 splice** uses an internal `Value` kind
   (`internal/rawvalue`) that only exists between reflection and
-  encoding. The encoder checks it in the switch's `default` arm so the
-  kind switch stays a dense jump table (a `case 0xff` cost
-  `EncodeScalars` ~19%). Raw bytes are still validated as one complete
-  item before splicing.
+  encoding. The encoder checks it before its kind switch and writes it
+  in an out-of-line helper: handling it anywhere inside the switch
+  (as a `case` or in `default`) cost `EncodeScalars` ~20% through code
+  generation of that recursive hot function, not extra work. Raw bytes
+  are still validated as one complete item before splicing.
 - **`Cursor.skipItem`** is now a structural validator matching `Decode`
   (reserved AI 28–30, AI 31 on major 0/1/6, stray breaks, two-byte
   simple < 32, nesting limit, `MaxArrayLength`/`MaxByteStringLength`,

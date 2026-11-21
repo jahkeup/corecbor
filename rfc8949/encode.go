@@ -89,6 +89,9 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	if v.Kind == cbor.KindInvalid {
 		return dst, fmt.Errorf("encode: %w", cbor.ErrNilValue)
 	}
+	if v.Kind == rawvalue.Kind {
+		return encodeOther(dst, v)
+	}
 	switch v.Kind {
 	case cbor.KindUint:
 		return wire.AppendHead(dst, wire.MajorUint, v.Num), nil
@@ -172,14 +175,18 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	case cbor.KindFloat64:
 		return encodeFloat64(dst, math.Float64frombits(v.Num), opts)
 	default:
-		if v.Kind == rawvalue.Kind {
-			// Pre-encoded, validated item (Permissive-mode
-			// RawMessage/RawTag). Checked here, outside the case list,
-			// so the switch stays a dense jump table.
-			return append(dst, v.Bstr...), nil
-		}
 		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind)
 	}
+}
+
+// encodeOther writes the internal raw kind: a pre-encoded, validated
+// item from Permissive-mode RawMessage/RawTag. It is kept out of line;
+// handling it inside encode's switch cost ~20% on scalar encoding
+// (code generation of that recursive hot function, not extra work).
+//
+//go:noinline
+func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
+	return append(dst, v.Bstr...), nil
 }
 
 func encodeFloat32(dst []byte, val float32, opts *EncodeOpts) ([]byte, error) {

@@ -33,8 +33,45 @@ func RejectDuplicateMapKeys() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectDuplicateMapKeys = true }
 }
 
+// RejectUnknownTags rejects every tag not in the allowlist built by
+// WithAllowedTags. With no WithAllowedTags option, the allowlist is
+// TagsModeled: the tags encoder-decoder-spec.md §4.3 says the library
+// models. Tag 55799 (self-describe) is always allowed.
 func RejectUnknownTags() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectUnknownTags = true }
+}
+
+// WithAllowedTags restricts the tags the decoder accepts to ids (plus
+// any added by other WithAllowedTags options). A tag not in the set
+// fails with ErrUnknownTag. Tag 55799 (self-describe) is always
+// allowed, so WithAllowedTags with no arguments allows only 55799.
+func WithAllowedTags(ids ...uint64) DecoderOption {
+	return func(c *decodeConfig) {
+		c.opts.RejectUnknownTags = true
+		all := append(c.opts.AllowedTags.IDs(), ids...)
+		c.opts.AllowedTags = rfc8949.NewTagSet(append(all, cbor.TagSelfDescribe)...)
+	}
+}
+
+// TagsModeled is the default allowlist for RejectUnknownTags: exactly
+// the tags in encoder-decoder-spec.md §4.3.
+var TagsModeled = []uint64{0, 1, 2, 3, 21, 22, 23, 24, 32, 35, 258, 55799}
+
+// TagsWellKnown is TagsModeled plus the tags of the COSE/CWT/EAT
+// family this module tree implements. It is never applied implicitly;
+// pass WithAllowedTags(TagsWellKnown...) to use it.
+var TagsWellKnown = []uint64{
+	0, 1, 2, 3, // RFC 8949 §3.4.1–3.4.3
+	21, 22, 23, // expected conversion
+	24,     // encoded CBOR
+	32, 35, // URI, regexp
+	258,        // set
+	16, 17, 18, // COSE_Encrypt0, COSE_Mac0, COSE_Sign1 (RFC 9052)
+	96, 97, 98, // COSE_Encrypt, COSE_Mac, COSE_Sign
+	61,    // CWT (RFC 8392)
+	601,   // UCCS (RFC 9781)
+	602,   // detached EAT bundle (RFC 9711 §5)
+	55799, // self-describe
 }
 
 func RejectNonFiniteFloats() DecoderOption {
@@ -124,6 +161,11 @@ func NewDecoder(opts ...DecoderOption) *Decoder {
 	return d
 }
 
+// StrictDecoder returns a Decoder with the encoder-decoder-spec.md §3.2
+// strict preset: it rejects indefinite lengths, non-shortest arguments,
+// invalid UTF-8, duplicate map keys, non-finite floats and null map
+// keys. Tags are accepted; add RejectUnknownTags() or WithAllowedTags
+// for closed-world tag validation.
 func StrictDecoder(opts ...DecoderOption) *Decoder {
 	cfg := decodeConfig{opts: rfc8949.StrictOpts()}
 	for _, o := range opts {

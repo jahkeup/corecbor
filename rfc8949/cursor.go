@@ -446,6 +446,9 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 		return pos, nil
 
 	case wire.MajorTag:
+		if !o.tagAllowed(h.Arg) {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrUnknownTag, off)
+		}
 		if strip && h.Arg == cbor.TagSelfDescribe {
 			return c.skipAt(pos, depth, reserve, true)
 		}

@@ -73,4 +73,13 @@ var goldenChanges = map[string]string{
 	"root/unmarshal/rawmessage-unsorted-map": "proposal 022: RawMessage receives the original bytes",
 	"root/raw/rawtag-unmarshal-unsorted":     "proposal 022: RawTag keeps the tag content's original bytes",
 	"root/unmarshal/rawmessage-non-shortest": "proposal 022: RawMessage receives the original bytes (non-shortest int kept)",
+
+	// Proposal 023 — strict decode tag policy.
+	"root/decode/strict/tag1-epoch":               "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
+	"root/decode/strict/tag2-bignum":              "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
+	"root/decode/strict/tag2-leading-zero":        "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
+	"root/decode/strict/tag24":                    "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
+	"root/decode/strict/tag-unknown-100":          "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
+	"root/decode/strict/tag18-cose-empty":         "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
+	"root/decode/option/reject-unknown-tags-tag1": "proposal 023: RejectUnknownTags allows the spec §4.3 modeled tags (TagsModeled)",
 }

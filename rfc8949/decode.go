@@ -6,6 +6,7 @@ package rfc8949
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 	"unicode/utf8"
 
@@ -48,6 +49,12 @@ type DecodeOpts struct {
 	MaxNestingDepth     int
 	MaxArrayLength      int
 	MaxByteStringLength int
+
+	// AllowedTags, when non-nil, is the set of tag numbers accepted
+	// under RejectUnknownTags; tag 55799 (self-describe) is always
+	// accepted. Nil means the tags the library models
+	// (encoder-decoder-spec.md §4.3).
+	AllowedTags *TagSet
 
 	Budget   *BudgetState
 	Interner *StringInterner
@@ -93,7 +100,6 @@ func StrictOpts() DecodeOpts {
 		RejectNonShortest:      true,
 		RejectInvalidUTF8:      true,
 		RejectDuplicateMapKeys: true,
-		RejectUnknownTags:      true,
 		RejectNonFiniteFloats:  true,
 		RejectNullMapKeys:      true,
 	}
@@ -133,8 +139,61 @@ func DecodeNested(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
 	return decodeValue(src, 0, 0, opts, false)
 }
 
-var knownTags = map[uint64]bool{
-	55799: true,
+// modeledTags are the tags encoder-decoder-spec.md §4.3 says the library
+// models; RejectUnknownTags with no AllowedTags accepts exactly these.
+var modeledTags = map[uint64]struct{}{
+	0: {}, 1: {}, 2: {}, 3: {}, 21: {}, 22: {}, 23: {}, 24: {},
+	32: {}, 35: {}, 258: {}, cbor.TagSelfDescribe: {},
+}
+
+// TagSet is an immutable set of tag numbers, used as
+// DecodeOpts.AllowedTags. It is a pointer type so DecodeOpts stays
+// comparable.
+type TagSet struct {
+	m map[uint64]struct{}
+}
+
+// NewTagSet returns a set holding ids.
+func NewTagSet(ids ...uint64) *TagSet {
+	s := &TagSet{m: make(map[uint64]struct{}, len(ids))}
+	for _, id := range ids {
+		s.m[id] = struct{}{}
+	}
+	return s
+}
+
+// Contains reports whether id is in the set. A nil set is empty.
+func (s *TagSet) Contains(id uint64) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.m[id]
+	return ok
+}
+
+// IDs returns the set's tag numbers in ascending order.
+func (s *TagSet) IDs() []uint64 {
+	if s == nil {
+		return nil
+	}
+	ids := make([]uint64, 0, len(s.m))
+	for id := range s.m {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+// tagAllowed reports whether tag id passes the RejectUnknownTags policy.
+func (o *DecodeOpts) tagAllowed(id uint64) bool {
+	if !o.RejectUnknownTags || id == cbor.TagSelfDescribe {
+		return true
+	}
+	if o.AllowedTags != nil {
+		return o.AllowedTags.Contains(id)
+	}
+	_, ok := modeledTags[id]
+	return ok
 }
 
 func decodeValue(src []byte, off, depth int, opts DecodeOpts, stripSelfDescribe bool) (cbor.Value, int, error) {
@@ -766,7 +825,7 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	tagID := h.Arg
 	pos := off + h.N
 
-	if opts.RejectUnknownTags && !knownTags[tagID] {
+	if !opts.tagAllowed(tagID) {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrUnknownTag, off)
 	}
 

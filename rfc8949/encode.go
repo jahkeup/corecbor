@@ -175,7 +175,7 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	case cbor.KindFloat64:
 		return encodeFloat64(dst, math.Float64frombits(v.Num), opts)
 	default:
-		return dst, kindError(v.Kind)
+		return dst, unsupportedKind(v.Kind)
 	}
 }
 
@@ -190,7 +190,7 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 //go:noinline
 func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
 	if !rawvalue.Is(v) {
-		return dst, kindError(v.Kind)
+		return dst, unsupportedKind(v.Kind)
 	}
 	return append(dst, v.Bstr...), nil
 }
@@ -381,3 +381,10 @@ func (k kindError) Error() string {
 }
 
 func (k kindError) Unwrap() error { return cbor.ErrInvalidKind }
+
+// unsupportedKind builds the error out of line: constructing it inside
+// encode's switch changed that hot recursive function's code generation
+// enough to cost ~20% on scalar encoding.
+//
+//go:noinline
+func unsupportedKind(k cbor.Kind) error { return kindError(k) }

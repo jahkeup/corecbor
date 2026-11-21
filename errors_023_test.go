@@ -121,3 +121,28 @@ func TestEncodeInvalidKind(t *testing.T) {
 		t.Errorf("Error() = %q, want %q", err.Error(), want)
 	}
 }
+
+func TestDecodeErrorPath(t *testing.T) {
+	cases := []struct{ hex, path string }{
+		{"8201a1616b", "$[1].k"},               // [1, {"k": <truncated>}]
+		{"a16361206281" + "1c", `$["a b"][0]`}, // {"a b": [<reserved AI>]}
+		{"9f01a1011cff", "$[1][1]"},            // [_ 1, {1: <reserved AI>}]
+		{"1c", "$"},
+	}
+	for _, tc := range cases {
+		_, err := NewDecoder(WithErrorPath()).Decode(mustHex(t, tc.hex))
+		var de *DecodeError
+		if !errors.As(err, &de) {
+			t.Fatalf("%s: err %v (%T)", tc.hex, err, err)
+		}
+		if de.Path != tc.path {
+			t.Errorf("%s: Path = %q, want %q (err %v)", tc.hex, de.Path, tc.path, err)
+		}
+	}
+	// Without the option there is no path, and the text is unchanged.
+	_, err := NewDecoder().Decode(mustHex(t, "8201a1616b"))
+	var de *DecodeError
+	if !errors.As(err, &de) || de.Path != "" {
+		t.Errorf("default decoder set Path: %v", err)
+	}
+}

@@ -57,6 +57,10 @@ type DecodeOpts struct {
 	// (encoder-decoder-spec.md §4.3).
 	AllowedTags *TagSet
 
+	// ErrorPath makes every DecodeError carry Path, the location of the
+	// offending item ("$[2].foo"). It costs nothing on the success path.
+	ErrorPath bool
+
 	Budget   *BudgetState
 	Interner *StringInterner
 	Arena    *Arena
@@ -132,7 +136,11 @@ func (o DecodeOpts) maxBytes() int {
 }
 
 func Decode(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
-	return decodeValue(src, 0, 0, opts, true)
+	v, n, err := decodeValue(src, 0, 0, opts, true)
+	if err != nil && opts.ErrorPath {
+		err = withPath(err, "$")
+	}
+	return v, n, err
 }
 
 // DecodeNested decodes one item from the start of src the way Decode
@@ -425,7 +433,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	_ = arr[count-1]
 	for i := range count {
 		if pos >= srcLen {
-			return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
+			return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrTruncated, pos), opts, i)
 		}
 		ib := src[pos]
 
@@ -439,50 +447,50 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 				n = 1
 			case ai == 24:
 				if pos+1 >= srcLen {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrTruncated, pos), opts, i)
 				}
 				arg = uint64(src[pos+1])
 				n = 2
 				if opts.RejectNonShortest && arg < 24 {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrNonShortest, pos), opts, i)
 				}
 			case ai == 25:
 				if pos+2 >= srcLen {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrTruncated, pos), opts, i)
 				}
 				arg = uint64(src[pos+1])<<8 | uint64(src[pos+2])
 				n = 3
 				if opts.RejectNonShortest && arg <= 0xff {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrNonShortest, pos), opts, i)
 				}
 			case ai == 26:
 				if pos+4 >= srcLen {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrTruncated, pos), opts, i)
 				}
 				arg = uint64(src[pos+1])<<24 | uint64(src[pos+2])<<16 | uint64(src[pos+3])<<8 | uint64(src[pos+4])
 				n = 5
 				if opts.RejectNonShortest && arg <= 0xffff {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrNonShortest, pos), opts, i)
 				}
 			case ai == 27:
 				if pos+8 >= srcLen {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrTruncated, pos), opts, i)
 				}
 				arg = uint64(src[pos+1])<<56 | uint64(src[pos+2])<<48 | uint64(src[pos+3])<<40 | uint64(src[pos+4])<<32 |
 					uint64(src[pos+5])<<24 | uint64(src[pos+6])<<16 | uint64(src[pos+7])<<8 | uint64(src[pos+8])
 				n = 9
 				if opts.RejectNonShortest && arg <= 0xffffffff {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrNonShortest, pos), opts, i)
 				}
 			default:
 				if ai >= 28 && ai <= 30 {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrReservedAI, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrReservedAI, pos), opts, i)
 				}
 				co := opts
 				co.reserve += count - i - 1
 				v, next, err := decodeValue(src, pos, childDepth, co, false)
 				if err != nil {
-					return cbor.Value{}, next, err
+					return cbor.Value{}, next, indexPath(err, opts, i)
 				}
 				arr[i] = v
 				pos = next
@@ -503,7 +511,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 			end := pos + 1 + length
 			if end <= srcLen {
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
-					return cbor.Value{}, pos, decodeErr(cbor.ErrInvalidUTF8, pos)
+					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrInvalidUTF8, pos), opts, i)
 				}
 				var s string
 				if opts.Interner != nil {
@@ -562,7 +570,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		co.reserve += count - i - 1
 		v, next, err := decodeValue(src, pos, childDepth, co, false)
 		if err != nil {
-			return cbor.Value{}, next, err
+			return cbor.Value{}, next, indexPath(err, opts, i)
 		}
 		arr[i] = v
 		pos = next
@@ -593,7 +601,7 @@ func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Va
 		co.reserve++ // break code
 		v, next, err := decodeValue(src, pos, depth+1, co, false)
 		if err != nil {
-			return cbor.Value{}, next, err
+			return cbor.Value{}, next, indexPath(err, opts, len(arr))
 		}
 		arr = append(arr, v)
 		pos = next
@@ -688,7 +696,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		co.reserve += rest
 		v, next, err := decodeValue(src, pos, depth+1, co, false)
 		if err != nil {
-			return cbor.Value{}, next, err
+			return cbor.Value{}, next, keyPath(err, opts, k)
 		}
 		pos = next
 		m, err = mapInsert(m, k, v, keyOff, encodedKey, dedup, opts)
@@ -736,7 +744,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		vOpts.reserve++ // break code
 		v, next, err := decodeValue(src, pos, depth+1, vOpts, false)
 		if err != nil {
-			return cbor.Value{}, next, err
+			return cbor.Value{}, next, keyPath(err, opts, k)
 		}
 		pos = next
 		m, err = mapInsert(m, k, v, keyOff, encodedKey, nil, opts)

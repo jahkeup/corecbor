@@ -26,13 +26,13 @@ const (
 // NaN or ±Inf.
 func AsTime(t Value) (time.Time, error) {
 	if t.Kind != KindTag {
-		return time.Time{}, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
+		return time.Time{}, mismatchf("cbor: expected Tag value, got kind %d", t.Kind)
 	}
 	switch t.TagID() {
 	case TagDateTimeString:
 		inner := t.TagInner()
 		if inner.Kind != KindText {
-			return time.Time{}, fmt.Errorf("cbor: tag 0 inner must be Text, got kind %d", inner.Kind)
+			return time.Time{}, mismatchf("cbor: tag 0 inner must be Text, got kind %d", inner.Kind)
 		}
 		return time.Parse(time.RFC3339, inner.TextVal())
 	case TagEpochDateTime:
@@ -54,10 +54,10 @@ func AsTime(t Value) (time.Time, error) {
 		case KindFloat64:
 			return floatEpoch(inner.Float64Val())
 		default:
-			return time.Time{}, fmt.Errorf("cbor: tag 1 inner must be Uint/NegInt/Float, got kind %d", inner.Kind)
+			return time.Time{}, mismatchf("cbor: tag 1 inner must be Uint/NegInt/Float, got kind %d", inner.Kind)
 		}
 	default:
-		return time.Time{}, fmt.Errorf("cbor: expected tag 0 or 1, got tag %d", t.TagID())
+		return time.Time{}, mismatchf("cbor: expected tag 0 or 1, got tag %d", t.TagID())
 	}
 }
 
@@ -95,27 +95,27 @@ func TimeToString(t time.Time) Value {
 
 func AsBigInt(t Value) (*big.Int, error) {
 	if t.Kind != KindTag {
-		return nil, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
+		return nil, mismatchf("cbor: expected Tag value, got kind %d", t.Kind)
 	}
 	switch t.TagID() {
 	case TagUnsignedBignum:
 		inner := t.TagInner()
 		if inner.Kind != KindBytes {
-			return nil, fmt.Errorf("cbor: tag 2 inner must be Bytes, got kind %d", inner.Kind)
+			return nil, mismatchf("cbor: tag 2 inner must be Bytes, got kind %d", inner.Kind)
 		}
 		n := new(big.Int).SetBytes(inner.BytesVal())
 		return n, nil
 	case TagNegativeBignum:
 		inner := t.TagInner()
 		if inner.Kind != KindBytes {
-			return nil, fmt.Errorf("cbor: tag 3 inner must be Bytes, got kind %d", inner.Kind)
+			return nil, mismatchf("cbor: tag 3 inner must be Bytes, got kind %d", inner.Kind)
 		}
 		n := new(big.Int).SetBytes(inner.BytesVal())
 		n.Add(n, big.NewInt(1))
 		n.Neg(n)
 		return n, nil
 	default:
-		return nil, fmt.Errorf("cbor: expected tag 2 or 3, got tag %d", t.TagID())
+		return nil, mismatchf("cbor: expected tag 2 or 3, got tag %d", t.TagID())
 	}
 }
 
@@ -134,14 +134,30 @@ func BigIntTo(n *big.Int) Value {
 
 func AsNestedCBOR(t Value) ([]byte, error) {
 	if t.Kind != KindTag {
-		return nil, fmt.Errorf("cbor: expected Tag value, got kind %d", t.Kind)
+		return nil, mismatchf("cbor: expected Tag value, got kind %d", t.Kind)
 	}
 	if t.TagID() != TagEncodedCBOR {
-		return nil, fmt.Errorf("cbor: expected tag 24, got tag %d", t.TagID())
+		return nil, mismatchf("cbor: expected tag 24, got tag %d", t.TagID())
 	}
 	inner := t.TagInner()
 	if inner.Kind != KindBytes {
-		return nil, fmt.Errorf("cbor: tag 24 inner must be Bytes, got kind %d", inner.Kind)
+		return nil, mismatchf("cbor: tag 24 inner must be Bytes, got kind %d", inner.Kind)
 	}
 	return inner.BytesVal(), nil
+}
+
+// textError keeps a fixed message while wrapping a sentinel, so
+// errors.Is matches without changing the v0.2.2 text.
+type textError struct {
+	msg string
+	err error
+}
+
+func (e *textError) Error() string { return e.msg }
+
+func (e *textError) Unwrap() error { return e.err }
+
+// mismatchf returns a formatted error that wraps ErrTypeMismatch.
+func mismatchf(format string, args ...any) error {
+	return &textError{msg: fmt.Sprintf(format, args...), err: ErrTypeMismatch}
 }

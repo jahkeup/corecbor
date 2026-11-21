@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("\xa4000\xd200000")
+uint64(1)
+uint64(1)

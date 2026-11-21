@@ -98,6 +98,9 @@ func NewBufferedReader(r io.Reader) *BufferedReader {
 // errItemEOF reports that the reader ended inside an item.
 var errItemEOF = errors.New("rfc8949: reader ended mid-item")
 
+// errInternal marks a broken internal invariant (a bug, not bad input).
+var errInternal = errors.New("rfc8949: internal")
+
 // itemReader reads the bytes of exactly one data item. It walks heads
 // with an explicit stack (no recursion), enforcing the same nesting,
 // length and well-formedness rules Decode applies to the item's
@@ -140,7 +143,7 @@ func (ir *itemReader) decode() (cbor.Value, error) {
 		return cbor.Value{}, err
 	}
 	if n != len(ir.buf) {
-		return cbor.Value{}, fmt.Errorf("rfc8949: internal: read %d bytes for an item that decoded from %d", len(ir.buf), n)
+		return cbor.Value{}, fmt.Errorf("%w: read %d bytes for an item that decoded from %d", errInternal, len(ir.buf), n)
 	}
 	return v, nil
 }

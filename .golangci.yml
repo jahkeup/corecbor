@@ -3,6 +3,10 @@ version: "2"
 run:
   timeout: 5m
   tests: true
+  # Paths in exclusion rules are relative to this file, so the rules
+  # below mean the same thing when a sub-module is linted from its own
+  # directory.
+  relative-path-mode: cfg
 
 issues:
   max-issues-per-linter: 0
@@ -14,7 +18,21 @@ formatters:
 
 linters:
   default: standard
+  enable:
+    # Proposal 023 / spec §5: every error wraps a sentinel. err113
+    # rejects fmt.Errorf without %w and errors.New outside package-level
+    # sentinel vars.
+    - err113
   exclusions:
     paths:
       - engineering-docs
       - testdata
+    rules:
+      # err113 is enforced for the root module's library packages (root,
+      # cbor, rfc8949, wire, internal). Tests and CLIs may build ad-hoc
+      # errors; the sub-modules adopt it with their own error-wrapping
+      # proposals (027, 031, 032, 033).
+      - linters: [err113]
+        path: _test\.go$
+      - linters: [err113]
+        path: ^(cmd|tools|cose|cwt|eat|edhoc)/

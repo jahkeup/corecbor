@@ -82,4 +82,17 @@ var goldenChanges = map[string]string{
 	"root/decode/strict/tag-unknown-100":          "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
 	"root/decode/strict/tag18-cose-empty":         "proposal 023: StrictDecoder accepts tags (spec §3.2 excludes RejectUnknownTags)",
 	"root/decode/option/reject-unknown-tags-tag1": "proposal 023: RejectUnknownTags allows the spec §4.3 modeled tags (TagsModeled)",
+
+	// Proposal 023: these errors now wrap ErrTypeMismatch (v0.2.2 had no sentinel); text unchanged.
+	"root/unmarshal/struct-tag-mismatch":   "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/unmarshal/float-into-int":        "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/unmarshal/text-into-int":         "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/unmarshal/time-untagged":         "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/unmarshal/bigint-from-uint":      "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/unmarshal/strict-decoder-struct": "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/time/AsTime-wrong-tag":           "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/time/AsTime-not-tag":             "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/bigint/AsBigInt-uint":            "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/nested/AsNestedCBOR-wrong":       "proposal 023: error now wraps ErrTypeMismatch (same message)",
+	"root/raw/rawtag-unmarshal-not-tag":    "proposal 023: error now wraps ErrTypeMismatch (same message)",
 }

@@ -52,6 +52,14 @@ func WithAllowedTags(ids ...uint64) DecoderOption {
 	}
 }
 
+// WithErrorPath makes decoder errors carry DecodeError.Path, the
+// RFC 9535-style location of the offending item, e.g. `$[1].k` or
+// `$["a b"][0]`. The path is appended to the message as " (path)".
+// Off by default; it costs nothing until an error occurs.
+func WithErrorPath() DecoderOption {
+	return func(c *decodeConfig) { c.opts.ErrorPath = true }
+}
+
 // TagsModeled is the default allowlist for RejectUnknownTags: exactly
 // the tags in encoder-decoder-spec.md §4.3.
 var TagsModeled = []uint64{0, 1, 2, 3, 21, 22, 23, 24, 32, 35, 258, 55799}

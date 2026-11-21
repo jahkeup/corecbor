@@ -5,6 +5,7 @@ package corecbor
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/wire"
@@ -22,7 +23,7 @@ func (r RawMessage) MarshalCBOR() ([]byte, error) {
 
 func (r *RawMessage) UnmarshalCBOR(data []byte) error {
 	if r == nil {
-		return fmt.Errorf("cbor: UnmarshalCBOR on nil *RawMessage")
+		return unsupportedTarget(cbor.KindInvalid, reflect.TypeFor[*RawMessage](), "UnmarshalCBOR on nil *RawMessage")
 	}
 	*r = append((*r)[:0], data...)
 	return nil
@@ -47,7 +48,7 @@ func (t RawTag) MarshalCBOR() ([]byte, error) {
 // self-describe tags (55799) are skipped, as Decode does.
 func (t *RawTag) UnmarshalCBOR(data []byte) error {
 	if t == nil {
-		return fmt.Errorf("cbor: UnmarshalCBOR on nil *RawTag")
+		return unsupportedTarget(cbor.KindInvalid, reflect.TypeFor[*RawTag](), "UnmarshalCBOR on nil *RawTag")
 	}
 	dec := NewDecoder()
 	val, err := dec.Decode(data)
@@ -55,7 +56,7 @@ func (t *RawTag) UnmarshalCBOR(data []byte) error {
 		return fmt.Errorf("cbor: RawTag decode: %w", err)
 	}
 	if val.Kind != cbor.KindTag {
-		return fmt.Errorf("cbor: RawTag expected Tag, got kind %d", val.Kind)
+		return typeMismatchf(val.Kind, reflect.TypeFor[RawTag](), "RawTag expected Tag, got kind %d", val.Kind)
 	}
 	item := stripSelfDescribe(data)
 	h := wire.ParseHead(item)

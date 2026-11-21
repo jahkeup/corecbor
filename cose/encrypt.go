@@ -7,6 +7,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"fmt"
+	"slices"
 
 	"github.com/jahkeup/corecbor"
 )
@@ -15,10 +16,38 @@ type EncryptOption func(*encryptOpts)
 
 type encryptOpts struct {
 	externalAAD []byte
+	policy      headerPolicy
 }
 
 func WithEncryptExternalAAD(aad []byte) EncryptOption {
 	return func(o *encryptOpts) { o.externalAAD = aad }
+}
+
+// WithEncryptAlgorithms restricts which content-encryption algorithms
+// are accepted. For DecryptEncrypt0 the caller's alg must be listed.
+// For DecryptMulti it replaces the default set (AES-GCM 128/192/256).
+func WithEncryptAlgorithms(algs ...Algorithm) EncryptOption {
+	return func(o *encryptOpts) { o.policy.allowed = slices.Clone(algs) }
+}
+
+// WithEncryptKnownCriticalHeaders declares header labels the caller
+// processes itself; see WithKnownCriticalHeaders.
+func WithEncryptKnownCriticalHeaders(labels ...any) EncryptOption {
+	return func(o *encryptOpts) { o.policy.knownCrit = append(o.policy.knownCrit, normalizeLabels(labels)...) }
+}
+
+// WithLegacyEncryptHeaders restores v0.2.2 header handling for
+// decryption: the alg header isn't bound to the caller's algorithm
+// (DecryptEncrypt0) or checked against the unprotected bucket
+// (DecryptMulti), and crit isn't processed.
+//
+// Deprecated: proposal 027 H2/H3 (RFC 9052 §3.1). Retained for
+// migration only; removed no earlier than v0.32.0.
+func WithLegacyEncryptHeaders() EncryptOption {
+	return func(o *encryptOpts) {
+		o.policy.legacyAlg = true
+		o.policy.legacyCrit = true
+	}
 }
 
 func EncryptEncrypt0(plaintext, key, nonce []byte, alg Algorithm, opts ...EncryptOption) (*Encrypt0, error) {
@@ -64,6 +93,12 @@ func DecryptEncrypt0(msg *Encrypt0, key, nonce []byte, alg Algorithm, opts ...En
 	}
 
 	if err := validateAESGCMKey(alg, key); err != nil {
+		return nil, err
+	}
+	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
+		return nil, err
+	}
+	if err := bindAlg(&msg.Protected, &msg.Unprotected, alg, &o.policy); err != nil {
 		return nil, err
 	}
 

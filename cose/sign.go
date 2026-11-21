@@ -14,6 +14,7 @@ import (
 	"encoding/asn1"
 	"fmt"
 	"math/big"
+	"slices"
 
 	"github.com/jahkeup/corecbor"
 )
@@ -119,11 +120,48 @@ func WithVerifierExternalData(ext []byte) VerifierOption {
 	return func(v *Verifier) { v.external = ext }
 }
 
+// WithAllowedAlgorithms restricts which algorithms the Verifier accepts.
+// The message's alg header must also match the key: without this option
+// the only accepted algorithm is the one the key implies.
+func WithAllowedAlgorithms(algs ...Algorithm) VerifierOption {
+	return func(v *Verifier) { v.policy.allowed = slices.Clone(algs) }
+}
+
+// WithKnownCriticalHeaders declares header labels (int or string) that
+// the caller processes itself. A message whose crit header (RFC 9052
+// §3.1) lists a label outside this set and the RFC 9052 labels 1-6 is
+// rejected with ErrCriticalHeader, because nobody would process it.
+func WithKnownCriticalHeaders(labels ...any) VerifierOption {
+	return func(v *Verifier) { v.policy.knownCrit = append(v.policy.knownCrit, normalizeLabels(labels)...) }
+}
+
+// WithLegacyAlgorithmFromKey restores v0.2.2 behavior: the message's
+// alg header is ignored and the signature is checked with the
+// algorithm the key implies.
+//
+// Deprecated: an unbound alg header is a contract defect (RFC 9052
+// §3.1, proposal 027 H2). Retained for migration only; removed no
+// earlier than v0.32.0.
+func WithLegacyAlgorithmFromKey() VerifierOption {
+	return func(v *Verifier) { v.policy.legacyAlg = true }
+}
+
+// WithLegacyIgnoreCritical restores v0.2.2 behavior: the crit header is
+// not processed.
+//
+// Deprecated: RFC 9052 §3.1 requires critical headers to be understood
+// (proposal 027 H3). Retained for migration only; removed no earlier
+// than v0.32.0.
+func WithLegacyIgnoreCritical() VerifierOption {
+	return func(v *Verifier) { v.policy.legacyCrit = true }
+}
+
 type Verifier struct {
 	key      crypto.PublicKey
 	alg      Algorithm
 	external []byte
 	enc      *corecbor.Encoder
+	policy   headerPolicy
 }
 
 func NewVerifier(key crypto.PublicKey, opts ...VerifierOption) (*Verifier, error) {
@@ -161,6 +199,9 @@ func (v *Verifier) VerifyDetached(msg *Sign1, payload []byte) error {
 }
 
 func (v *Verifier) verifySign1(msg *Sign1, payload []byte) error {
+	if err := v.checkLayer(&msg.Protected, &msg.Unprotected); err != nil {
+		return err
+	}
 	protectedBytes, err := msg.Protected.encodeProtected()
 	if err != nil {
 		return err
@@ -172,6 +213,15 @@ func (v *Verifier) verifySign1(msg *Sign1, payload []byte) error {
 	}
 
 	return v.verifyBytes(toBeSigned, msg.Signature)
+}
+
+// checkLayer applies the verifier's header policy (alg binding and
+// crit) to the layer carrying the signature.
+func (v *Verifier) checkLayer(prot, unprot *Headers) error {
+	if err := checkCrit(prot, unprot, &v.policy); err != nil {
+		return err
+	}
+	return bindAlg(prot, unprot, v.alg, &v.policy)
 }
 
 func (v *Verifier) verifyBytes(data, sig []byte) error {

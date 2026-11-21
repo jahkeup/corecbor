@@ -75,9 +75,21 @@ func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]in
 		return nil, err
 	}
 
+	// A verifier whose policy rejects the body's headers (crit) or a
+	// signature's headers (crit, alg) verifies nothing there; the last
+	// such error is reported if the policy ends up unsatisfied.
+	var policyErr error
 	var verified []int
 	for i, sig := range msg.Signatures {
 		for _, v := range verifiers {
+			if err := checkCrit(&msg.Protected, &msg.Unprotected, &v.policy); err != nil {
+				policyErr = err
+				continue
+			}
+			if err := v.checkLayer(&sig.Protected, &sig.Unprotected); err != nil {
+				policyErr = err
+				continue
+			}
 			sigProtectedBytes, err := sig.Protected.encodeProtected()
 			if err != nil {
 				continue
@@ -94,8 +106,12 @@ func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]in
 	}
 
 	switch {
+	case len(verified) == 0 && policyErr != nil:
+		return verified, fmt.Errorf("%w: no signature verified: %w", ErrVerification, policyErr)
 	case len(verified) == 0:
 		return verified, fmt.Errorf("%w: no signature verified", ErrVerification)
+	case p == RequireAll && len(verified) != len(msg.Signatures) && policyErr != nil:
+		return verified, fmt.Errorf("%w: %d of %d signatures verified: %w", ErrVerification, len(verified), len(msg.Signatures), policyErr)
 	case p == RequireAll && len(verified) != len(msg.Signatures):
 		return verified, fmt.Errorf("%w: %d of %d signatures verified", ErrVerification, len(verified), len(msg.Signatures))
 	}

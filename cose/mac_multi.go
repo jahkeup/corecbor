@@ -31,6 +31,9 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 
 	var cek []byte
 	if key != nil {
+		if err := o.checkMACKey(key, alg); err != nil {
+			return nil, err
+		}
 		cek = key
 	} else {
 		cek = make([]byte, cekLen)
@@ -80,16 +83,36 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 // VerifyMACMulti verifies a COSE_Mac tag using the key recovered by
 // recipient. A nil msg.Payload means the payload is detached; set it
 // before calling, or VerifyMACMulti returns ErrMissingPayload.
-func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int) error {
+//
+// The MAC algorithm comes from the protected header, which the sender
+// (or an attacker) chose, so it must be protected and in the allowed
+// set: HMAC 256/256, 384/384 or 512/512 unless WithMACAlgorithms says
+// otherwise. Header-selected HMAC 256/64 is rejected by default because
+// it truncates the tag to 64 bits. WithMACExternalAAD supplies the
+// external AAD the sender used.
+func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...MACOption) error {
 	if msg.Payload == nil {
 		return ErrMissingPayload
 	}
 	if recipientIndex < 0 || recipientIndex >= len(msg.Recipients) {
 		return fmt.Errorf("%w: recipient index out of range", ErrMACVerification)
 	}
+	var o macOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
 
 	r := msg.Recipients[recipientIndex]
-	alg := msg.Protected.Algorithm()
+	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
+		return err
+	}
+	if err := checkCrit(&r.Protected, &r.Unprotected, &o.policy); err != nil {
+		return err
+	}
+	alg, err := multiAlg(&msg.Protected, &msg.Unprotected, &o.policy, defaultMACMultiAlgs)
+	if err != nil {
+		return err
+	}
 
 	hashFunc, err := hmacHashFunc(alg)
 	if err != nil {
@@ -102,13 +125,16 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int) error {
 	if err != nil {
 		return fmt.Errorf("%w: key unwrap failed", ErrMACVerification)
 	}
+	if err := o.checkMACKey(cek, alg); err != nil {
+		return fmt.Errorf("%w: %w", ErrMACVerification, err)
+	}
 
 	protectedBytes, err := msg.Protected.encodeProtected()
 	if err != nil {
 		return err
 	}
 
-	toMAC, err := buildMACStructureMulti(protectedBytes, nil, msg.Payload)
+	toMAC, err := buildMACStructureMulti(protectedBytes, o.externalAAD, msg.Payload)
 	if err != nil {
 		return err
 	}

@@ -16,5 +16,8 @@ func init() {
 	coseSentinels = append(
 		coseSentinels,
 		g.Sentinel{Name: "ErrMissingPayload", Err: cose.ErrMissingPayload},
+		g.Sentinel{Name: "ErrAlgorithmMismatch", Err: cose.ErrAlgorithmMismatch},
+		g.Sentinel{Name: "ErrCriticalHeader", Err: cose.ErrCriticalHeader},
+		g.Sentinel{Name: "ErrDuplicateLabel", Err: cose.ErrDuplicateLabel},
 	)
 }

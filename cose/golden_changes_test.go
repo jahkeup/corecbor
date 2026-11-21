@@ -15,4 +15,8 @@ var goldenChanges = map[string]string{
 	"cose/unmarshal/sign1-bytes-header-label":   "proposal 027 H5: a bstr header label is ErrMalformed, not a panic",
 	"cose/multi/verify-none-match":              "proposal 027 H6: VerifyMulti fails closed when no signature verifies",
 	"cose/sign1/verify-nil-payload-after-empty": "proposal 027 H11: a nil (detached) payload is ErrMissingPayload, not the empty payload",
+
+	// Proposal 027 Phase 2.
+	"cose/mac0/empty-key":                 "proposal 027: an empty HMAC key is ErrInvalidKey (a MAC under it authenticates nothing)",
+	"cose/mac0/verify-alg-param-mismatch": "proposal 027 H2: the header alg must match the caller's algorithm (ErrAlgorithmMismatch)",
 }

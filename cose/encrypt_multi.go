@@ -93,13 +93,31 @@ func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDerive
 	return msg, nil
 }
 
-func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int) ([]byte, error) {
+// DecryptMulti decrypts a COSE_Encrypt message with the key recovered by
+// recipient. The content algorithm comes from the protected header and
+// must be in the allowed set (AES-GCM 128/192/256 unless
+// WithEncryptAlgorithms says otherwise). WithEncryptExternalAAD
+// supplies the external AAD the sender used.
+func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts ...EncryptOption) ([]byte, error) {
 	if recipientIndex < 0 || recipientIndex >= len(msg.Recipients) {
 		return nil, fmt.Errorf("%w: recipient index out of range", ErrDecryption)
 	}
+	var o encryptOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
 
 	r := msg.Recipients[recipientIndex]
-	contentAlg := msg.Protected.Algorithm()
+	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
+		return nil, err
+	}
+	if err := checkCrit(&r.Protected, &r.Unprotected, &o.policy); err != nil {
+		return nil, err
+	}
+	contentAlg, err := multiAlg(&msg.Protected, &msg.Unprotected, &o.policy, defaultEncryptMultiAlgs)
+	if err != nil {
+		return nil, err
+	}
 	cekLen := cekLenForAlg(contentAlg)
 	if cekLen == 0 {
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, contentAlg)
@@ -108,7 +126,6 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int) ([]byt
 	unwrapOpts := KeyUnwrapOpts{CEKAlgorithm: contentAlg, CEKLength: cekLen}
 
 	var cek []byte
-	var err error
 
 	if ek, ok := recipient.(*ECDHESKey); ok {
 		derived, derr := ek.UnderiveKey(r.Unprotected, unwrapOpts)
@@ -136,7 +153,7 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int) ([]byt
 		return nil, err
 	}
 
-	aad, err := buildEncStructureMulti(protectedBytes, nil)
+	aad, err := buildEncStructureMulti(protectedBytes, o.externalAAD)
 	if err != nil {
 		return nil, err
 	}

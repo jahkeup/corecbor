@@ -4,6 +4,7 @@
 package cose
 
 import (
+	"errors"
 	"fmt"
 	"math"
 
@@ -152,10 +153,9 @@ func decodeProtected(data []byte) (*Headers, error) {
 	if len(data) == 0 {
 		return &Headers{}, nil
 	}
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, err
+		return nil, decodeError(err)
 	}
 	if v.Kind != corecbor.KindMap {
 		return nil, ErrMalformed
@@ -166,6 +166,23 @@ func decodeProtected(data []byte) (*Headers, error) {
 	}
 	h.raw = data
 	return h, nil
+}
+
+// newMessageDecoder returns the decoder for COSE messages and protected
+// header maps. Header maps are the only maps in a COSE structure, and a
+// repeated label is invalid (RFC 9052 §3, RFC 8949 §5.6), so duplicate
+// keys are rejected instead of resolved last-wins.
+func newMessageDecoder() *corecbor.Decoder {
+	return corecbor.NewDecoder(corecbor.RejectDuplicateMapKeys())
+}
+
+// decodeError wraps a core decode error as ErrMalformed, keeping it in
+// the chain, and reports a duplicate map key as ErrDuplicateLabel.
+func decodeError(err error) error {
+	if errors.Is(err, corecbor.ErrDuplicateMapKey) {
+		return fmt.Errorf("%w: %w: %w", ErrMalformed, ErrDuplicateLabel, err)
+	}
+	return fmt.Errorf("%w: %w", ErrMalformed, err)
 }
 
 // decodeUnprotected decodes an unprotected header CBOR map value.
@@ -189,9 +206,34 @@ func headersFromPairs(pairs []corecbor.MapEntry) (*Headers, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Labels compare as values, so 01 and 1801 are the same label.
+		if _, dup := h.params[key]; dup {
+			return nil, fmt.Errorf("%w: label %v", ErrDuplicateLabel, key)
+		}
 		h.params[key] = cborToGo(entry.Value)
 	}
 	return h, nil
+}
+
+// decodeBuckets decodes one layer's protected bstr and unprotected map
+// and rejects a label present in both (RFC 9052 §3: "the same header
+// label MUST NOT occur in both the protected and unprotected
+// buckets").
+func decodeBuckets(protected []byte, unprotected corecbor.Value) (*Headers, *Headers, error) {
+	prot, err := decodeProtected(protected)
+	if err != nil {
+		return nil, nil, err
+	}
+	unprot, err := decodeUnprotected(unprotected)
+	if err != nil {
+		return nil, nil, err
+	}
+	for label := range unprot.params {
+		if _, dup := prot.params[label]; dup {
+			return nil, nil, fmt.Errorf("%w: label %v in both buckets", ErrDuplicateLabel, label)
+		}
+	}
+	return prot, unprot, nil
 }
 
 // labelToGo converts a header label. COSE labels are int or tstr

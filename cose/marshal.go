@@ -54,10 +54,9 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 
 // UnmarshalSign1 decodes a Sign1 message from CBOR (tagged or untagged).
 func UnmarshalSign1(data []byte) (*Sign1, error) {
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, decodeError(err)
 	}
 
 	var arr []corecbor.Value
@@ -90,14 +89,9 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, err := decodeProtected(protectedBstr)
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
-	}
-
-	unprot, err := decodeUnprotected(arr[1])
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
 
 	var payload []byte
@@ -156,10 +150,9 @@ func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
 }
 
 func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, decodeError(err)
 	}
 
 	var arr []corecbor.Value
@@ -192,14 +185,9 @@ func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, err := decodeProtected(protectedBstr)
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
-	}
-
-	unprot, err := decodeUnprotected(arr[1])
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
 
 	var ciphertext []byte
@@ -250,10 +238,9 @@ func MarshalMac0(msg *Mac0) ([]byte, error) {
 }
 
 func UnmarshalMac0(data []byte) (*Mac0, error) {
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, decodeError(err)
 	}
 
 	var arr []corecbor.Value
@@ -286,14 +273,9 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, err := decodeProtected(protectedBstr)
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
-	}
-
-	unprot, err := decodeUnprotected(arr[1])
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
 
 	var payload []byte
@@ -377,10 +359,9 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 }
 
 func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, decodeError(err)
 	}
 
 	var arr []corecbor.Value
@@ -413,14 +394,9 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, err := decodeProtected(protectedBstr)
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
-	}
-
-	unprot, err := decodeUnprotected(arr[1])
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
 
 	var ciphertext []byte
@@ -452,14 +428,9 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
-		rProt, err := decodeProtected([]byte(rProtBstr))
+		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1])
 		if err != nil {
-			return nil, fmt.Errorf("%w: recipient %d: %v", ErrMalformed, i, err)
-		}
-
-		rUnprot, err := decodeUnprotected(rArr[1])
-		if err != nil {
-			return nil, fmt.Errorf("%w: recipient %d: %v", ErrMalformed, i, err)
+			return nil, fmt.Errorf("%w: recipient %d: %w", ErrMalformed, i, err)
 		}
 
 		var rCiphertext []byte
@@ -538,10 +509,9 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 }
 
 func UnmarshalSign(data []byte) (*Sign, error) {
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, decodeError(err)
 	}
 
 	var arr []corecbor.Value
@@ -574,14 +544,9 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, err := decodeProtected(protectedBstr)
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
-	}
-
-	unprot, err := decodeUnprotected(arr[1])
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
 
 	var payload []byte
@@ -613,14 +578,9 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: signature %d protected must be bstr", ErrMalformed, i)
 		}
-		sProt, err := decodeProtected([]byte(sProtBstr))
+		sProt, sUnprot, err := decodeBuckets([]byte(sProtBstr), sArr[1])
 		if err != nil {
-			return nil, fmt.Errorf("%w: signature %d: %v", ErrMalformed, i, err)
-		}
-
-		sUnprot, err := decodeUnprotected(sArr[1])
-		if err != nil {
-			return nil, fmt.Errorf("%w: signature %d: %v", ErrMalformed, i, err)
+			return nil, fmt.Errorf("%w: signature %d: %w", ErrMalformed, i, err)
 		}
 
 		sigBytes := sArr[2].BytesVal()
@@ -702,10 +662,9 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 }
 
 func UnmarshalMac(data []byte) (*Mac, error) {
-	dec := corecbor.NewDecoder()
-	v, err := dec.Decode(data)
+	v, err := newMessageDecoder().Decode(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, decodeError(err)
 	}
 
 	var arr []corecbor.Value
@@ -738,14 +697,9 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, err := decodeProtected(protectedBstr)
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
-	}
-
-	unprot, err := decodeUnprotected(arr[1])
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformed, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
 
 	var payload []byte
@@ -783,14 +737,9 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
-		rProt, err := decodeProtected([]byte(rProtBstr))
+		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1])
 		if err != nil {
-			return nil, fmt.Errorf("%w: recipient %d: %v", ErrMalformed, i, err)
-		}
-
-		rUnprot, err := decodeUnprotected(rArr[1])
-		if err != nil {
-			return nil, fmt.Errorf("%w: recipient %d: %v", ErrMalformed, i, err)
+			return nil, fmt.Errorf("%w: recipient %d: %w", ErrMalformed, i, err)
 		}
 
 		var rCiphertext []byte

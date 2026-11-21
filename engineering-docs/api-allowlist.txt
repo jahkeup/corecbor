@@ -17,3 +17,9 @@
 
 # Proposal 027 H6: VerifyMulti fails closed; optional policy (RequireAny default).
 github.com/jahkeup/corecbor/cose: VerifyMulti: changed from func(*Sign, []*Verifier) ([]int, error) to func(*Sign, []*Verifier, ...VerifyPolicy) ([]int, error)
+
+# Proposal 027 H7: external AAD and algorithm options on multi-recipient
+# verify/decrypt. No-option calls behave as v0.2.2 except header-selected
+# HMAC 256/64, which is rejected (safety defect: attacker-chosen truncation).
+github.com/jahkeup/corecbor/cose: DecryptMulti: changed from func(*Encrypt, KeyDeriver, int) ([]byte, error) to func(*Encrypt, KeyDeriver, int, ...EncryptOption) ([]byte, error)
+github.com/jahkeup/corecbor/cose: VerifyMACMulti: changed from func(*Mac, KeyDeriver, int) error to func(*Mac, KeyDeriver, int, ...MACOption) error

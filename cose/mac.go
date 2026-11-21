@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"hash"
+	"slices"
 
 	"github.com/jahkeup/corecbor"
 )
@@ -18,10 +19,60 @@ type MACOption func(*macOpts)
 
 type macOpts struct {
 	externalAAD []byte
+	policy      headerPolicy
+	strictKey   bool
 }
 
 func WithMACExternalAAD(aad []byte) MACOption {
 	return func(o *macOpts) { o.externalAAD = aad }
+}
+
+// WithMACAlgorithms restricts which MAC algorithms are accepted. For
+// VerifyMAC0 the caller's alg must be listed. For VerifyMACMulti it
+// replaces the default set (HMAC 256/256, 384/384, 512/512); list
+// AlgHMAC256_64 here to accept the 64-bit truncated tag.
+func WithMACAlgorithms(algs ...Algorithm) MACOption {
+	return func(o *macOpts) { o.policy.allowed = slices.Clone(algs) }
+}
+
+// WithMACKnownCriticalHeaders declares header labels the caller
+// processes itself; see WithKnownCriticalHeaders.
+func WithMACKnownCriticalHeaders(labels ...any) MACOption {
+	return func(o *macOpts) { o.policy.knownCrit = append(o.policy.knownCrit, normalizeLabels(labels)...) }
+}
+
+// WithStrictMACKeyLength requires the HMAC key to be at least as long as
+// the hash output (RFC 9053 §3.1 says the key SHOULD be). Without it,
+// any non-empty key is accepted, as in v0.2.2.
+func WithStrictMACKeyLength() MACOption {
+	return func(o *macOpts) { o.strictKey = true }
+}
+
+// WithLegacyMACHeaders restores v0.2.2 header handling for MAC
+// verification: the alg header isn't bound to the caller's algorithm
+// (VerifyMAC0) or checked against the unprotected bucket
+// (VerifyMACMulti), and crit isn't processed. It does not re-enable
+// header-selected HMAC 256/64 in VerifyMACMulti; use WithMACAlgorithms.
+//
+// Deprecated: proposal 027 H2/H3 (RFC 9052 §3.1). Retained for
+// migration only; removed no earlier than v0.32.0.
+func WithLegacyMACHeaders() MACOption {
+	return func(o *macOpts) {
+		o.policy.legacyAlg = true
+		o.policy.legacyCrit = true
+	}
+}
+
+// checkMACKey rejects an empty key (a MAC under it authenticates
+// nothing) and, with WithStrictMACKeyLength, one shorter than the hash.
+func (o *macOpts) checkMACKey(key []byte, alg Algorithm) error {
+	if len(key) == 0 {
+		return fmt.Errorf("%w: empty MAC key", ErrInvalidKey)
+	}
+	if o.strictKey && len(key) < hmacKeyLen(alg) {
+		return fmt.Errorf("%w: %s key must be at least %d bytes", ErrInvalidKey, alg, hmacKeyLen(alg))
+	}
+	return nil
 }
 
 func ComputeMAC0(payload, key []byte, alg Algorithm, opts ...MACOption) (*Mac0, error) {
@@ -32,6 +83,9 @@ func ComputeMAC0(payload, key []byte, alg Algorithm, opts ...MACOption) (*Mac0, 
 
 	hashFunc, err := hmacHashFunc(alg)
 	if err != nil {
+		return nil, err
+	}
+	if err := o.checkMACKey(key, alg); err != nil {
 		return nil, err
 	}
 
@@ -74,6 +128,15 @@ func VerifyMAC0(msg *Mac0, key []byte, alg Algorithm, opts ...MACOption) error {
 
 	hashFunc, err := hmacHashFunc(alg)
 	if err != nil {
+		return err
+	}
+	if err := o.checkMACKey(key, alg); err != nil {
+		return err
+	}
+	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
+		return err
+	}
+	if err := bindAlg(&msg.Protected, &msg.Unprotected, alg, &o.policy); err != nil {
 		return err
 	}
 

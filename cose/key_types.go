@@ -6,6 +6,8 @@ package cose
 import (
 	"crypto/elliptic"
 	"fmt"
+
+	"github.com/jahkeup/corecbor"
 )
 
 // COSE Key parameter labels (RFC 9052 / RFC 9053).
@@ -24,7 +26,9 @@ type KeyType int64
 const (
 	KeyTypeOKP       KeyType = 1
 	KeyTypeEC2       KeyType = 2
+	KeyTypeRSA       KeyType = 3 // RFC 8230
 	KeyTypeSymmetric KeyType = 4
+	KeyTypeAKP       KeyType = 7 // RFC 9964 (Algorithm Key Pair)
 )
 
 type Curve int64
@@ -34,12 +38,16 @@ const (
 	CurveP384    Curve = 2
 	CurveP521    Curve = 3
 	CurveX25519  Curve = 4
+	CurveX448    Curve = 5
 	CurveEd25519 Curve = 6
+	CurveEd448   Curve = 7
 )
 
 // Key is a COSE_Key represented as a map of integer labels to values.
+// Text-labeled parameters are kept as received, for round trips.
 type Key struct {
 	params map[int64]any
+	text   map[string]corecbor.Value
 }
 
 func (k *Key) get(label int64) any {

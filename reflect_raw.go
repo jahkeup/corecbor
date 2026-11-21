@@ -405,9 +405,15 @@ func (r rawState) assign(mt mapTarget, key cbor.Value, keySpan, span []byte, val
 	if mt.fields == nil {
 		return r.assignMap(mt, key, keySpan, span, val)
 	}
-	idx, found, err := r.fieldFor(mt.fields, key, mt.exact, mt.target.Type())
-	if err != nil || !found {
-		return err
+	idx, found := mt.fields.lookup(key)
+	if !found && (r.caseInsensitive || r.disallowUnknown) {
+		var err error
+		if idx, found, err = r.fieldFor(mt.fields, key, mt.exact, mt.target.Type()); err != nil {
+			return err
+		}
+	}
+	if !found {
+		return nil
 	}
 	fi := &mt.fields.list[idx]
 	fv, err := fieldByIndexAlloc(mt.target, fi.index)

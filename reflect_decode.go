@@ -82,7 +82,8 @@ func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	// encoding.BinaryUnmarshaler takes byte strings and
 	// encoding.TextUnmarshaler text strings, mirroring encode (proposal
 	// 025; 008 documents both as supported).
-	if !u.legacyNoTextBinary && target.CanAddr() {
+	if !u.legacyNoTextBinary && (val.Kind == cbor.KindText || val.Kind == cbor.KindBytes) &&
+		target.CanAddr() && mayHaveMethods(target.Type()) {
 		if done, err := callTextBinary(val, target); done {
 			return err
 		}
@@ -342,6 +343,22 @@ func untagField(fi *fieldInfo, val cbor.Value, ft reflect.Type) (cbor.Value, err
 	return val.TagInner(), nil
 }
 
+// mayHaveMethods reports whether t (or *t) can have methods: named
+// types and structs (which can promote methods from embedded fields).
+// Predeclared and other unnamed types such as string or []byte can't,
+// so the interface checks are skipped for them.
+func mayHaveMethods(t reflect.Type) bool {
+	if t == stringType || t == bytesType { // the common targets, compared by identity
+		return false
+	}
+	return t.PkgPath() != "" || t.Kind() == reflect.Struct
+}
+
+var (
+	stringType = reflect.TypeFor[string]()
+	bytesType  = reflect.TypeFor[[]byte]()
+)
+
 // callTextBinary calls target's encoding.BinaryUnmarshaler for a byte
 // string or encoding.TextUnmarshaler for a text string. done is false
 // when neither applies.
@@ -449,9 +466,14 @@ func (u unmarshalState) decodeMapToStruct(m []cbor.MapEntry, target reflect.Valu
 	}
 
 	for _, entry := range m {
-		idx, found, err := u.fieldFor(fields, entry.Key, exact, target.Type())
-		if err != nil {
-			return err
+		// An exact match wins under every option, so only a miss needs
+		// fieldFor's case-insensitive / unknown-field handling.
+		idx, found := fields.lookup(entry.Key)
+		if !found && (u.caseInsensitive || u.disallowUnknown) {
+			var err error
+			if idx, found, err = u.fieldFor(fields, entry.Key, exact, target.Type()); err != nil {
+				return err
+			}
 		}
 		if !found {
 			continue

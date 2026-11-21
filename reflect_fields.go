@@ -46,14 +46,14 @@ type structFields struct {
 	raw     []bool // per field: needsRaw(field type), see reflect_raw.go
 }
 
-// fieldKey keys the cache: the same type has a different layout when
-// untagged fields keep their Go names (WithGoFieldNames).
-type fieldKey struct {
-	t       reflect.Type
-	goNames bool
-}
-
-var fieldCache sync.Map // fieldKey -> *structFields
+// The same type has a different layout when untagged fields keep their
+// Go names (WithGoFieldNames), so each naming mode has its own cache.
+// Keying by reflect.Type alone keeps the default-mode lookup as cheap as
+// a single interface hash.
+var (
+	fieldCache        sync.Map // reflect.Type -> *structFields (default naming)
+	fieldCacheGoNames sync.Map // reflect.Type -> *structFields (WithGoFieldNames)
+)
 
 // getStructFields returns the wire layout of struct type rt. Embedded
 // structs are flattened using the encoding/json rules: the shallowest
@@ -66,11 +66,14 @@ func getStructFields(rt reflect.Type) *structFields { return structFieldsFor(rt,
 // structFieldsFor is getStructFields with the naming mode: goNames keys
 // untagged fields by the Go field name as-is instead of lowercased.
 func structFieldsFor(rt reflect.Type, goNames bool) *structFields {
-	k := fieldKey{rt, goNames}
-	if f, ok := fieldCache.Load(k); ok {
+	cache := &fieldCache
+	if goNames {
+		cache = &fieldCacheGoNames
+	}
+	if f, ok := cache.Load(rt); ok {
 		return f.(*structFields)
 	}
-	f, _ := fieldCache.LoadOrStore(k, typeFields(rt, goNames))
+	f, _ := cache.LoadOrStore(rt, typeFields(rt, goNames))
 	return f.(*structFields)
 }
 

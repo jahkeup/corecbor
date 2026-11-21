@@ -32,7 +32,17 @@ const (
 // half/double never equal single.
 func keysEqual(a, b cbor.Value, legacyFloat bool) bool {
 	if !legacyFloat {
-		return a.Equal(b) // the data-model rule, shared with cbor.Value.Equal
+		// Text and integer keys, the common case, compare inline; the
+		// rest use the data-model rule shared with cbor.Value.Equal.
+		if a.Kind == b.Kind {
+			switch a.Kind {
+			case cbor.KindText:
+				return a.Str == b.Str
+			case cbor.KindUint, cbor.KindNegInt:
+				return a.Num == b.Num
+			}
+		}
+		return a.Equal(b)
 	}
 	af, bf := isFloat(a.Kind), isFloat(b.Kind)
 	if af || bf {

@@ -291,7 +291,81 @@ func rootGoldenCases() []g.Case {
 	addRawCases(add)
 	addSequenceCases(add)
 	addStreamCases(add)
+	addStorageCorpusCases(add)
 	return cases
+}
+
+// variant wraps v as a single-entry map keyed by a variant tag, the
+// shape a deterministic storage consumer uses for typed attribute values.
+func variant(tag string, v cc.Value) cc.Value {
+	return cc.MakeMap(entry(cc.Text(tag), v))
+}
+
+// storageCorpus is a variant-tag storage corpus: text, numbers carried
+// as text, bytes, bool, null, nested maps and lists, and sets as
+// pre-sorted arrays, including text that isn't valid UTF-8. Its Core
+// Deterministic encoding (with AllowInvalidUTF8) is used as AEAD AAD and
+// checksum input by such consumers, so it must stay byte-identical.
+func storageCorpus() []namedValue {
+	item := func(pairs ...cc.MapEntry) cc.Value { return cc.MakeMap(pairs...) }
+	return []namedValue{
+		{"s", variant("s", cc.Text("hello"))},
+		{"s-empty", variant("s", cc.Text(""))},
+		{"s-invalid-utf8", variant("s", cc.Text("\xff\xfe ok"))},
+		{"s-long", variant("s", cc.Text(strings.Repeat("x", 300)))},
+		{"n-int", variant("n", cc.Text("12345"))},
+		{"n-decimal", variant("n", cc.Text("-0.000123456789012345678901234567890123456"))},
+		{"b", variant("b", cc.Bytes([]byte{0, 1, 2, 0xff}))},
+		{"b-empty", variant("b", cc.Bytes([]byte{}))},
+		{"bool-true", variant("bool", cc.Bool(true))},
+		{"bool-false", variant("bool", cc.Bool(false))},
+		{"null", variant("null", cc.Bool(true))},
+		{"ss", variant("ss", cc.MakeArray(cc.Text("a"), cc.Text("b"), cc.Text("c")))},
+		{"ns", variant("ns", cc.MakeArray(cc.Text("1"), cc.Text("10"), cc.Text("2")))},
+		{"bs", variant("bs", cc.MakeArray(cc.Bytes([]byte{1}), cc.Bytes([]byte{2, 3})))},
+		{"l", variant("l", cc.MakeArray(variant("s", cc.Text("x")), variant("n", cc.Text("1")), variant("null", cc.Bool(true))))},
+		{"m", variant("m", item(
+			entry(cc.Text("zeta"), variant("s", cc.Text("z"))),
+			entry(cc.Text("alpha"), variant("n", cc.Text("1"))),
+			entry(cc.Text("mid"), variant("bool", cc.Bool(false))),
+		))},
+		{"item", item(
+			entry(cc.Text("pk"), variant("s", cc.Text("user#42"))),
+			entry(cc.Text("sk"), variant("s", cc.Text("profile"))),
+			entry(cc.Text("age"), variant("n", cc.Text("42"))),
+			entry(cc.Text("tags"), variant("ss", cc.MakeArray(cc.Text("admin"), cc.Text("ops")))),
+			entry(cc.Text("blob"), variant("b", cc.Bytes([]byte("\x00\x01binary")))),
+			entry(cc.Text("nested"), variant("m", item(
+				entry(cc.Text("list"), variant("l", cc.MakeArray(variant("n", cc.Text("3")), variant("s", cc.Text("\xc3\x28"))))),
+				entry(cc.Text("k"), variant("null", cc.Bool(true))),
+			))),
+		)},
+		{"item-wide", func() cc.Value {
+			var pairs []cc.MapEntry
+			for i := range 40 {
+				pairs = append(pairs, entry(cc.Text(fmt.Sprintf("attr%02d", 39-i)), variant("n", cc.Text(fmt.Sprint(i)))))
+			}
+			return cc.MakeMap(pairs...)
+		}()},
+	}
+}
+
+func addStorageCorpusCases(add func(string, func() string)) {
+	enc := cc.NewShared(cc.ModeCoreDeterministic, cc.AllowInvalidUTF8())
+	for _, nv := range storageCorpus() {
+		add("root/storage-corpus/encode/"+nv.name, func() string { return hexOf(enc.Encode(nil, nv.v)) })
+		add("root/storage-corpus/reencode/"+nv.name, func() string {
+			b, err := enc.Encode(nil, nv.v)
+			if err != nil {
+				return hexOf(nil, err)
+			}
+			v, err := cc.NewDecoder().Decode(b)
+			if err != nil {
+				return hexOf(nil, err)
+			}
+			return hexOf(enc.Encode(nil, v))
+		})
+	}
 }
 
 type GoldenInner struct {

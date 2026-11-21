@@ -329,6 +329,21 @@ value and mode (§6.1). Fix: route float and text values through the
 same rules as `Encode` (shortest/forced-64 float per mode; UTF-8
 validation unless `AllowInvalidUTF8`). Contract defect (§6.1).
 
+### D19 — `Diagnostic` hides duplicate map entries
+
+`Diagnostic` decoded into a `Value` and rendered that, and the
+forgiving decoder resolves duplicate map keys last-wins, so
+`a2 6161 01 6161 02` printed `{"a": 2}` and silently dropped `"a": 1`.
+After D12 the indicators view rendered from bytes and showed both,
+so the two views disagreed (`root/diag/map-dup-key`). A map with
+duplicate keys is well-formed but not valid CBOR (RFC 8949 §5.6), and
+diagnostic notation describes the data item as encoded (§8), so
+`Diagnostic` now always renders from the source bytes after
+validating them. Without `DiagIndicators()` the output is otherwise
+unchanged (no `_` markers; indefinite strings shown concatenated).
+`DiagnosticValue` still renders the `Value` it is given. Contract
+defect (RFC 8949 §8).
+
 ### Behavior / migration
 
 - **D4 changes wire output.** Values encoded from embedded structs will
@@ -381,6 +396,7 @@ root `CompatV02()` bundle includes nothing from 021. New identifiers
 | D14 `Simple(24..31)` rejected at encode | Contract defect | RFC 8949 §3.3; `cbor/value.go:116-117` valid range | `ErrReservedSimple` | none |
 | D15 duplicate keys rejected in deterministic modes | Contract defect | RFC 8949 §5.6, §4.2.1 (which the modes claim) | `ErrDuplicateMapKey` | none (Permissive unchanged) |
 | D16 stray break → `ErrUnexpectedBreak` | Contract defect | RFC 8949 §3.2.1 | new sentinel | none |
+| D19 `Diagnostic` renders every encoded map entry | Contract defect | RFC 8949 §8, §5.6 | duplicates shown | none |
 | D17 HPKE alg `String()`; negative `Leeway` | Contract defect | `cose/algorithm.go` `String`; `cwt.Validator.Leeway` doc (tolerance) | fixed; `ErrInvalidValidator` | none |
 
 No `...Option` parameters are appended to existing functions.
@@ -505,3 +521,4 @@ the pool, which the D2 fix guarantees.
 | 2026-11-20 | Add D10–D17 from v0.2.2 golden-vector capture; clarify D4 promotion rules | corecbor maintainers |
 | 2026-11-20 | Implementation notes: D1 decoder pool; D3 null/simple keys unchanged; D4 option-only tags keep the field name | corecbor maintainers |
 | 2026-11-20 | Implementation notes from D6/D10/D14–D16 work; add D18 (stream WriteValue float/UTF-8) | corecbor maintainers |
+| 2026-11-20 | Add D19 (Diagnostic renders from bytes so duplicate keys aren't hidden) | corecbor maintainers |

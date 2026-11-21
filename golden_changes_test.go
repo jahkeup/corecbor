@@ -41,7 +41,9 @@ var goldenChanges = map[string]string{
 	"root/diag-indicators/text-indef":            "proposal 021 D12: indefinite-length text string chunks",
 	"root/diag-indicators/array-indef":           "proposal 021 D12: indefinite-length array indicator",
 	"root/diag-indicators/map-indef":             "proposal 021 D12: indefinite-length map indicator",
-	"root/diag-indicators/map-dup-key":           "proposal 021 D12: byte view shows each encoded map entry",
+	"root/diag-indicators/map-dup-key":           "proposal 021 D12/D19: Diagnostic renders every encoded map entry",
+	"root/diag/map-dup-key":                      "proposal 021 D19: Diagnostic renders every encoded map entry, including duplicate keys",
+	"root/diag-compact/map-dup-key":              "proposal 021 D19: Diagnostic renders every encoded map entry, including duplicate keys",
 	"root/diag-indicators/map-dup-float-width":   "proposal 021 D12: float encoding indicator _2 on key",
 
 	// 021 D13: invalid UTF-8 text renders as annotated bytes.

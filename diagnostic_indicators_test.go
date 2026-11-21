@@ -123,3 +123,33 @@ func mustHex(t *testing.T, s string) []byte {
 	}
 	return b
 }
+
+// D19: Diagnostic shows every encoded map entry, with or without
+// indicators; DiagnosticValue renders the resolved Value.
+func TestD19_DiagnosticShowsDuplicateKeys(t *testing.T) {
+	data := mustHex(t, "a2616101616102") // {"a": 1, "a": 2}
+	for name, opts := range map[string][]DiagnosticOption{
+		"plain":      nil,
+		"compact":    {DiagCompact()},
+		"indicators": {DiagIndicators()},
+	} {
+		got, err := Diagnostic(data, opts...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `{"a": 1, "a": 2}`
+		if name == "compact" {
+			want = `{"a":1,"a":2}`
+		}
+		if got != want {
+			t.Errorf("%s: Diagnostic = %s, want %s", name, got, want)
+		}
+	}
+	v, err := NewDecoder().Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := DiagnosticValue(v); got != `{"a": 2}` {
+		t.Errorf("DiagnosticValue = %s, want {\"a\": 2}", got)
+	}
+}

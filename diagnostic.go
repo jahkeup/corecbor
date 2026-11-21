@@ -33,10 +33,12 @@ func DiagIndicators() DiagnosticOption {
 	return func(o *diagOpts) { o.indicators = true }
 }
 
-// Diagnostic decodes data and renders it in RFC 8949 §8 diagnostic
-// notation. With DiagIndicators, the §8.1 encoding indicators are
-// rendered from the source bytes: "_" for indefinite-length items, and
-// "_0".."_3" for arguments (and floats) not in their shortest form.
+// Diagnostic validates data and renders it in RFC 8949 §8 diagnostic
+// notation from the source bytes, so every map entry appears as
+// encoded, including duplicate keys that decoding would resolve. With
+// DiagIndicators, the §8.1 encoding indicators are also shown: "_" for
+// indefinite-length items, and "_0".."_3" for arguments (and floats)
+// not in their shortest form.
 func Diagnostic(data []byte, opts ...DiagnosticOption) (string, error) {
 	dec := NewDecoder()
 	v, err := dec.Decode(data)
@@ -47,14 +49,15 @@ func Diagnostic(data []byte, opts ...DiagnosticOption) (string, error) {
 	for _, fn := range opts {
 		fn(o)
 	}
-	if o.indicators {
-		var b strings.Builder
-		if _, ok := diagWriteRaw(&b, data, 0, 0, o, true); ok {
-			return b.String(), nil
-		}
-		// data already decoded, so the walk can't fail on it; fall back
-		// to the value rendering rather than return partial output.
+	// Render from the bytes, not the decoded Value: decoding resolves
+	// duplicate map keys (last wins), which would hide entries that are
+	// in the input (RFC 8949 §5.6, §8).
+	var b strings.Builder
+	if _, ok := diagWriteRaw(&b, data, 0, 0, o, true); ok {
+		return b.String(), nil
 	}
+	// data already decoded, so the walk can't fail on it; fall back to
+	// the value rendering rather than return partial output.
 	return DiagnosticValue(v, opts...), nil
 }
 
@@ -246,6 +249,24 @@ func utf16Surrogates(r rune) (uint16, uint16) {
 // argIndicator returns the RFC 8949 §8.1 encoding indicator for a head
 // whose argument isn't in its shortest form ("_0" for AI 24 through "_3"
 // for AI 27), or "" when it is.
+// arg returns the argument's encoding indicator when indicators are
+// enabled, or "".
+func (o *diagOpts) arg(h wire.HeadResult) string {
+	if !o.indicators {
+		return ""
+	}
+	return argIndicator(h)
+}
+
+// float returns the float's encoding indicator when indicators are
+// enabled, or "".
+func (o *diagOpts) float(ai byte, f float64) string {
+	if !o.indicators {
+		return ""
+	}
+	return floatIndicator(ai, f)
+}
+
 func argIndicator(h wire.HeadResult) string {
 	if h.AI < wire.AI1Byte || h.AI > wire.AI8Bytes || h.IsShortest() {
 		return ""
@@ -269,7 +290,8 @@ func floatIndicator(ai byte, f float64) string {
 	return ""
 }
 
-// diagWriteRaw renders the item at src[off:] with encoding indicators
+// diagWriteRaw renders the item at src[off:], with encoding indicators
+// when o.indicators is set,
 // and returns the offset after it. ok is false if the bytes aren't a
 // well-formed item; Diagnostic validates them first, so that only
 // guards against inconsistencies. top mirrors the decoder stripping
@@ -295,7 +317,7 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 			return off, false
 		}
 		b.WriteString(strconv.FormatUint(h.Arg, 10))
-		b.WriteString(argIndicator(h))
+		b.WriteString(o.arg(h))
 		return pos, true
 
 	case wire.MajorNegInt:
@@ -303,10 +325,41 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 			return off, false
 		}
 		diagWriteNegInt(b, h.Arg)
-		b.WriteString(argIndicator(h))
+		b.WriteString(o.arg(h))
 		return pos, true
 
 	case wire.MajorBytes, wire.MajorText:
+		if indef && !o.indicators {
+			// Without indicators, render the concatenated chunks as the
+			// single string a decoder produces.
+			var chunks []byte
+			for {
+				if pos >= len(src) {
+					return off, false
+				}
+				if src[pos] == wire.BreakCode {
+					pos++
+					break
+				}
+				ch := wire.ParseHead(src[pos:])
+				if ch.N == 0 || ch.Major != h.Major || ch.AI == wire.AIIndefinite || ch.AI > wire.AI8Bytes ||
+					ch.Arg > uint64(len(src)-pos-ch.N) {
+					return off, false
+				}
+				start := pos + ch.N
+				end := start + int(ch.Arg)
+				chunks = append(chunks, src[start:end]...)
+				pos = end
+			}
+			if h.Major == wire.MajorBytes {
+				b.WriteString("h'")
+				b.WriteString(hex.EncodeToString(chunks))
+				b.WriteByte('\'')
+			} else {
+				diagWriteTextItem(b, string(chunks), "")
+			}
+			return pos, true
+		}
 		if indef {
 			b.WriteString("(_ ")
 			for i := 0; ; i++ {
@@ -338,9 +391,9 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 			b.WriteString("h'")
 			b.WriteString(hex.EncodeToString(src[pos:end]))
 			b.WriteByte('\'')
-			b.WriteString(argIndicator(h))
+			b.WriteString(o.arg(h))
 		} else {
-			diagWriteTextItem(b, string(src[pos:end]), argIndicator(h))
+			diagWriteTextItem(b, string(src[pos:end]), o.arg(h))
 		}
 		return end, true
 
@@ -351,9 +404,9 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 		} else {
 			b.WriteByte('[')
 		}
-		if indef {
+		if indef && o.indicators {
 			b.WriteString("_ ")
-		} else if ind := argIndicator(h); ind != "" {
+		} else if ind := o.arg(h); ind != "" {
 			b.WriteString(ind)
 			b.WriteByte(' ')
 		}
@@ -415,7 +468,7 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 			return diagWriteRaw(b, src, pos, depth, o, true)
 		}
 		b.WriteString(strconv.FormatUint(h.Arg, 10))
-		b.WriteString(argIndicator(h))
+		b.WriteString(o.arg(h))
 		b.WriteByte('(')
 		n, ok := diagWriteRaw(b, src, pos, depth+1, o, false)
 		if !ok {
@@ -443,11 +496,11 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 		case h.AI == wire.AI4Bytes:
 			f := float64(math.Float32frombits(uint32(h.Arg)))
 			diagWriteFloat(b, f, 32)
-			b.WriteString(floatIndicator(h.AI, f))
+			b.WriteString(o.float(h.AI, f))
 		case h.AI == wire.AI8Bytes:
 			f := math.Float64frombits(h.Arg)
 			diagWriteFloat(b, f, 64)
-			b.WriteString(floatIndicator(h.AI, f))
+			b.WriteString(o.float(h.AI, f))
 		default:
 			return off, false
 		}

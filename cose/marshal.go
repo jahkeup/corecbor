@@ -9,13 +9,14 @@ import (
 	"github.com/jahkeup/corecbor"
 )
 
+// COSE message tags (RFC 9052 §2), from the shared corecbor constants.
 const (
-	tagSign1    uint64 = 18
-	tagEncrypt0 uint64 = 16
-	tagMac0     uint64 = 17
-	tagEncrypt  uint64 = 96
-	tagSign     uint64 = 98
-	tagMac      uint64 = 97
+	tagSign1    = corecbor.TagCOSESign1
+	tagEncrypt0 = corecbor.TagCOSEEncrypt0
+	tagMac0     = corecbor.TagCOSEMac0
+	tagEncrypt  = corecbor.TagCOSEEncrypt
+	tagSign     = corecbor.TagCOSESign
+	tagMac      = corecbor.TagCOSEMac
 )
 
 var sharedEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic)

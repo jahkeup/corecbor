@@ -174,6 +174,9 @@ func AsBigIntAny(v Value) (*big.Int, error) {
 	}
 }
 
+// AsNestedCBOR returns the embedded bytes of a tag 24 value. To decode
+// them as well, use Decoder.DecodeEncodedCBOR in the root package; to
+// build a tag 24 value, use WrapEncodedCBOR or Encoder.EncodeEncodedCBOR.
 func AsNestedCBOR(t Value) ([]byte, error) {
 	if t.Kind != KindTag {
 		return nil, mismatchf("cbor: expected Tag value, got kind %d", t.Kind)

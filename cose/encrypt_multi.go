@@ -145,6 +145,10 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int) ([]byt
 	if err != nil {
 		return nil, ErrDecryption
 	}
+	// The IV comes from the message; gcm.Open panics on a wrong size.
+	if len(nonce) != gcm.NonceSize() {
+		return nil, fmt.Errorf("%w: IV must be %d bytes", ErrDecryption, gcm.NonceSize())
+	}
 
 	plaintext, err := gcm.Open(nil, nonce, msg.Ciphertext, aad)
 	if err != nil {

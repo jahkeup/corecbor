@@ -77,7 +77,13 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 	return msg, nil
 }
 
+// VerifyMACMulti verifies a COSE_Mac tag using the key recovered by
+// recipient. A nil msg.Payload means the payload is detached; set it
+// before calling, or VerifyMACMulti returns ErrMissingPayload.
 func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int) error {
+	if msg.Payload == nil {
+		return ErrMissingPayload
+	}
 	if recipientIndex < 0 || recipientIndex >= len(msg.Recipients) {
 		return fmt.Errorf("%w: recipient index out of range", ErrMACVerification)
 	}

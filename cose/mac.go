@@ -60,7 +60,13 @@ func ComputeMAC0(payload, key []byte, alg Algorithm, opts ...MACOption) (*Mac0, 
 	return msg, nil
 }
 
+// VerifyMAC0 verifies a COSE_Mac0 tag. A nil msg.Payload means the
+// payload is detached (RFC 9052 §2); set it before calling, or
+// VerifyMAC0 returns ErrMissingPayload.
 func VerifyMAC0(msg *Mac0, key []byte, alg Algorithm, opts ...MACOption) error {
+	if msg.Payload == nil {
+		return ErrMissingPayload
+	}
 	var o macOpts
 	for _, opt := range opts {
 		opt(&o)

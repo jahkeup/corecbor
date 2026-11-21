@@ -102,7 +102,10 @@ func (s *Signer) ecdsaSign(data []byte, hash crypto.Hash, curve elliptic.Curve) 
 	// intermediate + raw R||S output). ~83 allocs/op for ES256. Irreducible:
 	// stdlib crypto/ecdsa uses big.Int math internally and returns DER which
 	// we must decode then re-encode as raw R||S per COSE convention.
-	digest := hashData(hash, data)
+	digest, err := hashData(hash, data)
+	if err != nil {
+		return nil, err
+	}
 	derSig, err := s.key.Sign(rand.Reader, digest, hash)
 	if err != nil {
 		return nil, err
@@ -139,15 +142,31 @@ func NewVerifier(key crypto.PublicKey, opts ...VerifierOption) (*Verifier, error
 	return v, nil
 }
 
-// Verify checks the signature of a Sign1 message.
-// For detached payloads, set msg.Payload before calling Verify.
+// Verify checks the signature of a Sign1 message. A nil msg.Payload
+// means the payload is detached (RFC 9052 §2) and Verify returns
+// ErrMissingPayload; use VerifyDetached, or set msg.Payload first. An
+// empty, non-nil payload is verified as the empty byte string.
 func (v *Verifier) Verify(msg *Sign1) error {
+	if msg.Payload == nil {
+		return ErrMissingPayload
+	}
+	return v.verifySign1(msg, msg.Payload)
+}
+
+// VerifyDetached checks the signature of a Sign1 message whose payload
+// is transported separately. payload is the detached content; nil is
+// treated as the empty byte string. msg.Payload is ignored.
+func (v *Verifier) VerifyDetached(msg *Sign1, payload []byte) error {
+	return v.verifySign1(msg, payload)
+}
+
+func (v *Verifier) verifySign1(msg *Sign1, payload []byte) error {
 	protectedBytes, err := msg.Protected.encodeProtected()
 	if err != nil {
 		return err
 	}
 
-	toBeSigned, err := encodeSigStructure(v.enc, protectedBytes, v.external, msg.Payload)
+	toBeSigned, err := encodeSigStructure(v.enc, protectedBytes, v.external, payload)
 	if err != nil {
 		return err
 	}
@@ -184,7 +203,10 @@ func (v *Verifier) ecdsaVerify(data, sig []byte, hash crypto.Hash, curve ellipti
 	if !ok {
 		return fmt.Errorf("%w: expected *ecdsa.PublicKey", ErrInvalidKey)
 	}
-	digest := hashData(hash, data)
+	digest, err := hashData(hash, data)
+	if err != nil {
+		return err
+	}
 	derSig, err := rawToDerECDSA(sig, curve)
 	if err != nil {
 		return ErrVerification
@@ -239,19 +261,19 @@ func algForPublicKey(pub crypto.PublicKey) (Algorithm, error) {
 	}
 }
 
-func hashData(h crypto.Hash, data []byte) []byte {
+func hashData(h crypto.Hash, data []byte) ([]byte, error) {
 	switch h {
 	case crypto.SHA256:
 		d := sha256.Sum256(data)
-		return d[:]
+		return d[:], nil
 	case crypto.SHA384:
 		d := sha512.Sum384(data)
-		return d[:]
+		return d[:], nil
 	case crypto.SHA512:
 		d := sha512.Sum512(data)
-		return d[:]
+		return d[:], nil
 	default:
-		panic("unsupported hash")
+		return nil, fmt.Errorf("%w: unsupported hash %v", ErrUnsupportedAlgorithm, h)
 	}
 }
 
@@ -260,13 +282,24 @@ func derToRawECDSA(der []byte, curve elliptic.Curve) ([]byte, error) {
 	var sig struct {
 		R, S *big.Int
 	}
-	if _, err := asn1.Unmarshal(der, &sig); err != nil {
-		return nil, err
+	rest, err := asn1.Unmarshal(der, &sig)
+	if err != nil {
+		return nil, fmt.Errorf("%w: signer returned invalid DER: %w", ErrInvalidKey, err)
+	}
+	if len(rest) != 0 {
+		return nil, fmt.Errorf("%w: signer returned trailing bytes after DER signature", ErrInvalidKey)
 	}
 	size := curveKeySize(curve)
+	if sig.R == nil || sig.S == nil || sig.R.Sign() <= 0 || sig.S.Sign() <= 0 {
+		return nil, fmt.Errorf("%w: signer returned a non-positive ECDSA component", ErrInvalidKey)
+	}
+	r, s := sig.R.Bytes(), sig.S.Bytes()
+	if len(r) > size || len(s) > size {
+		return nil, fmt.Errorf("%w: ECDSA component longer than %d bytes", ErrInvalidKey, size)
+	}
 	out := make([]byte, 2*size)
-	copy(out[size-len(sig.R.Bytes()):size], sig.R.Bytes())
-	copy(out[2*size-len(sig.S.Bytes()):], sig.S.Bytes())
+	copy(out[size-len(r):size], r)
+	copy(out[2*size-len(s):], s)
 	return out, nil
 }
 

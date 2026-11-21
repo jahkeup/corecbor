@@ -35,9 +35,39 @@ func SignMulti(payload []byte, signers []*Signer, opts ...SignerOption) (*Sign, 
 	return msg, nil
 }
 
-func VerifyMulti(msg *Sign, verifiers []*Verifier) ([]int, error) {
+// VerifyPolicy says which signatures of a COSE_Sign must verify.
+type VerifyPolicy int
+
+const (
+	// RequireAny accepts the message when at least one signature
+	// verifies. It is the default.
+	RequireAny VerifyPolicy = iota
+	// RequireAll accepts the message only when every signature verifies.
+	RequireAll
+)
+
+// VerifyMulti verifies the signatures of a COSE_Sign message against
+// verifiers and returns the indices of the signatures that verified.
+// It returns ErrVerification when the policy (RequireAny unless one is
+// given) is not satisfied, including when no signature verifies. A nil
+// msg.Payload means the payload is detached; set it before calling, or
+// VerifyMulti returns ErrMissingPayload.
+func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]int, error) {
 	if len(verifiers) == 0 {
 		return nil, fmt.Errorf("%w: at least one verifier required", ErrInvalidKey)
+	}
+	if len(policy) > 1 {
+		return nil, fmt.Errorf("%w: at most one VerifyPolicy", ErrInvalidKey)
+	}
+	p := RequireAny
+	if len(policy) == 1 {
+		p = policy[0]
+	}
+	if p != RequireAny && p != RequireAll {
+		return nil, fmt.Errorf("%w: unknown VerifyPolicy %d", ErrInvalidKey, p)
+	}
+	if msg.Payload == nil {
+		return nil, ErrMissingPayload
 	}
 
 	bodyProtectedBytes, err := msg.Protected.encodeProtected()
@@ -63,6 +93,12 @@ func VerifyMulti(msg *Sign, verifiers []*Verifier) ([]int, error) {
 		}
 	}
 
+	switch {
+	case len(verified) == 0:
+		return verified, fmt.Errorf("%w: no signature verified", ErrVerification)
+	case p == RequireAll && len(verified) != len(msg.Signatures):
+		return verified, fmt.Errorf("%w: %d of %d signatures verified", ErrVerification, len(verified), len(msg.Signatures))
+	}
 	return verified, nil
 }
 

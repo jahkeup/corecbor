@@ -4,6 +4,9 @@
 package cose
 
 import (
+	"fmt"
+	"math"
+
 	"github.com/jahkeup/corecbor"
 )
 
@@ -17,10 +20,17 @@ const (
 
 // Headers represents COSE header parameters.
 // Keys are int64 (integer labels) or string (text labels).
+//
+// Headers decoded from a message keep the protected bucket's bytes as
+// received, and signatures, MACs and AEAD tags are computed over those
+// bytes (RFC 9052 §4.4, §5.3, §6.3). Modifying the headers with Set
+// discards them, and the headers are re-encoded deterministically.
+//
+// Headers are safe for concurrent reads, including concurrent
+// verification of one message, but not for concurrent modification.
 type Headers struct {
-	params       map[any]any
-	encodedCache []byte // cached CBOR encoding of protected headers
-	cacheValid   bool
+	params map[any]any
+	raw    []byte // protected bucket bytes as received; nil if locally built
 }
 
 // Get returns the value for the given label, or nil if not set.
@@ -37,7 +47,14 @@ func (h *Headers) Set(label any, value any) {
 		h.params = make(map[any]any)
 	}
 	h.params[label] = value
-	h.cacheValid = false
+	h.raw = nil
+}
+
+// Raw returns the protected bucket bytes these headers were decoded
+// from, or nil for headers built locally or modified since decoding.
+// The returned slice must not be modified.
+func (h *Headers) Raw() []byte {
+	return h.raw
 }
 
 // Algorithm returns the algorithm header (label 1), or 0 if not set.
@@ -83,22 +100,21 @@ func (h *Headers) IsEmpty() bool {
 	return len(h.params) == 0
 }
 
-// encodeProtected serializes protected headers to CBOR bytes.
-// Empty headers produce a zero-length byte string.
+// encodeProtected returns the protected bucket bytes: the bytes as
+// received for decoded headers, otherwise a deterministic encoding.
+// With no protected parameters it returns a zero-length byte string,
+// which is what RFC 9052 §4.4, §5.3 and §6.3 put in the signed and
+// authenticated structures even when the sender encoded h'a0' (§3).
+// It does not modify h, so concurrent verification of one message is
+// race-free.
 func (h *Headers) encodeProtected() ([]byte, error) {
 	if h.IsEmpty() {
 		return nil, nil
 	}
-	if h.cacheValid {
-		return h.encodedCache, nil
+	if h.raw != nil {
+		return h.raw, nil
 	}
-	encoded, err := encodeHeaderMap(h.params)
-	if err != nil {
-		return nil, err
-	}
-	h.encodedCache = encoded
-	h.cacheValid = true
-	return encoded, nil
+	return encodeHeaderMap(h.params)
 }
 
 // toCBORMap converts headers to a corecbor map Value.
@@ -130,7 +146,8 @@ func encodeHeaderMap(params map[any]any) ([]byte, error) {
 	return sharedEncoder.Encode(nil, m)
 }
 
-// decodeProtected decodes CBOR-encoded protected headers.
+// decodeProtected decodes CBOR-encoded protected headers and keeps data
+// as the headers' raw bytes.
 func decodeProtected(data []byte) (*Headers, error) {
 	if len(data) == 0 {
 		return &Headers{}, nil
@@ -140,18 +157,14 @@ func decodeProtected(data []byte) (*Headers, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, ok := v.Kind == corecbor.KindMap, v.Kind == corecbor.KindMap
-	if !ok {
+	if v.Kind != corecbor.KindMap {
 		return nil, ErrMalformed
 	}
-	pairs := v.Map()
-	h := &Headers{params: make(map[any]any, len(pairs))}
-	for _, entry := range pairs {
-		key := cborToGo(entry.Key)
-		val := cborToGo(entry.Value)
-		h.params[key] = val
+	h, err := headersFromPairs(v.Map())
+	if err != nil {
+		return nil, err
 	}
-	_ = m
+	h.raw = data
 	return h, nil
 }
 
@@ -163,17 +176,44 @@ func decodeUnprotected(v corecbor.Value) (*Headers, error) {
 	if v.Kind != corecbor.KindMap {
 		return nil, ErrMalformed
 	}
-	m := v.Map()
-	if len(m) == 0 {
+	return headersFromPairs(v.Map())
+}
+
+func headersFromPairs(pairs []corecbor.MapEntry) (*Headers, error) {
+	if len(pairs) == 0 {
 		return &Headers{}, nil
 	}
-	h := &Headers{params: make(map[any]any, len(m))}
-	for _, entry := range m {
-		key := cborToGo(entry.Key)
-		val := cborToGo(entry.Value)
-		h.params[key] = val
+	h := &Headers{params: make(map[any]any, len(pairs))}
+	for _, entry := range pairs {
+		key, err := labelToGo(entry.Key)
+		if err != nil {
+			return nil, err
+		}
+		h.params[key] = cborToGo(entry.Value)
 	}
 	return h, nil
+}
+
+// labelToGo converts a header label. COSE labels are int or tstr
+// (RFC 9052 §3); anything else, or an int outside the int64 range, is
+// malformed.
+func labelToGo(k corecbor.Value) (any, error) {
+	switch k.Kind {
+	case corecbor.KindUint:
+		if k.UintVal() > math.MaxInt64 {
+			return nil, fmt.Errorf("%w: header label %d out of range", ErrMalformed, k.UintVal())
+		}
+		return int64(k.UintVal()), nil
+	case corecbor.KindNegInt:
+		if k.NegIntVal() > math.MaxInt64 {
+			return nil, fmt.Errorf("%w: header label -1-%d out of range", ErrMalformed, k.NegIntVal())
+		}
+		return -1 - int64(k.NegIntVal()), nil
+	case corecbor.KindText:
+		return k.TextVal(), nil
+	default:
+		return nil, fmt.Errorf("%w: header label must be int or tstr", ErrMalformed)
+	}
 }
 
 // goToCBOR converts a Go value to a corecbor Value.

@@ -14,3 +14,6 @@
 # Format: one entry per line, "<module path>: <apidiff line>", copied from
 # the apicheck output, e.g.
 #   github.com/jahkeup/corecbor/eat: DecodeClaims: changed from func([]byte) (*Claims, error) to func([]byte, ...Option) (*Claims, error)
+
+# Proposal 027 H6: VerifyMulti fails closed; optional policy (RequireAny default).
+github.com/jahkeup/corecbor/cose: VerifyMulti: changed from func(*Sign, []*Verifier) ([]int, error) to func(*Sign, []*Verifier, ...VerifyPolicy) ([]int, error)

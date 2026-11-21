@@ -26,6 +26,9 @@ type ECDHESKey struct {
 func (e *ECDHESKey) Algorithm() Algorithm { return AlgECDH_ES_HKDF_256 }
 
 func (e *ECDHESKey) WrapKey(cek []byte, opts KeyWrapOpts) ([]byte, Headers, error) {
+	if e.PeerPublic == nil {
+		return nil, Headers{}, fmt.Errorf("%w: ECDHESKey.PeerPublic is nil", ErrInvalidKey)
+	}
 	curve := e.PeerPublic.Curve()
 	ephemeral, err := curve.GenerateKey(rand.Reader)
 	if err != nil {
@@ -69,6 +72,9 @@ func (e *ECDHESKey) UnwrapKey(_ []byte, h Headers, opts KeyUnwrapOpts) ([]byte, 
 		return nil, fmt.Errorf("%w: missing ephemeral key in headers", ErrDecryption)
 	}
 
+	if e.PrivateKey == nil {
+		return nil, fmt.Errorf("%w: ECDHESKey.PrivateKey is nil", ErrInvalidKey)
+	}
 	curve := e.PrivateKey.PublicKey().Curve()
 	ephPub, err := curve.NewPublicKey(ephBytes)
 	if err != nil {
@@ -98,6 +104,9 @@ func (e *ECDHESKey) UnwrapKey(_ []byte, h Headers, opts KeyUnwrapOpts) ([]byte, 
 
 // DeriveKey performs ECDH + HKDF to derive a key (for use in EncryptMulti).
 func (e *ECDHESKey) DeriveKey(opts KeyWrapOpts) (cek []byte, headers Headers, err error) {
+	if e.PeerPublic == nil {
+		return nil, Headers{}, fmt.Errorf("%w: ECDHESKey.PeerPublic is nil", ErrInvalidKey)
+	}
 	curve := e.PeerPublic.Curve()
 	ephemeral, err := curve.GenerateKey(rand.Reader)
 	if err != nil {

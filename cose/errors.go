@@ -12,4 +12,8 @@ var (
 	ErrMalformed            = errors.New("cose: malformed message")
 	ErrDecryption           = errors.New("cose: decryption failed")
 	ErrMACVerification      = errors.New("cose: MAC verification failed")
+
+	// ErrMissingPayload indicates a message with a detached (nil)
+	// payload was verified without supplying the payload.
+	ErrMissingPayload = errors.New("cose: payload is detached and none was supplied")
 )

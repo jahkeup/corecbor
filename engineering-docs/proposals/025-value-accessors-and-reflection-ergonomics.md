@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 025 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 016 (struct Value), 008 (Marshal/Unmarshal), 021 (core codec safety fixes — embedded-struct index paths), 034 (compatibility policy) |
@@ -275,6 +275,46 @@ func CompatV02Decoding() DecoderOption
    `DisallowUnknownFields` the other one is an error.
 4. The package-level `Marshal`/`Unmarshal` are unchanged.
 
+### Implementation notes (2026-11-21)
+
+Phases A, B and D are implemented. Decisions taken while implementing:
+
+- **`Equal` is the data-model rule, not order-sensitive.** The text
+  above says maps compare order-sensitively; RFC 8949 §2 maps are
+  unordered, and 024 made the decoder's default key identity the data
+  model (±0 equal, cross-width floats equal, NaN by payload and sign).
+  `Value.Equal` is that rule, and `rfc8949` delegates to it for
+  non-legacy key comparison (text and integer keys stay inline for
+  speed).
+- **`String()` without an import cycle.** The diagnostic primitives
+  live in `internal/diagfmt` (no module imports); the `Value` walk is in
+  `cbor` and registers itself with `diagfmt` at init, which the root
+  package's `DiagnosticValue` calls. `Diagnostic`/`DiagnosticValue`
+  output is unchanged (golden vectors).
+- **`Kind.String()`** changed one golden-harness record that formatted
+  a `Kind` with `%v`; the harness now prints `%d`, so the recorded
+  output is unchanged.
+- **`Get`** returns the first match (open question resolved as leaned).
+- **`toarray`**: a too-long array is `ErrArrayLength` (open question
+  resolved: strict; a forward-compatible tail can be modeled with a
+  trailing `[]cbor.Value`-typed field later). Fields under a nil
+  embedded pointer encode as null. `toarray` works on the raw
+  (`RawMessage`/`Unmarshaler`) decode path too. A map into a `toarray`
+  struct, or an array into a map-shaped struct, is a type mismatch.
+- **Field cache**: already present since 021 (index paths, `sync.Map`);
+  025 adds one cache per naming mode. `BenchmarkMarshalStruct` allocs
+  are unchanged from main (13), so the "≥30% fewer allocs" target was
+  already met by 021 relative to v0.2.2's per-call `getStructFields`.
+- **Text/Binary unmarshalers**: checked only for text and byte-string
+  values, and skipped for predeclared/unnamed non-struct target types,
+  which can't have methods.
+- **Phase C deferred.** The private conversions in `cwt` and `eat`
+  (`int64(v.UintVal())`, `-1-int64(v.NegIntVal())`) wrap on overflow;
+  switching them to `Int64()` turns wrapping into errors, which is a
+  behavior change pinned by golden vectors and is the defect 031/032
+  fix. Migrating them belongs with 031/032; `cose`/`edhoc` with
+  028/033. The Phase A API covers every site.
+
 ### Behavior
 
 Phases A, C and D are purely additive; no existing output or
@@ -346,10 +386,10 @@ existing functions.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| A | `Get`/`GetInt`/`GetText`/`Int64`/`Uint64`/`Equal`/`String`, diag move | Pending | Phase A rows green |
-| B | `toarray`, `DisallowUnknownFields`, Unmarshaler symmetry, cache, `omitzero` | Pending | Phase B rows green |
-| C | Migrate sibling modules to Phase A API | Pending | Helpers deleted, tests green |
-| D | Opt-in `WithGoFieldNames()` / `WithCaseInsensitiveFieldNames()` + root `CompatV02`/`CompatV02Decoding` bundles | Pending | Phase D rows green; migration guide entry |
+| A | `Get`/`GetInt`/`GetText`/`Int64`/`Uint64`/`Equal`/`String`, diag move | Done | Phase A rows green |
+| B | `toarray`, `DisallowUnknownFields`, Unmarshaler symmetry, cache, `omitzero` | Done | Phase B rows green |
+| C | Migrate sibling modules to Phase A API | Deferred to 028/031/032/033 | Helpers deleted, tests green |
+| D | Opt-in `WithGoFieldNames()` / `WithCaseInsensitiveFieldNames()` + root `CompatV02`/`CompatV02Decoding` bundles | Done | Phase D rows green; migration guide entry |
 
 ---
 
@@ -438,3 +478,4 @@ existing functions.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Add `Kind.String()` (downstream request) to Phase A | corecbor maintainers |
+| 2026-11-21 | Phases A, B, D implemented; Phase C deferred to 028/031/032/033; implementation notes | corecbor maintainers |

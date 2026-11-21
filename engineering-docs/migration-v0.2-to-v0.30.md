@@ -87,6 +87,30 @@ v0.2.2 and under the new version and diffs the output.
   than Allow for the same invalid input.
 - `rfc8949.DecodeTextArray` now honors `RejectInvalidUTF8`.
 
+## Value accessors and reflection (025)
+
+- **New on `cbor.Value`:** `Get`, `GetInt`, `GetText` (map lookup),
+  `Int64`/`Uint64` (checked: `ErrOverflow`, `ErrTypeMismatch`), `Equal`
+  (RFC 8949 data model + erratum 8589, the decoder's default key
+  identity) and `String` (compact diagnostic notation). `Kind` has a
+  `String` method, so `%v`/`%s` print names such as `map`; use `%d` if
+  you need the number. `ErrOverflow` now lives in `cbor`;
+  `corecbor.ErrOverflow` is the same value.
+- **Fixed:** `Unmarshal` calls `encoding.TextUnmarshaler` for text
+  strings and `encoding.BinaryUnmarshaler` for byte strings, matching
+  what `Marshal` already did for the `*Marshaler` side (so `netip.Addr`
+  and similar types round-trip). A `string`- or `[]byte`-kinded type
+  that implements one of them now gets the method called instead of the
+  raw value; `WithLegacyNoTextBinaryUnmarshal()` (deprecated, included
+  in `CompatV02Decoding()`) restores v0.2.
+- **New, opt-in:** struct-level ``_ struct{} `cbor:",toarray"` `` (array
+  encoding in field order; trailing pointer fields optional on decode;
+  `ErrArrayLength`), `DisallowUnknownFields()` (`ErrUnknownField`), the
+  `omitzero` field option, `WithGoFieldNames()` (encoder: untagged
+  fields keyed by the Go name as-is) and
+  `WithCaseInsensitiveFieldNames()` (decoder). The default untagged key
+  is still the lowercased field name.
+
 ## Errors
 
 - Decoder errors are `*DecodeError` (`errors.As`), with an `Offset` and,
@@ -286,9 +310,10 @@ Selectors that weaken verification are never included in a
 | Selector | Package | Restores |
 |---|---|---|
 | `CompatV02()` | root (encoder) | `WithLegacyBignumPassthrough()` |
-| `CompatV02Decoding()` | root (decoder) | `WithLegacyFloatKeyEquality()` |
+| `CompatV02Decoding()` | root (decoder) | `WithLegacyFloatKeyEquality()`, `WithLegacyNoTextBinaryUnmarshal()` |
 | `WithLegacyBignumPassthrough()` | root | bignums as supplied in deterministic modes |
 | `WithLegacyFloatKeyEquality()` | root | v0.2 float key comparison |
+| `WithLegacyNoTextBinaryUnmarshal()` | root | no Text/BinaryUnmarshaler calls on decode |
 | `WithLegacyAlgorithmFromKey()` | cose | ignore header `alg` |
 | `WithLegacyIgnoreCritical()` | cose | ignore `crit` |
 | `WithLegacyMACHeaders()` | cose | v0.2 MAC header handling |

@@ -26,6 +26,7 @@ proposal lifecycle.
 | [032](032-eat-rfc9711-conformance.md) | 3 | Draft | EAT: RFC 9711 conformance | corecbor maintainers | 005, 022, 027, 031 | 2026-11-20 |
 | [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Draft | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 004, 022, 028, 031 | 2026-11-20 |
 | [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Draft | Standards currency and legacy-compatibility selection policy | corecbor maintainers | — | 2026-11-20 |
+| [035](035-invalid-utf8-text-policy.md) | 1 | Accepted | Caller-selected representation of text that is not valid UTF-8 | corecbor maintainers | 021, 023, 034 | 2026-11-21 |
 
 ## Closed proposals
 
@@ -53,7 +54,7 @@ proposal lifecycle.
 
 ## Numbering
 
-Next available proposal number: **035**
+Next available proposal number: **036**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than

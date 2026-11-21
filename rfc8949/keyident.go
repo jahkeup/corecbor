@@ -14,7 +14,7 @@ import (
 
 // KeyIdentity selects when two map keys are the same key for duplicate
 // detection (proposal 024).
-type KeyIdentity int
+type KeyIdentity uint8
 
 const (
 	// KeyIdentityValue compares keys in the CBOR data model (RFC 8949
@@ -140,13 +140,6 @@ func hashU64(h uint64, n uint64) uint64 {
 	return h
 }
 
-func hashBytes(h uint64, b []byte) uint64 {
-	for _, c := range b {
-		h = hashByte(h, c)
-	}
-	return h
-}
-
 func keyHash(v cbor.Value) uint64 { return keyHashInto(fnvOffset, v) }
 
 func keyHashInto(h uint64, v cbor.Value) uint64 {
@@ -164,13 +157,17 @@ func keyHashInto(h uint64, v cbor.Value) uint64 {
 			return hashU64(h, bits)
 		}
 	case cbor.KindText:
-		h = hashByte(h, byte(v.Kind))
+		h = (h ^ uint64(cbor.KindText)) * fnvPrime
 		for i := 0; i < len(v.Str); i++ {
-			h = hashByte(h, v.Str[i])
+			h = (h ^ uint64(v.Str[i])) * fnvPrime
 		}
 		return h
 	case cbor.KindBytes:
-		return hashBytes(hashByte(h, byte(v.Kind)), v.Bstr)
+		h = (h ^ uint64(cbor.KindBytes)) * fnvPrime
+		for _, c := range v.Bstr {
+			h = (h ^ uint64(c)) * fnvPrime
+		}
+		return h
 	case cbor.KindArray:
 		h = hashU64(hashByte(h, byte(v.Kind)), uint64(len(v.Items)))
 		for i := range v.Items {
@@ -300,18 +297,18 @@ func (ks *keySet) add(idx int, key cbor.Value, enc []byte, opts *DecodeOpts) {
 // (RejectDuplicateMapKeys), or last-write-wins (default: the repeated
 // key keeps its first position and takes the new value). It returns the
 // index of the entry that now holds val.
-func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []byte, ks *keySet, opts DecodeOpts) ([]cbor.MapEntry, int, error) {
+func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []byte, ks *keySet, opts *DecodeOpts) ([]cbor.MapEntry, int, error) {
 	if opts.KeepDuplicateMapKeys {
 		return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
 	}
-	if idx := ks.find(m, key, encodedKey, &opts); idx >= 0 {
+	if idx := ks.find(m, key, encodedKey, opts); idx >= 0 {
 		if opts.RejectDuplicateMapKeys {
 			return m, idx, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
 		}
 		m[idx].Value = val
 		return m, idx, nil
 	}
-	ks.add(len(m), key, encodedKey, &opts)
+	ks.add(len(m), key, encodedKey, opts)
 	return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
 }
 

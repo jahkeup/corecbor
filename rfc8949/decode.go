@@ -733,7 +733,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		}
 		pos = next
 		var idx int
-		m, idx, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
+		m, idx, err = mapInsert(m, k, v, keyOff, encodedKey, ks, &opts)
 		if err != nil {
 			return cbor.Value{}, keyOff, err
 		}
@@ -791,7 +791,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		}
 		pos = next
 		var idx int
-		m, idx, err = mapInsert(m, k, v, keyOff, encodedKey, ks, opts)
+		m, idx, err = mapInsert(m, k, v, keyOff, encodedKey, ks, &opts)
 		if err != nil {
 			return cbor.Value{}, keyOff, err
 		}

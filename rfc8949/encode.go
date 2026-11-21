@@ -77,8 +77,6 @@ type EncodeOpts struct {
 	AllowNonFiniteFloats bool
 	AllowInvalidUTF8     bool
 	SkipUTF8Validation   bool
-	SortCache            *SortStateCache
-
 	// LegacyBignumPassthrough emits tag 2/3 contents as supplied in
 	// deterministic modes, as v0.2.2 did, instead of stripping leading
 	// zeros and reducing values that fit major type 0/1 (RFC 8949
@@ -86,6 +84,7 @@ type EncodeOpts struct {
 	//
 	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
 	LegacyBignumPassthrough bool
+	SortCache               *SortStateCache
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
@@ -155,19 +154,7 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	case cbor.KindMap:
 		return encodeMap(dst, v.Pairs, opts)
 	case cbor.KindTag:
-		if len(v.Items) == 0 {
-			return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
-		}
-		inner := &v.Items[0]
-		if inner.Kind == cbor.KindInvalid {
-			return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
-		}
-		if (v.Num == cbor.TagUnsignedBignum || v.Num == cbor.TagNegativeBignum) &&
-			inner.Kind == cbor.KindBytes && opts.Deterministic && !opts.LegacyBignumPassthrough {
-			return appendPreferredBignum(dst, v.Num, inner.Bstr), nil
-		}
-		dst = wire.AppendHead(dst, wire.MajorTag, v.Num)
-		return encode(dst, inner, opts)
+		return encodeTag(dst, v, opts)
 	case cbor.KindBool:
 		if v.Num != 0 {
 			return append(dst, wire.SimpleTrue), nil
@@ -209,6 +196,28 @@ func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
 		return dst, unsupportedKind(v.Kind)
 	}
 	return append(dst, v.Bstr...), nil
+}
+
+// encodeTag writes a tag Value. It is out of line so encode's hot switch
+// stays small: carrying the tag 2/3 preferred-bignum branch (proposal
+// 024) inside encode cost ~27% on scalar-array encoding through code
+// generation alone, as raw values did for encodeOther.
+//
+//go:noinline
+func encodeTag(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
+	if len(v.Items) == 0 {
+		return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
+	}
+	inner := &v.Items[0]
+	if inner.Kind == cbor.KindInvalid {
+		return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
+	}
+	if v.Num-cbor.TagUnsignedBignum < 2 && opts.Deterministic &&
+		inner.Kind == cbor.KindBytes && !opts.LegacyBignumPassthrough {
+		return appendPreferredBignum(dst, v.Num, inner.Bstr), nil
+	}
+	dst = wire.AppendHead(dst, wire.MajorTag, v.Num)
+	return encode(dst, inner, opts)
 }
 
 // appendPreferredBignum writes tag 2/3 content in RFC 8949 §3.4.3

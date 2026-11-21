@@ -38,7 +38,9 @@ floats, and duplicate NaN keys. This proposal:
 
 1. Fixes the bignum and NaN gaps that RFC 8949 itself requires
    (§3.4.3 preferred bignum serialization; §2.2 NaN in CTAP2).
-2. Implements RFC 8949 erratum 8589.
+2. Implements RFC 8949 erratum 8589 and makes map-key identity and
+   duplicate handling explicit, caller-selected choices (see "Map key
+   identity and duplicate policy").
 3. Adds `RequireDeterministic()`, a checking decoder for the published
    RFC 8949 §4.2.1 rules.
 4. Adds, **as opt-in Draft behavior** per proposal 034,
@@ -214,6 +216,75 @@ floats by canonical bit pattern:
    half-precision input decodes as `KindFloat64` while single-precision
    input decodes as `KindFloat32`.
 
+### Map key identity and duplicate policy
+
+Two independent questions decide what a decoder does with repeated map
+keys, and v0.2.2 answers neither consistently: maps of up to 16 entries
+compare keys as data-model values (`valuesEqual`), so `01` and `1800`
+collide and last-write-wins keeps only the second; larger maps compare
+the encoded bytes (dedup hash, `rfc8949/decode.go:634-675`), so the same
+pair keeps both entries and `RejectDuplicateMapKeys` misses it. Spec
+§8.1 requires the default to be last-write-wins *and deterministic*, so
+the split is a contract defect. Which notion of "same key" is right is
+the caller's call: a protocol implementation wants the RFC data model,
+while someone auditing an encoder or treating key bytes as opaque wants
+`01` and `1800` kept apart.
+
+**Key identity** — new option, default unchanged in meaning for every
+map size once the split is fixed:
+
+```go
+// KeyIdentity selects when two map keys are the same key.
+type KeyIdentity int
+
+const (
+	// KeyIdentityValue compares keys in the CBOR data model (RFC 8949
+	// §5.6.1 + erratum 8589): 01 and 1800 are the same key, as are
+	// f93c00 and fa3f800000; integer 1 and float 1.0 are not. Default.
+	KeyIdentityValue KeyIdentity = iota
+	// KeyIdentityEncoded treats keys as the same only when their encoded
+	// bytes are identical: 01 and 1800 are different keys.
+	KeyIdentityEncoded
+)
+
+// WithMapKeyIdentity selects key identity for duplicate detection.
+func WithMapKeyIdentity(k KeyIdentity) DecoderOption
+```
+
+**Duplicate policy** — what happens when a key repeats under the chosen
+identity:
+
+| Policy | Identifier | Status |
+|---|---|---|
+| Last-write-wins | default (spec §3.3, §8.1) | unchanged |
+| Reject | `RejectDuplicateMapKeys()` | existing |
+| Keep every entry, in input order, no merging | `KeepDuplicateMapKeys() DecoderOption` | new |
+
+`KeepDuplicateMapKeys` is cheap because `cbor.Value` maps are
+`[]MapEntry`. Combining it with `RejectDuplicateMapKeys` is a
+configuration error (`ErrInvalidOption`, new). Combinations compose:
+`WithMapKeyIdentity(KeyIdentityEncoded)` + `RejectDuplicateMapKeys()`
+rejects only byte-identical repeats.
+
+All map sizes use one implementation: the dedup hash keys on the
+canonical form for `KeyIdentityValue` (Core Deterministic encoding of
+the key, with erratum 8589 float/NaN normalization) and on the input
+bytes for `KeyIdentityEncoded`, with `valuesEqual` (or `bytes.Equal`)
+confirming hash hits. The small-map linear scan uses the same predicate.
+
+Documented consequences:
+
+- `Unmarshal` into a Go `map` can't hold duplicates; the last entry is
+  assigned last regardless of policy. Use a `cbor.Value` or
+  `[]cbor.MapEntry` target to keep them.
+- Deterministic encoding writes `1800` as `01`, so a `Value` decoded
+  with `KeyIdentityEncoded` + `KeepDuplicateMapKeys` and re-encoded in a
+  deterministic mode fails with `ErrDuplicateMapKey` (021 D15) instead
+  of silently merging.
+- Raw views are available whatever the policy: `Diagnostic` renders
+  every encoded entry (021 D19), and `Cursor`/`DecodeRaw` (022) expose
+  the bytes.
+
 ### Spec edits (§2.1, §2.2)
 
 - Fix the §2.1 table's Canonical and CTAP2 sort descriptions so they
@@ -266,6 +337,9 @@ and revision.
 | Bignum leading zeros stripped by the encoder in deterministic modes | Contract defect | `doc.go:12-15` (modes claim RFC 8949 §4.2.1, which requires preferred serialization, §4.1/§3.4.3) | stripped | `func WithLegacyBignumPassthrough() Option` — Deprecated; emits tag 2/3 contents as supplied |
 | Bignums that fit major 0/1 encoded as integers in deterministic modes | Contract defect | same, RFC 8949 §3.4.3 ("preferred serialization … never makes use of bignums that also can be expressed as basic integers") | reduced at encode time; `BigIntTo` unchanged | same `WithLegacyBignumPassthrough()` |
 | Duplicate-key equality: NaN sign bit, ±0 equal, cross-width float equality | Contract defect | RFC 8949 §5.6.1 + verified erratum 8589; `RejectDuplicateMapKeys` documents RFC 8949 §5.6 (spec `:182`) | erratum rules | `func WithLegacyFloatKeyEquality() DecoderOption` — Deprecated; v0.2 `Kind`-and-`==` comparison |
+| Same key-identity rule for every map size (v0.2.2 used value identity up to 16 entries, encoded bytes above) | Contract defect | spec §3.3 last-write-wins and §8.1 "MUST be deterministic" | `KeyIdentityValue` at every size | none — callers who want byte identity choose `KeyIdentityEncoded` |
+| `WithMapKeyIdentity`, `KeyIdentityValue`, `KeyIdentityEncoded` | Additive | — | default = data model (current standards state) | the option is the opt-in |
+| `KeepDuplicateMapKeys()`, `ErrInvalidOption` | Additive | — | last-write-wins default unchanged | the option is the opt-in |
 | `Unmarshal` into `big.Int` accepts major 0/1 | Additive (input v0.2.2 rejected now succeeds) | proposal 008 round-trip | tag 2/3 decode unchanged | n/a |
 | `BigIntToPreferred`, `AsBigIntAny` | Additive | — | `BigIntTo`/`AsBigInt` unchanged | n/a |
 | `RequireDeterministic()`, `DeterministicDecoder()` | Additive (RFC 8949 §4.2.1) | — | `StrictDecoder` unchanged | n/a — opt-in, recommended for AAD inputs |
@@ -300,6 +374,10 @@ lifecycle. That is a separate proposal.
 | §2.1 table corrected | doc review | Yes |
 | `WithLegacyBignumPassthrough()` reproduces v0.2.2 bytes for `Tag(2,h'0001')` (`c2 42 0001`) and `BigIntTo`-built values; default strips/reduces | `TestCompatBignumPassthrough` vs `testdata/legacy-v0.2.2/` | Yes |
 | `WithLegacyFloatKeyEquality()` accepts `{f93c00:1, fa3f800000:2}` as v0.2.2 did; default rejects | `TestCompatFloatKeyEquality` | Yes |
+| `{01:"a", 1800:"b"}` behaves identically at 2 and at 17+ entries: last-write-wins keeps `"b"`; `RejectDuplicateMapKeys` rejects | `TestKeyIdentityMapSizeIndependent` | Yes |
+| `KeyIdentityEncoded`: `{01:"a", 1800:"b"}` keeps both under last-write-wins and isn't rejected by `RejectDuplicateMapKeys`; `{01:"a", 01:"b"}` is | `TestKeyIdentityEncoded` | Yes |
+| `KeepDuplicateMapKeys`: every entry kept in input order for both identities; with `RejectDuplicateMapKeys` → `ErrInvalidOption` | `TestKeepDuplicateMapKeys` | Yes |
+| Decode with each identity × policy agrees with a reference model over random maps | `FuzzMapKeyIdentity` | Yes |
 | `Unmarshal(01, &big.Int)` and `Unmarshal(c2 41 01, &big.Int)` both yield 1 | `TestUnmarshalBigIntFromInt` | Yes |
 | Legacy selectors carry `// Deprecated:` with removal floor v0.32.0; `ModePreferredPlus` and `RequirePreferredPlus` carry `Experimental:` naming draft-ietf-cbor-serialization-13 | doc review + staticcheck SA1019 fixture | Yes |
 | `StrictDecoder()` accepts the unsorted map `a2 6162 01 6161 02`; `DeterministicDecoder()` rejects it | `TestStrictVsDeterministicPreset` | Yes |
@@ -314,7 +392,8 @@ lifecycle. That is a separate proposal.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Correct under RFC 8949 alone: CTAP2 NaN (§2.2), erratum 8589 key equality, encode-time bignum strip/reduction in deterministic modes (`BigIntTo` unchanged), §2.1 table fix | Pending | First three rows + erratum row pass |
+| 1 | Correct under RFC 8949 alone: CTAP2 NaN (§2.2), erratum 8589 key equality, one key-identity rule for all map sizes, encode-time bignum strip/reduction in deterministic modes (`BigIntTo` unchanged), §2.1 table fix | Pending | First three rows + erratum + map-size rows pass |
+| 1b | Caller-selected key identity and duplicate policy: `WithMapKeyIdentity`, `KeepDuplicateMapKeys` | Pending | identity/policy rows + `FuzzMapKeyIdentity` pass |
 | 2 | `RequirePreferredPlus` / `RequireDeterministic` + sentinels | Pending | Checking-decoder rows pass |
 | 3 | Encoder-side bignum normalization (RFC 8949 §3.4.3) + `WithLegacyBignumPassthrough` | Pending | Bignum rows pass |
 | 4 | Draft class (034): `ModePreferredPlus`, `RequirePreferredPlus` documented Experimental; draft vectors | Pending | Draft rows pass; **renamed/finalized when the RFC publishes, per 034 lifecycle** |
@@ -402,3 +481,4 @@ lifecycle. That is a separate proposal.
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review + IETF upstream check | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-20 | Map key identity (value vs encoded) and duplicate policy (last-wins / reject / keep) as explicit caller choices; fix small/large-map split (maintainer decision) | corecbor maintainers |

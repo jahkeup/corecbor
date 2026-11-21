@@ -430,13 +430,28 @@ cases:
   in `TestCOSEWGExamples`: `eddsa-sig-01`, `sign-pass-01`,
   `sign-pass-02`, `HMac-01`, `aes-gcm-enc-01`.
 
-Open issue for Phase 2: cose-wg `sign-pass-01` carries `alg` only in
-the **unprotected** bucket and is a *pass* vector. H2's "alg from the
-protected bucket only" would reject it. RFC 9052 §3.1 requires `alg`
-to be authenticated only "where the ability to change the algorithm
-identifier would provide an attack vector". Phase 2 needs to decide
-whether an unprotected `alg` that matches the key (and allow-list) is
-accepted.
+**Decided 2026-11-20 (maintainers) — H2 rule for Phase 2.** `alg` is
+taken from the protected bucket when present. An `alg` that appears
+**only** in the unprotected bucket is accepted if, and only if, it
+equals the algorithm the verifier key implies (and passes
+`WithAllowedAlgorithms` when set); any other unprotected `alg`, or an
+`alg` present in both buckets (also an H4 duplicate), is rejected with
+`ErrAlgorithmMismatch`. An unprotected `alg` can't steer verification
+to a different algorithm this way, so RFC 9052 §3.1's concern (changing
+the identifier as an attack vector) doesn't arise, and cose-wg
+`sign-pass-01` keeps verifying. A message with no `alg` at all is
+verified with the key's algorithm, as today.
+
+**Decided 2026-11-20 (maintainers) — nil payload means detached.**
+`Signer.Sign(nil)` producing a detached message, and `Verify` returning
+`ErrMissingPayload` for it, is intended (RFC 9052 §2). To detach a real
+payload, sign it and set `Payload = nil` before marshaling (028 adds a
+`SignDetached` helper); verify with `VerifyDetached(msg, content)`. An
+empty non-nil slice is an attached empty payload. Usage is shown in
+runnable examples: `ExampleSigner_Sign`, `ExampleVerifier_VerifyDetached`,
+`ExampleSigner_Sign_emptyPayload`, `ExampleVerifyMulti`
+(`cose/example_payload_test.go`). The migration guide must call out the
+nil-vs-empty distinction.
 
 ## Compatibility selection
 
@@ -597,3 +612,4 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Phase 1 implemented (H1, H5, H6, H8, H11, nil guards, DER bounds, DecryptMulti IV); fuzz targets for Phase 1 surfaces; status In-Progress | corecbor maintainers |
+| 2026-11-20 | Decisions: H2 unprotected-alg rule; nil payload = detached; runnable payload examples | corecbor maintainers |

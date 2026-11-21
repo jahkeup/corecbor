@@ -16,5 +16,11 @@ func init() {
 	cwtSentinels = append(
 		cwtSentinels,
 		g.Sentinel{Name: "ErrInvalidValidator", Err: cwt.ErrInvalidValidator},
+		g.Sentinel{Name: "ErrIssuerMismatch", Err: cwt.ErrIssuerMismatch},
+		g.Sentinel{Name: "ErrIssuedInFuture", Err: cwt.ErrIssuedInFuture},
+		g.Sentinel{Name: "ErrTokenTooOld", Err: cwt.ErrTokenTooOld},
+		g.Sentinel{Name: "ErrMissingIssuedAt", Err: cwt.ErrMissingIssuedAt},
+		g.Sentinel{Name: "ErrUnexpectedType", Err: cwt.ErrUnexpectedType},
+		g.Sentinel{Name: "ErrKeyResolution", Err: cwt.ErrKeyResolution},
 	)
 }

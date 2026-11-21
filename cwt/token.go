@@ -25,10 +25,18 @@ func Sign(claims *ClaimsSet, signer *cose.Signer) ([]byte, error) {
 }
 
 // Verify decodes and verifies a signed CWT, returning the embedded claims.
+// An outer CWT tag 61 is accepted (RFC 8392 §6).
+//
+// Verify checks the signature only; it does not validate claims. Use
+// VerifyToken, or call Validator.Validate on the result.
 func Verify(data []byte, verifier *cose.Verifier) (*ClaimsSet, error) {
-	msg, err := cose.UnmarshalSign1(data)
+	inner, _, err := unwrapCWT(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformedClaims, err)
+		return nil, err
+	}
+	msg, err := cose.UnmarshalSign1(inner)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
 
 	if err := verifier.Verify(msg); err != nil {

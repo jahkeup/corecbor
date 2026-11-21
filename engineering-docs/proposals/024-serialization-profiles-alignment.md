@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 024 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001, 021 (`ErrNotDeterministic` user), 023 (`DecodeError`), 034 (compatibility policy) |
@@ -295,6 +295,57 @@ Documented consequences:
   Deterministic, and `ModePreferredPlus` ≡ Preferred-Plus.
 - Make §2.2's NaN bullet cite `f97e00` explicitly.
 
+### Implementation notes (2026-11-20)
+
+- **Key identity everywhere.** One predicate (`keysEqual`, RFC 8949
+  §5.6.1 + erratum 8589) and a matching data-model hash (`keyHash`)
+  serve every map size; v0.2.2 hashed encoded bytes above 16 entries.
+  Arrays, tags and maps compare structurally (maps order-independently).
+  `KeyIdentityEncoded` compares input bytes (`bytes.Equal`, FNV hash for
+  large maps); indefinite maps keep the v0.2 linear scan.
+- **Half-precision NaN payloads.** `wire.DecodeFloat16` used to return
+  Go's `math.NaN()` for every half NaN, which made `f97e00` and `f97e01`
+  equal keys, contrary to erratum 8589. It now zero-extends the sign and
+  significand into binary64. No golden vector changed.
+- **Checking decoders** run as a separate pass over the item's bytes
+  after a successful decode (`rfc8949/check.go`), so default decode hot
+  paths are untouched. Options live on `rfc8949.DecodeOpts`
+  (`RequirePreferred`, `RequireSortedMapKeys`, `RequireCanonicalNaN`);
+  `RequireDeterministic()` sets the first two, `RequirePreferredPlus()`
+  the first and third. Errors are 023 `DecodeError`s wrapping
+  `ErrNotPreferred` (plus `ErrNonShortest`/`ErrIndefiniteLength`) or
+  `ErrNotDeterministic` (plus `ErrDuplicateMapKey` for equal keys).
+  `RequireDeterministic` keeps NaN payloads in their shortest width
+  (RFC 8949 §4.1); the draft's `f97e00`-only rule comes from
+  `RequirePreferredPlus`.
+- **`ErrInvalidOption`** is returned by `rfc8949.Decode` (so by every
+  decode entry point) when `KeepDuplicateMapKeys` and
+  `RejectDuplicateMapKeys` are both set; options can't fail at
+  construction without changing `NewDecoder`'s signature.
+- **`ModePreferredPlus`** uses a new `rfc8949.SortNone`; deterministic
+  `StreamEncoder` key-order checks are skipped for it.
+  `StreamEncoder.WriteTag(2)` + `WriteBytes` is written as supplied; the
+  stream can't rewrite a bignum it has already started (use `WriteValue`).
+- **Raw path (022).** The raw-span `Unmarshal` path re-derived merges
+  with v0.2-era rules and disagreed with the decoder after this change
+  (e.g. two NaN keys). The decoder now records each resulting entry's
+  key and kept-value spans (`rfc8949.MapEntrySpans`), and the raw merge
+  path consumes them. A full-tree offset side table was not added:
+  profiling `BenchmarkUnmarshalStructRawMessage` shows cursor walking at
+  ~2% of CPU, and that benchmark is already ~19% faster than v0.2.2
+  (1.558µs → 1.264µs; 2088 → 760 B/op).
+- **Consumer byte-stability.** 36 golden vectors (variant-tag storage
+  corpus: single-entry variant-tag maps, numbers as text, pre-sorted
+  sets, invalid UTF-8 under `AllowInvalidUTF8`, a 40-attribute item)
+  generated from v0.2.2 pin Core Deterministic output and its decode →
+  re-encode; none is allowlisted.
+- **Draft vectors.** All 25 Appendix K.2 examples
+  (`testdata/serialization-13/examples.json`) pass the draft's K.1
+  encode, decode and checking-decoder tests.
+- **`DecodeFrom` / `Stream`** don't run the checking pass; it applies to
+  `Decode`, `DecodePrefix`, `DecodeRaw`, `DecodeSequence` and
+  `Unmarshal`.
+
 ### Behavior / migration
 
 - **CTAP2 NaN output changes.** CTAP2 forbids NaN in practice, so the
@@ -392,11 +443,11 @@ lifecycle. That is a separate proposal.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Correct under RFC 8949 alone: CTAP2 NaN (§2.2), erratum 8589 key equality, one key-identity rule for all map sizes, encode-time bignum strip/reduction in deterministic modes (`BigIntTo` unchanged), §2.1 table fix | Pending | First three rows + erratum + map-size rows pass |
-| 1b | Caller-selected key identity and duplicate policy: `WithMapKeyIdentity`, `KeepDuplicateMapKeys` | Pending | identity/policy rows + `FuzzMapKeyIdentity` pass |
-| 2 | `RequirePreferredPlus` / `RequireDeterministic` + sentinels | Pending | Checking-decoder rows pass |
-| 3 | Encoder-side bignum normalization (RFC 8949 §3.4.3) + `WithLegacyBignumPassthrough` | Pending | Bignum rows pass |
-| 4 | Draft class (034): `ModePreferredPlus`, `RequirePreferredPlus` documented Experimental; draft vectors | Pending | Draft rows pass; **renamed/finalized when the RFC publishes, per 034 lifecycle** |
+| 1 | Correct under RFC 8949 alone: CTAP2 NaN (§2.2), erratum 8589 key equality, one key-identity rule for all map sizes, encode-time bignum strip/reduction in deterministic modes (`BigIntTo` unchanged), §2.1 table fix | Done | First three rows + erratum + map-size rows pass |
+| 1b | Caller-selected key identity and duplicate policy: `WithMapKeyIdentity`, `KeepDuplicateMapKeys` | Done | identity/policy rows + `FuzzMapKeyIdentity` pass |
+| 2 | `RequirePreferredPlus` / `RequireDeterministic` + sentinels | Done | Checking-decoder rows pass |
+| 3 | Encoder-side bignum normalization (RFC 8949 §3.4.3) + `WithLegacyBignumPassthrough` | Done | Bignum rows pass |
+| 4 | Draft class (034): `ModePreferredPlus`, `RequirePreferredPlus` documented Experimental; draft vectors | Done | Draft rows pass; **renamed/finalized when the RFC publishes, per 034 lifecycle** |
 
 ---
 
@@ -482,3 +533,4 @@ lifecycle. That is a separate proposal.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Map key identity (value vs encoded) and duplicate policy (last-wins / reject / keep) as explicit caller choices; fix small/large-map split (maintainer decision) | corecbor maintainers |
+| 2026-11-20 | Status: In-Progress; Phases 1, 1b, 2, 3, 4 implemented; implementation notes | corecbor maintainers |

@@ -399,3 +399,4 @@ and the 104-byte `Value` (proposal 020) doesn't grow.
 | 2026-11-20 | Every `Unmarshaler` receives original bytes (contract defect, maintainer decision); `WithVerbatimUnmarshalerInput` dropped | corecbor maintainers |
 | 2026-11-20 | Status: In-Progress; Phases 1–3 implemented, Cursor skip hardened; implementation notes | corecbor maintainers |
 | 2026-11-20 | Status: Closed (Phases 1–3 + Cursor hardening on main; raw splice gated to Marshal-created values; CI green incl. fuzz). Follow-ups: RawMessage struct decode +12% (offset recording, with 024); large-map duplicate identity → 024 Phase 1 | corecbor maintainers |
+| 2026-11-20 | Follow-up (024): raw merge path uses decoder-recorded entry spans (`rfc8949.MapEntrySpans`), so merges follow 024 key identity; RawMessage struct decode measured ~19% faster than v0.2.2, so no full-tree offset table was added | corecbor maintainers |

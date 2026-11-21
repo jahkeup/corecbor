@@ -17,7 +17,7 @@ proposal lifecycle.
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 | [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
 | [020](020-default-decode-recovery.md) | 1 | Draft | Default-path decode recovery and residual throughput fixes | corecbor maintainers | 016, 018, 019 | 2026-05-24 |
-| [021](021-core-codec-safety-fixes.md) | 1 | Draft | Core codec safety fixes | corecbor maintainers | 008, 016, 020 | 2026-11-20 |
+| [021](021-core-codec-safety-fixes.md) | 1 | In-Progress | Core codec safety fixes | corecbor maintainers | 008, 016, 020, 034 | 2026-11-20 |
 | [022](022-raw-byte-preservation.md) | 1 | Draft | Raw byte preservation through decode | corecbor maintainers | 014, 018, 020, 021 | 2026-11-20 |
 | [023](023-strict-decode-policy-and-errors.md) | 1 | Draft | Strict decode policy (tag allowlist) and structured errors | corecbor maintainers | 001 | 2026-11-20 |
 | [024](024-serialization-profiles-alignment.md) | 1 | Draft | Align encoder modes and checking decoders with CBOR Serialization | corecbor maintainers | 001, 021, 023 | 2026-11-20 |

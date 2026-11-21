@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 021 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 008 (Marshal/Unmarshal), 016 (struct Value), 020 (internal arena), 034 (compatibility policy) |

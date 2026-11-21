@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 021 |
 | **Tier** | 1 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 008 (Marshal/Unmarshal), 016 (struct Value), 020 (internal arena), 034 (compatibility policy) |
@@ -522,3 +522,4 @@ the pool, which the D2 fix guarantees.
 | 2026-11-20 | Implementation notes: D1 decoder pool; D3 null/simple keys unchanged; D4 option-only tags keep the field name | corecbor maintainers |
 | 2026-11-20 | Implementation notes from D6/D10/D14–D16 work; add D18 (stream WriteValue float/UTF-8) | corecbor maintainers |
 | 2026-11-20 | Add D19 (Diagnostic renders from bytes so duplicate keys aren't hidden) | corecbor maintainers |
+| 2026-11-20 | Status: Closed (D1–D19 on main; CI green on linux/amd64 incl. fuzz) | corecbor maintainers |

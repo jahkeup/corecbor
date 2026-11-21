@@ -338,10 +338,20 @@ Per RFC 8949 §3.4 + IANA registry, the library SHOULD model these
 | 1 | Epoch-based date/time | helper `AsTime` |
 | 2 / 3 | Unsigned/negative bignum | helper `AsBigInt` |
 | 21 / 22 / 23 | Expected base64url / base64 / base16 conversion (decoder hint) | preserve as Tag |
-| 24 | Encoded CBOR data item (nested) | helper `AsNestedCBOR` |
+| 24 | Encoded CBOR data item (nested) | helpers `AsNestedCBOR`, `WrapEncodedCBOR`, `Encoder.EncodeEncodedCBOR`, `Decoder.DecodeEncodedCBOR` (026) |
+| 16–18, 96–98 | COSE messages (RFC 9052) | constants `TagCOSE*`; handled by `cose` |
 | 32 | URI | preserve as Tag |
 | 35 | Regular expression | preserve as Tag |
-| 55799 | Self-describe (CBOR magic) | strip on decode if at head |
+| 37 | Binary UUID (RFC 9562) | helpers `UUIDTo` / `AsUUID` (026) |
+| 52 / 54 | IPv4 / IPv6 address, prefix, interface (RFC 9164) | helpers `IPTo`, `PrefixTo`, `InterfaceTo`, `AsIP`, `AsPrefix` (026) |
+| 61 | CWT (RFC 8392) | constant `TagCWT` |
+| 100 / 1004 | Date: days since 1970-01-01 / RFC 3339 full-date (RFC 8943) | helpers `DaysTo`, `DateTo`, `AsDate` (026) |
+| 110 / 111 / 112 | Relative / absolute / enterprise-relative OID (RFC 9090) | helpers `OIDTo`, `RelativeOIDTo`, `AsOID`, `AsRelativeOID` (026) |
+| 272 / 273 / 274 | Non-UTF-8 text: CESU-8 / WTF-8 / MUTF-8 | `TextLossless`, `AsText` (035) |
+| 601 / 602 | UCCS (RFC 9781) / Detached EAT bundle (RFC 9711) | constants `TagUCCS`, `TagDetachedEATBundle` |
+| 1001 / 1002 | Extended time / duration (RFC 9581) | helpers `ExtendedTimeTo`, `AsExtendedTime`, `DurationTo`, `AsDuration` (026); 1003 (period) preserve as Tag |
+| 55799 | Self-describe (CBOR magic) | strip on decode if at head; `TagWrappedTo` (RFC 9277 §2.2) |
+| 55800 / 55801 | Labeled CBOR sequence / non-CBOR data (RFC 9277) | `SequenceLabelTo`, `AsSequenceLabel`, `ContentFormatTag` (026) |
 | 258 | Mathematical-finite Set | preserve as Tag (encoder MAY emit on `MarkAsSet` API) |
 
 Other tags pass through opaque (`Tag{ID, Inner}`); `RejectUnknownTags()`

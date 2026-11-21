@@ -130,6 +130,29 @@ goroutine (for example from a `sync.Pool`).
   `ModePreferredPlus`, `RequirePreferredPlus`.
 - Bignums: `BigIntToPreferred`, `AsBigIntAny` (024).
 - Map keys in `any`: `cbor.ByteKey`, `cbor.EncodedKey` (021).
+- Tag helpers for published tag RFCs (026), all returning errors that
+  wrap `ErrMalformedTag` or `ErrNonCanonicalTag`:
+  - tag 24: `WrapEncodedCBOR`, `Encoder.EncodeEncodedCBOR`,
+    `Decoder.DecodeEncodedCBOR` (returns the embedded bytes as
+    received);
+  - UUID (37): `UUIDTo`, `AsUUID`;
+  - dates (100/1004, RFC 8943): `DateTo`, `DaysTo`, `AsDate`;
+  - extended time and duration (1001/1002, RFC 9581):
+    `ExtendedTimeTo`, `AsExtendedTime`, `DurationTo`, `AsDuration`;
+  - IP addresses and prefixes (52/54, RFC 9164): `IPTo`, `PrefixTo`,
+    `InterfaceTo`, `AsIP`, `AsPrefix`;
+  - OIDs (110/111/112, RFC 9090): `OIDTo` (uses tag 112 under
+    1.3.6.1.4.1), `RelativeOIDTo`, `AsOID`, `AsRelativeOID`;
+  - stored CBOR (RFC 9277): `TagWrappedTo`, `SequenceLabelTo`,
+    `AsSequenceLabel`, `ContentFormatTag`, `AsContentFormat`.
+- Tag constants with stable hand-picked names (026): `TagCOSE*`,
+  `TagCWT`, `TagUCCS`, `TagDetachedEATBundle`, `TagUUID`, `TagIPv4`,
+  `TagIPv6`, `TagDays`, `TagFullDate`, `TagOID`, `TagRelativeOID`,
+  `TagEnterpriseOID`, `TagExtendedTime`, `TagDuration`, `TagPeriod`,
+  `TagCBORSequenceFile`, `TagCBORLabeledData`.
+- `registry`: refreshed from IANA (2026-11-13). Every generated
+  constant from v0.2.2 keeps its name and value
+  (`registry/names_frozen.txt`); new tags get new constants.
 
 ## cose
 

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 026 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 006 (registry codegen), 021 (core codec safety fixes — tag 1 / `TimeTo` range), 023 (tag allow-list in strict decode), 034 (compatibility policy) |
@@ -73,15 +73,19 @@ rules.
 
 ### Registry drift
 
-A diff of IANA's `cbor-tags.xml` (updated 2026-11-13) against
-`registry/registry.json` shows 280 vs 260 records. New entries include
-tags 10, 11, and 13 (IXDTF time-zone hint, IXDTF suffix, and timescale —
-RFC 9581 / RFC 9557), 600, 33000, 44252, 46010, 46011, 55003–55005,
-133133, and 1735551332. A few of the 20 are parse artefacts
-(unassigned/range rows) that the generator must handle explicitly.
-`cmd/cbor-registry-gen` already supports `-fetch`, and the CSV source
-URL (`https://www.iana.org/assignments/cbor-tags/tags.csv`) still
-returns 200.
+Refreshing `registry/registry.json` from IANA's CSV (registry updated
+2026-11-13) adds 10 tags — 33000, 44252, 46010, 46011, 55003, 55004,
+55005, 133133, 827539798 and 1735551332 — and removes none (260 → 270
+rows). The remaining row changes are cosmetic: references reformatted
+(`[RFC8949]` → `[RFC 8949]`, `][` → `]; `) and three TEMPORARY
+registrations now reading "publication requested" instead of an expiry
+date. An earlier XML-based count of 280 included unassigned/range rows,
+which the CSV parser skips. (Corrected 2026-11-21: 10, 11 and 13 are
+not CBOR tags; they are keys in RFC 9581's Time Tag Map Keys registry —
+IXDTF time-zone hint, IXDTF suffix and timescale — and are relevant to
+the tag 1001 helpers as map keys.) `cmd/cbor-registry-gen` already
+supports `-fetch`, and the CSV source URL
+(`https://www.iana.org/assignments/cbor-tags/tags.csv`) returns 200.
 
 ---
 
@@ -245,6 +249,57 @@ amendment to proposal 009. Per 034, `Diagnostic()` and
 default (existing identifiers keep their semantics); the new notation
 arrives as an opt-in `DiagCDN() DiagnosticOption`, recommended in godoc.
 
+### Implementation notes (2026-11-21)
+
+- **OIDs follow RFC 9090's preferred serialization.** `OIDTo` emits tag
+  112 for OIDs under 1.3.6.1.4.1 (§2.2 makes the shorter form preferred
+  and required in Core Deterministic encoding), otherwise tag 111.
+  Tag 110 (relative OID) got `RelativeOIDTo`/`AsRelativeOID`, since the
+  §2.1 validity rules are shared.
+- **RFC 9164 Interface Format** has its own constructor,
+  `InterfaceTo(netip.Prefix)` (the full address plus prefix length,
+  unmasked). Zones are carried as the optional third element: numeric
+  zones as integers, others as text. `IPTo` of a zoned address writes
+  `[address, null, zone]`; `AsIP` accepts the Address and Interface
+  formats, and `AsPrefix` accepts all three (the Address Format as a
+  full-length prefix).
+- **RFC 9581 coverage.** Base time key 1 (integer or float), decimal
+  fractions -3/-6/-9 (at most one, integer key 1 only) and the UTC
+  timescale (keys -1/-13/13 with value 0) are modelled. Keys 4/5,
+  fractions -12/-15/-18, other timescales and unknown unsigned
+  (critical) keys return `ErrMalformedTag`; other negative and text keys
+  are preserved in `Extra`. `ExtendedTimeTo` picks the coarsest exact
+  fraction key, which reproduces the RFC's examples. `DurationTo`
+  rounds seconds toward negative infinity so the unsigned fraction is
+  non-negative.
+- **`DateTo` outside years 0000–9999** emits the tag 100 form, since RFC
+  3339 full-date has a four-digit year.
+- **Range errors use `ErrTimeRange`** (021) rather than 025's
+  `ErrOverflow`, which isn't in package `cbor`.
+- **Existing helpers keep their v0.2 errors.** `AsTime`/`AsBigInt`/
+  `AsNestedCBOR` already wrap `ErrTypeMismatch` (023); also wrapping
+  `ErrMalformedTag` would change the golden error classification, so
+  only new helpers (and `DecodeEncodedCBOR`) use it.
+- **RFC 9277 helpers** beyond the constant: `TagWrappedTo` (§2.2),
+  `SequenceLabelTo`/`AsSequenceLabel` (§2.3, also accepting 55801) and
+  `ContentFormatTag`/`AsContentFormat` (App. B). Emitting the label from
+  `EncodeSequence` (open question) is not done.
+- **Phase C.5 (`registry.TagSet`, `CoreTags`, `COSETags`) is covered by
+  023**: `rfc8949.TagSet`, `TagsModeled` and `TagsWellKnown` already
+  provide allow-list sets; a second set type in `registry` would
+  duplicate them.
+- **Root aliases** for the helpers are `var` aliases (as `corecbor.go`
+  does for constructors), which also keeps the two gofumpt versions in
+  use (`make fmt-check` and golangci-lint) in agreement.
+- **Sibling migration.** `cose` uses the shared `TagCOSE*` constants.
+  `cwt` and `eat` have no tag 61/601/602 handling yet; 031 and 032 use
+  the constants when they add it.
+- **Generator.** Besides frozen names, it now writes the license header
+  the committed `tags_gen.go` already carried, so a no-fetch
+  regeneration is byte-identical. Tag 76 (`TagReserved`, RFC 8746) is a
+  registered reserved code point and keeps its v0.2.2 constant; only
+  "Unassigned" rows are skipped.
+
 ### Behavior
 
 Phases A–C are additive. Existing `TagEncodedCBOR` / `AsNestedCBOR` are
@@ -313,9 +368,9 @@ output changes.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| A | Envelope constants, tag-24 constructor/decoder, sibling migration | Pending | Phase A rows green |
-| B | UUID, dates, extended time, IP, OID helpers | Pending | Phase B rows green |
-| C | Registry refresh, generator fixes, stability note, `TagSet` | Pending | Registry diff merged |
+| A | Envelope constants, tag-24 constructor/decoder, sibling migration | Done | Phase A rows green |
+| B | UUID, dates, extended time, IP, OID helpers | Done | Phase B rows green |
+| C | Registry refresh, generator fixes, stability note, `TagSet` | Done (`TagSet` covered by 023) | Registry diff merged |
 | D | RFC 8746 typed arrays | Deferred | Consumer request |
 | E | CDN / EDN alignment | Deferred | `draft-ietf-cbor-edn-literals` published as RFC |
 
@@ -402,3 +457,4 @@ must not regress (`make bench` against `bench-020-baseline.txt`).
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | Phases A–C implemented; registry refreshed (+10 tags); IXDTF 10/11/13 corrected to RFC 9581 map keys; Phases D, E deferred; status In-Progress | corecbor maintainers |

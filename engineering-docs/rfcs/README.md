@@ -33,6 +33,12 @@ The files are checked in for three reasons:
 | `rfc9597.txt` | CBOR Web Token (CWT) Claims in COSE Headers | Proposed Standard | CWT Claims header label 15 (028, 031). |
 | `rfc9679.txt` | COSE Key Thumbprint | Proposed Standard | `(*Key).Thumbprint` and its test vector (028). |
 | `rfc9921.txt` | COSE Header Parameter for Timestamp Tokens as Defined in RFC 3161 | Proposed Standard | 3161-ttc / 3161-ctt accessors (028). |
+| `rfc8943.txt` | CBOR Tags for Date | Proposed Standard | Tags 100/1004 helpers (proposal 026). |
+| `rfc9090.txt` | CBOR Tags for Object Identifiers | Proposed Standard | Tags 110/111/112 helpers (proposal 026). |
+| `rfc9164.txt` | CBOR Tags for IPv4 and IPv6 Addresses and Prefixes | Proposed Standard | Tags 52/54 helpers (proposal 026). |
+| `rfc9277.txt` | On Stable Storage for Items in CBOR | Proposed Standard | Tags 55799/55800/55801 and content-format tags (proposal 026). |
+| `rfc9581.txt` | CBOR Tags for Time, Duration, and Period | Proposed Standard | Tags 1001/1002 helpers and time map keys (proposal 026). |
+| `rfc9781.txt` | A CBOR Tag for Unprotected CWT Claims Sets (UCCS) | Proposed Standard | Tag 601 constant (proposal 026; CWT work in 031). |
 
 ## Refresh procedure
 
@@ -41,7 +47,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

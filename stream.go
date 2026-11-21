@@ -501,6 +501,11 @@ func (s *StreamEncoder) WriteSimple(v uint8) error {
 // WriteTag writes a CBOR tag header. The next write becomes the tag's
 // content — caller must write exactly one item after WriteTag. The tag
 // and its content count as one item of the enclosing container.
+//
+// The head is written immediately, so a tag 2/3 bignum written as
+// WriteTag + WriteBytes keeps its content as supplied. In deterministic
+// modes, pass the whole Value to WriteValue to get the RFC 8949 §3.4.3
+// preferred form Encode writes (proposal 024).
 func (s *StreamEncoder) WriteTag(id uint64) error {
 	if err := s.startItem(false); err != nil {
 		return err

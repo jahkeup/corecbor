@@ -72,6 +72,12 @@ func streamValue(s *StreamEncoder, enc *Encoder, v Value) error {
 		}
 		return s.EndContainer()
 	case cbor.KindTag:
+		// Bignums go through WriteValue so deterministic modes write the
+		// preferred form, as Encode does (WriteTag can't rewrite them).
+		if (v.TagID() == cbor.TagUnsignedBignum || v.TagID() == cbor.TagNegativeBignum) &&
+			v.TagInner().Kind == cbor.KindBytes {
+			return s.WriteValue(v)
+		}
 		if err := s.WriteTag(v.TagID()); err != nil {
 			return err
 		}

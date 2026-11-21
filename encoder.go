@@ -35,9 +35,9 @@ const maxMode = ModePreferredPlus
 type encodeConfig struct {
 	allowNonFiniteFloats bool
 	allowInvalidUTF8     bool
-	invalidUTF8          rfc8949.InvalidUTF8
 	legacyBignum         bool
 	bufferPool           *sync.Pool
+	invalidUTF8          rfc8949.InvalidUTF8
 }
 
 type Option func(*encodeConfig)

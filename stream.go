@@ -410,6 +410,9 @@ func (s *StreamEncoder) WriteBytes(b []byte) error {
 
 // writeInvalidText writes t, which is not valid UTF-8, under the
 // encoder's invalid-UTF-8 policy. The item has already been counted.
+// Kept out of line so WriteValue's scalar paths don't grow.
+//
+//go:noinline
 func (s *StreamEncoder) writeInvalidText(t string) error {
 	if s.enc.cfg.invalidUTF8 == InvalidUTF8Reject {
 		return cbor.ErrInvalidUTF8

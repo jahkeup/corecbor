@@ -140,7 +140,20 @@ func hashU64(h uint64, n uint64) uint64 {
 	return h
 }
 
-func keyHash(v cbor.Value) uint64 { return keyHashInto(fnvOffset, v) }
+// keyHash hashes a key's data-model form. Text keys, the common case,
+// take an inlined loop instead of keyHashInto's recursive switch; the
+// result is identical to keyHashInto for them.
+func keyHash(v cbor.Value) uint64 {
+	if v.Kind == cbor.KindText {
+		h := uint64(fnvOffset)
+		h = (h ^ uint64(cbor.KindText)) * fnvPrime
+		for i := 0; i < len(v.Str); i++ {
+			h = (h ^ uint64(v.Str[i])) * fnvPrime
+		}
+		return h
+	}
+	return keyHashInto(fnvOffset, v)
+}
 
 func keyHashInto(h uint64, v cbor.Value) uint64 {
 	switch v.Kind {
@@ -234,25 +247,26 @@ func putKeySet(ks *keySet) {
 }
 
 // find returns the index of an entry in m whose key is the same key as
-// key (encoded as enc), or -1.
-func (ks *keySet) find(m []cbor.MapEntry, key cbor.Value, enc []byte, opts *DecodeOpts) int {
-	encoded := opts.KeyIdentity == KeyIdentityEncoded
+// key (encoded as enc), or -1, plus the key's hash when ks hashes, so
+// add doesn't hash the key a second time.
+func (ks *keySet) find(m []cbor.MapEntry, key cbor.Value, enc []byte, opts *DecodeOpts) (int, uint64) {
 	if ks == nil {
 		for i := range m {
 			if keysEqual(m[i].Key, key, opts.LegacyFloatKeyEquality) {
-				return i
+				return i, 0
 			}
 		}
-		return -1
+		return -1, 0
 	}
 	if !ks.hashed {
 		for i, e := range ks.enc {
 			if bytes.Equal(e, enc) {
-				return i
+				return i, 0
 			}
 		}
-		return -1
+		return -1, 0
 	}
+	encoded := opts.KeyIdentity == KeyIdentityEncoded
 	var h uint64
 	if encoded {
 		h = fnv1a(enc)
@@ -262,34 +276,27 @@ func (ks *keySet) find(m []cbor.MapEntry, key cbor.Value, enc []byte, opts *Deco
 	for _, idx := range ks.seen[h] {
 		if encoded {
 			if bytes.Equal(ks.enc[idx], enc) {
-				return idx
+				return idx, h
 			}
 		} else if keysEqual(m[idx].Key, key, opts.LegacyFloatKeyEquality) {
-			return idx
+			return idx, h
 		}
 	}
-	return -1
+	return -1, h
 }
 
-// add records that entry index idx has key (encoded as enc).
-func (ks *keySet) add(idx int, key cbor.Value, enc []byte, opts *DecodeOpts) {
+// add records that entry index idx has key (encoded as enc) with hash h
+// from find.
+func (ks *keySet) add(idx int, enc []byte, h uint64, opts *DecodeOpts) {
 	if ks == nil {
 		return
 	}
-	encoded := opts.KeyIdentity == KeyIdentityEncoded
-	if encoded {
+	if opts.KeyIdentity == KeyIdentityEncoded {
 		ks.enc = append(ks.enc, enc)
 	}
-	if !ks.hashed {
-		return
+	if ks.hashed {
+		ks.seen[h] = append(ks.seen[h], idx)
 	}
-	var h uint64
-	if encoded {
-		h = fnv1a(enc)
-	} else {
-		h = keyHash(key)
-	}
-	ks.seen[h] = append(ks.seen[h], idx)
 }
 
 // mapInsert adds key/val to m under the configured duplicate policy:
@@ -301,14 +308,15 @@ func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []
 	if opts.KeepDuplicateMapKeys {
 		return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
 	}
-	if idx := ks.find(m, key, encodedKey, opts); idx >= 0 {
+	idx, h := ks.find(m, key, encodedKey, opts)
+	if idx >= 0 {
 		if opts.RejectDuplicateMapKeys {
 			return m, idx, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
 		}
 		m[idx].Value = val
 		return m, idx, nil
 	}
-	ks.add(len(m), key, encodedKey, opts)
+	ks.add(len(m), encodedKey, h, opts)
 	return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
 }
 

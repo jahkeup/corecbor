@@ -534,3 +534,4 @@ lifecycle. That is a separate proposal.
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Map key identity (value vs encoded) and duplicate policy (last-wins / reject / keep) as explicit caller choices; fix small/large-map split (maintainer decision) | corecbor maintainers |
 | 2026-11-20 | Status: In-Progress; Phases 1, 1b, 2, 3, 4 implemented; implementation notes | corecbor maintainers |
+| 2026-11-21 | Accepted perf trade-off (maintainer decision): strict decode of maps >16 entries ~+15% (DecodeStrictLargeMap100/1000), DecodeNestedMapStrict ~+5.5% vs pre-024 main, from data-model key identity at every map size; default/forgiving paths flat. Follow-up: reduce per-key cost in the strict hashed path (find/mapInsert, DecodeOpts size) | corecbor maintainers |

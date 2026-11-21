@@ -17,7 +17,7 @@ proposal lifecycle.
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 | [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
 | [020](020-default-decode-recovery.md) | 1 | Draft | Default-path decode recovery and residual throughput fixes | corecbor maintainers | 016, 018, 019 | 2026-05-24 |
-| [024](024-serialization-profiles-alignment.md) | 1 | Draft | Align encoder modes and checking decoders with CBOR Serialization | corecbor maintainers | 001, 021, 023 | 2026-11-20 |
+| [024](024-serialization-profiles-alignment.md) | 1 | In-Progress | Align encoder modes and checking decoders with CBOR Serialization; caller-selected map key identity | corecbor maintainers | 001, 021, 023, 034 | 2026-11-21 |
 | [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
 | [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
 | [028](028-cose-signing-and-key-api.md) | 3 | Draft | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 002, 011, 027 | 2026-11-20 |

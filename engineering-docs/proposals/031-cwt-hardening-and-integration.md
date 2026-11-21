@@ -689,3 +689,4 @@ field. Rejected under 034; `Audiences` is added beside `Audience`.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Implemented (phases A–D on feat/031-cwt); RFC 9200 audience and exi questions resolved; implementation notes | corecbor maintainers |
+| 2026-11-22 | `ClaimsSet.Private` marked `// Deprecated:` (use `PrivateClaims`) now that edhoc no longer reads it (033 follow-ups); closes the implementation-notes gap | corecbor maintainers |

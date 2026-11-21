@@ -99,9 +99,10 @@ type ClaimsSet struct {
 	// map, or an integer outside the int64 range) are not representable
 	// as a Go map key here; they appear only in PrivateClaims. The ACE
 	// claims 9, 38, 39 and 40 also stay in Private, as in v0.2.2, besides
-	// populating their typed fields. Prefer PrivateClaims; Private is to
-	// be marked deprecated once no module in this repository reads it
-	// (proposal 031 implementation notes).
+	// populating their typed fields.
+	//
+	// Deprecated: use PrivateClaims, which represents every claim label
+	// exactly. Private keeps working for the life of the v0.x line.
 	Private map[any]any
 
 	// Audiences is the aud claim in either form (RFC 9200 §5.10.1: a

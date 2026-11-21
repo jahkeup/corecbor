@@ -214,6 +214,69 @@ var (
   allocates a fresh buffer instead of panicking. The godoc states the
   expected element type, `*[]byte`.
 
+### D10–D17 — Defects found while capturing v0.2.2 golden vectors
+
+Added 2026-11-20. Each one is pinned by a golden vector (the id is in
+parentheses) and moves to the module's `goldenChanges` allowlist in the
+commit that fixes it.
+
+- **D10 — `DecodeFrom` reads past the item and re-decodes quadratically**
+  (`rfc8949/stream_decode.go:14-37`). It re-runs `Decode` over the whole
+  buffer after every 256-byte read (O(n²) for an n-byte item) and
+  discards the bytes it read beyond the first item (`_ = consumed`), so
+  consecutive `DecodeFrom` calls on one reader lose data. Fix: when `r`
+  is an `io.ByteScanner`/`*bufio.Reader`, read exactly one item by
+  walking heads (`wire.ParseHead`) with the same nesting/length limits
+  and preallocation bounds as `Decode`. Otherwise read only the bytes
+  the item's heads declare, so nothing beyond the item is consumed.
+  A truncated item returns `io.ErrUnexpectedEOF` wrapped with
+  `ErrTruncated`.
+- **D11 — `Diagnostic` prints −2^64 as `-0`** (`diagnostic.go`, NegInt
+  path overflows int64) (`root/diag/negint-min`). Fix: format NegInt as
+  `-1 - n` with unsigned arithmetic (`-18446744073709551616`).
+- **D12 — `DiagIndicators()` doesn't mark encoding indicators**
+  (`root/diag/indicators-*`). RFC 8949 §8.1 indicators for indefinite
+  length (`[_ 1, 2]`) and non-shortest arguments (`0_0`) aren't emitted;
+  `Diagnostic` with `DiagIndicators()` must work from the source bytes
+  (cursor walk), since a decoded `Value` has lost them.
+  `DiagnosticValue` documents that it can't show indicators.
+- **D13 — `Diagnostic` renders invalid UTF-8 as a valid character**
+  (`root/diag/invalid-utf8`). `61ff` prints `"\u00ff"`, which reads as
+  the valid text U+00FF. Diagnostic notation has no text-string form for
+  invalid UTF-8, so print the string's bytes with a comment that says
+  what they are: `/ text, invalid UTF-8 / h'ff'`. The output stays
+  readable and can't be mistaken for valid text.
+- **D14 — Encoder emits ill-formed simple values** (`root/encode/simple-24`).
+  `Simple(24)` through `Simple(31)` encode as `f818`…`f81f`, which RFC
+  8949 §3.3 says MUST NOT be used. Fix: return `ErrReservedSimple`
+  (new sentinel) from `Encode` for 24–31 (20–23 already have named
+  kinds and encode as such). `Simple`'s godoc already states the valid
+  range (`cbor/value.go:116-117`).
+- **D15 — Deterministic modes encode duplicate map keys**
+  (`root/encode/deterministic-dup-key`). RFC 8949 §5.6 says a map with
+  duplicate keys isn't valid CBOR, and §4.2.1's ordering is undefined
+  for them. Fix: in deterministic modes, adjacent equal encoded keys
+  after sorting return `ErrDuplicateMapKey`. Permissive mode is
+  unchanged (it emits what it's given, as documented).
+- **D16 — Stray break byte reported as `ErrTruncated`**
+  (`root/decode/stray-break`). `ff` outside an indefinite container
+  isn't well-formed (RFC 8949 §3.2.1). Fix: return new sentinel
+  `ErrUnexpectedBreak`. It's still a decode error, so callers checking
+  `err != nil` are unaffected; callers matching `ErrTruncated` for this
+  input were relying on a misreport.
+- **D17 — Smaller fixes outside the root package**:
+  - `cose.AlgHPKEBaseP256SHA256AES128GCM.String()` returns `"unknown"`
+    (`cose/algorithm.go`). Fix: add the case. (cose `cose/alg-string-hpke`)
+  - `cwt.Validator` with negative `Leeway` rejects unexpired tokens
+    (`cwt/validate.go:31,37`). Fix: `Validate` returns
+    `ErrInvalidValidator` (new) for `Leeway < 0` rather than silently
+    tightening the window. (cwt `validator/negative-leeway`)
+
+D4 is also clarified: per the `encoding/json` rules it already cites,
+exported fields of an *unexported* embedded struct type, and fields of
+embedded struct *pointers*, are promoted. v0.2.2 silently dropped both
+(`root/marshal/embedded-unexported`, `root/marshal/embedded-pointer`).
+
 ### Behavior / migration
 
 - **D4 changes wire output.** Values encoded from embedded structs will
@@ -247,7 +310,8 @@ No exported identifier changes signature. Every behavior change is a
 contradicts what it documents), so per 034 none gets a selector and the
 root `CompatV02()` bundle includes nothing from 021. New identifiers
 (`ByteKey`, `EncodedKey`, `ErrTimeRange`, `ErrContainerOverflow`,
-`ErrStreamMapOrder`) are **Additive**.
+`ErrStreamMapOrder`, `ErrReservedSimple`, `ErrUnexpectedBreak`,
+`cwt.ErrInvalidValidator`) are **Additive**.
 
 | Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
 |---|---|---|---|---|
@@ -260,6 +324,12 @@ root `CompatV02()` bundle includes nothing from 021. New identifiers
 | D6 `StreamEncoder` counts nested containers; deterministic modes reject out-of-order map keys | Contract defect | `doc.go:12-17` (deterministic modes sort map keys); spec §6.1 | `ErrContainerOverflow` / `ErrStreamMapOrder` | none (callers that can't pre-sort use `EncodeTo`) |
 | D7 negint ≥ 2^63 into `any` returns `*big.Int`; out-of-range int struct keys don't match | Contract defect | `marshal.go:41-46` (`Unmarshal` decodes the data into `v`; v0.2 produced a different integer) | `*big.Int` / unknown key; every in-range value decodes as in v0.2.2 | none |
 | D8/D9 sequence budget reset; buffer-pool type check | Contract defect / Safety defect | `decoder.go:60-63` (budget is "for a single decode operation") | fixed | none |
+| D10 `DecodeFrom` consumes exactly one item, linear time | Contract defect | `stream.go` godoc "reads exactly one CBOR value from r" | no over-read | none |
+| D11–D13 diagnostic output: −2^64, indicators, invalid UTF-8 | Contract defect | RFC 8949 §8, §8.1 (which `Diagnostic` claims) | corrected text | none |
+| D14 `Simple(24..31)` rejected at encode | Contract defect | RFC 8949 §3.3; `cbor/value.go:116-117` valid range | `ErrReservedSimple` | none |
+| D15 duplicate keys rejected in deterministic modes | Contract defect | RFC 8949 §5.6, §4.2.1 (which the modes claim) | `ErrDuplicateMapKey` | none (Permissive unchanged) |
+| D16 stray break → `ErrUnexpectedBreak` | Contract defect | RFC 8949 §3.2.1 | new sentinel | none |
+| D17 HPKE alg `String()`; negative `Leeway` | Contract defect | `cose/algorithm.go` `String`; `cwt.Validator.Leeway` doc (tolerance) | fixed; `ErrInvalidValidator` | none |
 
 No `...Option` parameters are appended to existing functions.
 
@@ -380,3 +450,4 @@ the pool, which the D2 fix guarantees.
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-20 | Add D10–D17 from v0.2.2 golden-vector capture; clarify D4 promotion rules | corecbor maintainers |

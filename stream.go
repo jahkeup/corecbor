@@ -297,6 +297,9 @@ func (s *StreamEncoder) WriteValue(v Value) error {
 		s.scratch[0] = wire.SimpleUndefined
 		return s.write(s.scratch[:1])
 	case cbor.KindText:
+		if !s.enc.cfg.allowInvalidUTF8 && !utf8.ValidString(v.Str) {
+			return cbor.ErrInvalidUTF8
+		}
 		if err := s.writeHead(wire.MajorText, uint64(len(v.Str))); err != nil {
 			return err
 		}
@@ -306,10 +309,15 @@ func (s *StreamEncoder) WriteValue(v Value) error {
 			return err
 		}
 		return s.write(v.Bstr)
-	case cbor.KindFloat32:
-		return s.write(wire.AppendFloat32(s.scratch[:0], math.Float32frombits(uint32(v.Num))))
-	case cbor.KindFloat64:
-		return s.write(wire.AppendFloat64(s.scratch[:0], math.Float64frombits(v.Num)))
+	case cbor.KindFloat32, cbor.KindFloat64:
+		// Same float rules as Encode for this mode (width, NaN
+		// canonicalization, non-finite rejection). A float is at most 9
+		// bytes, so this appends into scratch without allocating.
+		buf, err := rfc8949.Encode(s.scratch[:0], v, s.enc.encodeOpts())
+		if err != nil {
+			return err
+		}
+		return s.write(buf)
 	case cbor.KindSimple:
 		if v.Num < 24 {
 			s.scratch[0] = wire.MajorOther | byte(v.Num)

@@ -287,6 +287,48 @@ exported fields of an *unexported* embedded struct type, and fields of
 embedded struct *pointers*, are promoted. v0.2.2 silently dropped both
 (`root/marshal/embedded-unexported`, `root/marshal/embedded-pointer`).
 
+### Implementation notes (2026-11-20)
+
+Decisions taken while implementing, recorded so review can check them:
+
+- **AI 31 on integer and tag heads** (`0x1f`, `0x3f`, `0xdf`) now returns
+  `ErrReservedAI`. v0.2.2 read them as the value 0, which isn't
+  well-formed (RFC 8949 §3) and let a duplicate key slip past
+  `StrictDecoder`. Same class as D16.
+- **D6 details.** A tag opens an item without counting it; a tag can't
+  overflow a full container and a container can't end right after a
+  tag; an indefinite map can't end right after a key. A repeated key in
+  a deterministic stream returns `ErrStreamMapOrder`, which also wraps
+  `ErrDuplicateMapKey`. `BeginMap` whose item count overflows `int`
+  returns `ErrMaxArrayLength`. Key bytes are captured through a writer
+  tee installed only while a key is being written.
+- **D10 details.** `DecodeFrom` applies limits as each head arrives, so
+  a structural error (limit, reserved AI, stray break, truncation) can
+  surface before a content error that `Decode` would hit first.
+  `BufferedReader` buffers internally (4 KiB) and gains `ReadByte`;
+  `DecodeFromBuffered` is `DecodeFrom` on it. A stray break inside a
+  `Stream` now surfaces through `Err()` instead of ending the stream.
+- **D15** also applies to `PrecomputeMapOrder`. `StrictDecoder` still
+  accepts keys that differ only in float width (1.0 as f16 vs f32);
+  D15 refuses to re-encode them. Fixing decoder key equality is 024.
+- **D3.** Typed `map[any]any` targets and non-empty interface targets
+  (e.g. a `fmt.Stringer` field) panicked too; both now return errors or
+  hashable keys (found by `FuzzUnmarshalAnyNeverPanics`).
+
+Follow-ups found during implementation, not in 021's scope:
+
+- `Cursor.skipItem` doesn't reject stray breaks, reserved AI or AI 31,
+  and it recurses without a depth bound. → 022 (Cursor promotion).
+- `StreamEncoder.WriteValue` writes floats without the mode's float rule
+  and doesn't validate UTF-8 in text values. → D18 below.
+
+### D18 — `StreamEncoder.WriteValue` ignores mode float rules and UTF-8
+
+`WriteValue` should produce the same bytes as `Encode` for the same
+value and mode (§6.1). Fix: route float and text values through the
+same rules as `Encode` (shortest/forced-64 float per mode; UTF-8
+validation unless `AllowInvalidUTF8`). Contract defect (§6.1).
+
 ### Behavior / migration
 
 - **D4 changes wire output.** Values encoded from embedded structs will
@@ -462,3 +504,4 @@ the pool, which the D2 fix guarantees.
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Add D10–D17 from v0.2.2 golden-vector capture; clarify D4 promotion rules | corecbor maintainers |
 | 2026-11-20 | Implementation notes: D1 decoder pool; D3 null/simple keys unchanged; D4 option-only tags keep the field name | corecbor maintainers |
+| 2026-11-20 | Implementation notes from D6/D10/D14–D16 work; add D18 (stream WriteValue float/UTF-8) | corecbor maintainers |

@@ -91,6 +91,66 @@ func (c *Cursor) RawBytes() ([]byte, error) {
 	return c.src[start:c.pos], nil
 }
 
+// Raw returns the source bytes of the item the cursor is positioned
+// at, without advancing. The slice aliases the cursor's source.
+func (c *Cursor) Raw() ([]byte, error) {
+	next, err := c.skipAt(c.pos, len(c.stack), 0, len(c.stack) == 0)
+	if err != nil {
+		return nil, err
+	}
+	return c.src[c.pos:next], nil
+}
+
+// DecodeRaw decodes the current item, returning its Value and its
+// source bytes (aliasing the cursor's source), and advances past it.
+func (c *Cursor) DecodeRaw() (cbor.Value, []byte, error) {
+	start := c.pos
+	v, err := c.Decode()
+	if err != nil {
+		return cbor.Value{}, nil, err
+	}
+	return v, c.src[start:c.pos], nil
+}
+
+// Bytes returns the contents of the current byte-string item without
+// copying (aliasing the cursor's source), and advances. It returns
+// ErrTypeMismatch if the item is not a byte string (major type 2), and
+// ErrIndefiniteLength for an indefinite-length byte string, which has
+// no single contiguous span.
+func (c *Cursor) Bytes() ([]byte, error) {
+	if c.pos >= len(c.src) {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+	}
+	h := wire.ParseHead(c.src[c.pos:])
+	if h.N == 0 {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+	}
+	if h.Major != wire.MajorBytes {
+		return nil, fmt.Errorf("%w at offset %d: expected byte string, got major %d",
+			ErrTypeMismatch, c.pos, h.Major>>5)
+	}
+	if h.AI == wire.AIIndefinite {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrIndefiniteLength, c.pos)
+	}
+	if h.AI >= 28 && h.AI <= 30 {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, c.pos)
+	}
+	if c.opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, c.pos)
+	}
+	if h.Arg > uint64(c.opts.maxBytes()) {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, c.pos)
+	}
+	start := c.pos + h.N
+	if h.Arg > uint64(len(c.src)-start) {
+		return nil, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+	}
+	end := start + int(h.Arg)
+	c.pos = end
+	c.consumeFromFrame()
+	return c.src[start:end], nil
+}
+
 // Decode fully decodes the current item using the cursor's DecodeOpts.
 // Advances the cursor past the item.
 func (c *Cursor) Decode() (cbor.Value, error) {
@@ -284,109 +344,153 @@ func (c *Cursor) skipRemaining(frame *cursorFrame) error {
 	return nil
 }
 
+// skipItem advances past one complete data item at the current
+// position. It checks the same structural rules as Decode (reserved
+// additional information, indefinite length where it isn't allowed,
+// stray break codes, two-byte simple values below 32, nesting depth,
+// length limits, and declared lengths the input can't hold) but none
+// of the content knobs (UTF-8, duplicates, tags, floats), which only
+// Decode applies.
 func (c *Cursor) skipItem() error {
-	if c.pos >= len(c.src) {
-		return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+	next, err := c.skipAt(c.pos, len(c.stack), 0, len(c.stack) == 0)
+	if err != nil {
+		return err
 	}
+	c.pos = next
+	return nil
+}
 
-	h := wire.ParseHead(c.src[c.pos:])
-	if h.N == 0 {
-		return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+// skipAt returns the offset just past the item at off. depth counts
+// enclosing containers and tags; reserve is the number of bytes that
+// enclosing containers still need for their pending items (see
+// DecodeOpts.reserve). strip mirrors Decode dropping leading
+// self-describe tags without counting them as nesting.
+func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
+	src, o := c.src, c.opts
+	if off >= len(src) {
+		return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
 	}
+	h := wire.ParseHead(src[off:])
+	if h.N == 0 {
+		return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+	}
+	if h.AI >= 28 && h.AI <= 30 {
+		return off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
+	}
+	if h.AI == wire.AIIndefinite && (h.Major == wire.MajorUint || h.Major == wire.MajorNegInt || h.Major == wire.MajorTag) {
+		return off, fmt.Errorf("%w (indefinite length for major type %d) at offset %d", cbor.ErrReservedAI, h.Major>>5, off)
+	}
+	pos := off + h.N
+	avail := len(src) - pos - reserve
 
 	switch h.Major {
 	case wire.MajorUint, wire.MajorNegInt:
-		c.pos += h.N
-		return nil
+		return pos, nil
 
 	case wire.MajorBytes, wire.MajorText:
 		if h.AI == wire.AIIndefinite {
-			c.pos += h.N
-			return c.skipIndefiniteString()
+			return c.skipChunks(pos, h.Major)
 		}
-		end := c.pos + h.N + int(h.Arg)
-		if end > len(c.src) {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		if h.Arg > uint64(o.maxBytes()) {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
 		}
-		c.pos = end
-		return nil
+		if h.Arg > uint64(len(src)-pos) {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		}
+		return pos + int(h.Arg), nil
 
-	case wire.MajorArray:
-		c.pos += h.N
+	case wire.MajorArray, wire.MajorMap:
+		isMap := h.Major == wire.MajorMap
+		if depth+1 > o.maxNesting() {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+		}
+		per := 1
+		if isMap {
+			per = 2
+		}
 		if h.AI == wire.AIIndefinite {
-			return c.skipIndefiniteItems(false)
+			for n := 0; ; n++ {
+				if pos >= len(src) {
+					return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+				}
+				if src[pos] == wire.BreakCode {
+					return pos + 1, nil
+				}
+				if n >= o.maxArray() {
+					return pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, pos)
+				}
+				for k := range per {
+					// Pending: the rest of this pair, plus the break code.
+					next, err := c.skipAt(pos, depth+1, reserve+per-k, false)
+					if err != nil {
+						return next, err
+					}
+					pos = next
+				}
+			}
+		}
+		if h.Arg > uint64(o.maxArray()) {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 		}
 		count := int(h.Arg)
-		for range count {
-			if err := c.skipItem(); err != nil {
-				return err
+		if count > avail/per {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		}
+		for i := range count * per {
+			next, err := c.skipAt(pos, depth+1, reserve+count*per-i-1, false)
+			if err != nil {
+				return next, err
 			}
+			pos = next
 		}
-		return nil
-
-	case wire.MajorMap:
-		c.pos += h.N
-		if h.AI == wire.AIIndefinite {
-			return c.skipIndefiniteItems(true)
-		}
-		count := int(h.Arg) * 2
-		for range count {
-			if err := c.skipItem(); err != nil {
-				return err
-			}
-		}
-		return nil
+		return pos, nil
 
 	case wire.MajorTag:
-		c.pos += h.N
-		return c.skipItem()
+		if strip && h.Arg == cbor.TagSelfDescribe {
+			return c.skipAt(pos, depth, reserve, true)
+		}
+		if depth+1 > o.maxNesting() {
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+		}
+		return c.skipAt(pos, depth+1, reserve, false)
 
-	case wire.MajorOther:
-		c.pos += h.N
-		return nil
-
-	default:
-		return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+	default: // major type 7
+		switch {
+		case h.AI == wire.AIIndefinite:
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrUnexpectedBreak, off)
+		case h.AI == wire.AI1Byte && h.Arg < 32:
+			return off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
+		}
+		return pos, nil
 	}
 }
 
-func (c *Cursor) skipIndefiniteString() error {
+// skipChunks skips the chunks of an indefinite-length byte or text
+// string starting at pos, through the break code.
+func (c *Cursor) skipChunks(pos int, major byte) (int, error) {
+	src, o := c.src, c.opts
+	total := uint64(0)
 	for {
-		if c.pos >= len(c.src) {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		if pos >= len(src) {
+			return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
 		}
-		if c.src[c.pos] == wire.BreakCode {
-			c.pos++
-			return nil
+		if src[pos] == wire.BreakCode {
+			return pos + 1, nil
 		}
-		h := wire.ParseHead(c.src[c.pos:])
-		if h.N == 0 {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		h := wire.ParseHead(src[pos:])
+		if h.N == 0 || h.Major != major || h.AI == wire.AIIndefinite {
+			return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
 		}
-		end := c.pos + h.N + int(h.Arg)
-		if end > len(c.src) {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		if h.AI >= 28 && h.AI <= 30 {
+			return pos, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, pos)
 		}
-		c.pos = end
-	}
-}
-
-func (c *Cursor) skipIndefiniteItems(isMap bool) error {
-	for {
-		if c.pos >= len(c.src) {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		if h.Arg > uint64(o.maxBytes()) || total+h.Arg > uint64(o.maxBytes()) {
+			return pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, pos)
 		}
-		if c.src[c.pos] == wire.BreakCode {
-			c.pos++
-			return nil
+		if h.Arg > uint64(len(src)-pos-h.N) {
+			return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
 		}
-		if err := c.skipItem(); err != nil {
-			return err
-		}
-		if isMap {
-			if err := c.skipItem(); err != nil {
-				return err
-			}
-		}
+		total += h.Arg
+		pos += h.N + int(h.Arg)
 	}
 }

@@ -124,6 +124,15 @@ func Decode(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
 	return decodeValue(src, 0, 0, opts, true)
 }
 
+// DecodeNested decodes one item from the start of src the way Decode
+// decodes it when nested inside a larger item: leading self-describe
+// tags (55799) are kept as tags instead of stripped. Use it to decode a
+// sub-item's source bytes and get the same Value Decode produced for it
+// inside its parent.
+func DecodeNested(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
+	return decodeValue(src, 0, 0, opts, false)
+}
+
 var knownTags = map[uint64]bool{
 	55799: true,
 }

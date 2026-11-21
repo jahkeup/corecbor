@@ -136,7 +136,43 @@ func StrictDecoder(opts ...DecoderOption) *Decoder {
 	return d
 }
 
-func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
+// Cursor is a forward-only reader over a CBOR byte slice that reads
+// item heads and skips payloads until asked to decode. Use
+// Decoder.Cursor to obtain one configured with a decoder's options.
+type Cursor = rfc8949.Cursor
+
+// Cursor returns a Cursor over src that applies d's strictness knobs
+// and limits. Byte slices it returns (Raw, DecodeRaw, Bytes) alias src.
+func (d *Decoder) Cursor(src []byte) *Cursor {
+	return rfc8949.NewCursor(src, d.cfg.opts)
+}
+
+// DecodePrefix decodes the first complete CBOR data item in src and
+// returns it together with the unconsumed remainder. Unlike Decode,
+// trailing bytes are not an error. The item's source bytes are
+// src[:len(src)-len(rest)]; rest aliases src.
+func (d *Decoder) DecodePrefix(src []byte) (v Value, rest []byte, err error) {
+	v, n, err := d.decode(src)
+	if err != nil {
+		return cbor.Value{}, nil, err
+	}
+	return v, src[n:], nil
+}
+
+// DecodeRaw is Decode plus the exact source bytes of the item, which
+// is all of src on success. Those bytes are what a signature or hash
+// over "the item as received" must cover; raw aliases src.
+func (d *Decoder) DecodeRaw(src []byte) (v Value, raw []byte, err error) {
+	v, err = d.Decode(src)
+	if err != nil {
+		return cbor.Value{}, nil, err
+	}
+	return v, src, nil
+}
+
+// decode decodes one item from the start of src, resetting per-call
+// state (budget, internal arena), and returns the bytes consumed.
+func (d *Decoder) decode(src []byte) (cbor.Value, int, error) {
 	if d.cfg.opts.Budget != nil {
 		d.cfg.opts.Budget.Allocated = 0
 	}
@@ -145,7 +181,11 @@ func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
 		d.arena.Reset()
 		opts.Arena = d.arena
 	}
-	v, n, err := rfc8949.Decode(src, opts)
+	return rfc8949.Decode(src, opts)
+}
+
+func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
+	v, n, err := d.decode(src)
 	if err != nil {
 		return cbor.Value{}, err
 	}

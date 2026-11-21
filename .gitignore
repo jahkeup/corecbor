@@ -16,3 +16,6 @@ coverage.txt
 # Go module download cache (if anyone runs go env-based scripts here)
 go.work
 go.work.sum
+
+# Agent/editor worktrees and local state
+.claude/

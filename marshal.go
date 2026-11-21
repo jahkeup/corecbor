@@ -87,7 +87,8 @@ func (d *Decoder) Unmarshal(data []byte, v any) error {
 		r := rawState{opts: d.cfg.opts}
 		r.opts.Arena, r.opts.Budget = nil, nil // already validated and charged
 		r.clone = clone
+		r.lossless = d.cfg.textLossless
 		return r.rawToGo(stripSelfDescribe(data), val, rv.Elem())
 	}
-	return unmarshalValue(val, v, clone)
+	return unmarshalValue(val, v, clone, d.cfg.textLossless)
 }

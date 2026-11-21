@@ -20,14 +20,18 @@ type unmarshalState struct {
 	// (an arena) or the source buffer (zero-copy). Anything stored into
 	// the caller's target as a cbor.Value is then deep-copied.
 	clone bool
+	// lossless lets string targets take byte strings (and tags
+	// 272/273/274 around them) with their exact bytes
+	// (InvalidUTF8Lossless, proposal 035).
+	lossless bool
 }
 
-func unmarshalValue(val cbor.Value, v any, clone bool) error {
+func unmarshalValue(val cbor.Value, v any, clone, lossless bool) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return ErrNotPointer
 	}
-	u := unmarshalState{clone: clone}
+	u := unmarshalState{clone: clone, lossless: lossless}
 	return u.valueToGo(val, rv.Elem())
 }
 
@@ -103,6 +107,10 @@ func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	case cbor.KindBytes:
 		if target.Kind() == reflect.Slice && target.Type().Elem().Kind() == reflect.Uint8 {
 			target.SetBytes(append([]byte(nil), val.BytesVal()...))
+			return nil
+		}
+		if u.lossless && target.Kind() == reflect.String {
+			target.SetString(string(val.BytesVal()))
 			return nil
 		}
 		return typeMismatch(cbor.KindBytes, "Bytes", target.Type())

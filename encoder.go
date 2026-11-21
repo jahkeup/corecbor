@@ -35,6 +35,7 @@ const maxMode = ModePreferredPlus
 type encodeConfig struct {
 	allowNonFiniteFloats bool
 	allowInvalidUTF8     bool
+	invalidUTF8          rfc8949.InvalidUTF8
 	legacyBignum         bool
 	bufferPool           *sync.Pool
 }
@@ -45,8 +46,27 @@ func AllowNonFiniteFloats() Option {
 	return func(c *encodeConfig) { c.allowNonFiniteFloats = true }
 }
 
+// AllowInvalidUTF8 writes text that is not valid UTF-8 as a text string
+// unchanged, which is not conformant (RFC 8949 §3.1). It is the same as
+// WithInvalidUTF8(InvalidUTF8Allow).
 func AllowInvalidUTF8() Option {
-	return func(c *encodeConfig) { c.allowInvalidUTF8 = true }
+	return WithInvalidUTF8(InvalidUTF8Allow)
+}
+
+// WithInvalidUTF8 selects how the encoder writes text that is not valid
+// UTF-8 (proposal 035): InvalidUTF8Reject (the default) returns
+// ErrInvalidUTF8; InvalidUTF8Allow writes it unchanged (not conformant);
+// InvalidUTF8Replace substitutes U+FFFD for each invalid byte;
+// InvalidUTF8Lossless writes conformant CBOR that keeps the exact bytes
+// (tag 273 for WTF-8, otherwise a byte string). Valid UTF-8 is written
+// the same way under every policy. The policy applies to every text
+// string, including map keys; in deterministic modes, keys sort by the
+// bytes actually written and duplicates are rejected.
+func WithInvalidUTF8(p InvalidUTF8) Option {
+	return func(c *encodeConfig) {
+		c.invalidUTF8 = p
+		c.allowInvalidUTF8 = p == InvalidUTF8Allow
+	}
 }
 
 // WithLegacyBignumPassthrough makes deterministic modes emit tag 2/3
@@ -137,6 +157,7 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 	opts := rfc8949.EncodeOpts{
 		AllowNonFiniteFloats: e.cfg.allowNonFiniteFloats,
 		AllowInvalidUTF8:     e.cfg.allowInvalidUTF8,
+		InvalidUTF8:          e.cfg.invalidUTF8,
 
 		LegacyBignumPassthrough: e.cfg.legacyBignum, //nolint:staticcheck // plumbing for the deprecated WithLegacyBignumPassthrough selector
 	}

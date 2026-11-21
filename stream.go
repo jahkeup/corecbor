@@ -300,7 +300,7 @@ func (s *StreamEncoder) WriteValue(v Value) error {
 		return s.write(s.scratch[:1])
 	case cbor.KindText:
 		if !s.enc.cfg.allowInvalidUTF8 && !utf8.ValidString(v.Str) {
-			return cbor.ErrInvalidUTF8
+			return s.writeInvalidText(v.Str)
 		}
 		if err := s.writeHead(wire.MajorText, uint64(len(v.Str))); err != nil {
 			return err
@@ -408,14 +408,28 @@ func (s *StreamEncoder) WriteBytes(b []byte) error {
 	return err
 }
 
-// WriteText writes a CBOR text string directly. Validates UTF-8 unless
-// the encoder was constructed with AllowInvalidUTF8.
+// writeInvalidText writes t, which is not valid UTF-8, under the
+// encoder's invalid-UTF-8 policy. The item has already been counted.
+func (s *StreamEncoder) writeInvalidText(t string) error {
+	if s.enc.cfg.invalidUTF8 == InvalidUTF8Reject {
+		return cbor.ErrInvalidUTF8
+	}
+	buf, err := rfc8949.Encode(nil, cbor.Text(t), s.enc.encodeOpts())
+	if err != nil {
+		return err
+	}
+	return s.write(buf)
+}
+
+// WriteText writes a CBOR text string directly. Text that is not valid
+// UTF-8 is handled by the encoder's WithInvalidUTF8 policy (rejected by
+// default).
 func (s *StreamEncoder) WriteText(t string) error {
 	if err := s.trackWrite(); err != nil {
 		return err
 	}
 	if !s.enc.cfg.allowInvalidUTF8 && !utf8.ValidString(t) {
-		return cbor.ErrInvalidUTF8
+		return s.writeInvalidText(t)
 	}
 	if err := s.writeHead(wire.MajorText, uint64(len(t))); err != nil {
 		return err

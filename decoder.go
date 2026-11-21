@@ -12,6 +12,7 @@ import (
 type decodeConfig struct {
 	opts            rfc8949.DecodeOpts
 	noInternalArena bool
+	textLossless    bool // InvalidUTF8Lossless: Unmarshal into string accepts non-UTF-8 forms
 }
 
 type DecoderOption func(*decodeConfig)
@@ -24,8 +25,31 @@ func RejectNonShortest() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectNonShortest = true }
 }
 
+// RejectInvalidUTF8 rejects text strings that are not valid UTF-8 with
+// ErrInvalidUTF8. It is the same as
+// WithInvalidUTF8Decoding(InvalidUTF8Reject).
 func RejectInvalidUTF8() DecoderOption {
-	return func(c *decodeConfig) { c.opts.RejectInvalidUTF8 = true }
+	return WithInvalidUTF8Decoding(InvalidUTF8Reject)
+}
+
+// WithInvalidUTF8Decoding selects how the decoder handles text strings
+// that are not valid UTF-8 (proposal 035):
+//   - InvalidUTF8Allow (the default) keeps their bytes unchanged;
+//   - InvalidUTF8Reject returns ErrInvalidUTF8;
+//   - InvalidUTF8Replace substitutes U+FFFD for each invalid byte,
+//     including in map keys and indefinite-length text;
+//   - InvalidUTF8Lossless keeps text bytes unchanged and also lets
+//     Unmarshal into a Go string accept the lossless encoder forms: a
+//     byte string, or tag 272/273/274 around one, stored with its exact
+//     bytes.
+//
+// The last of RejectInvalidUTF8 and WithInvalidUTF8Decoding wins.
+func WithInvalidUTF8Decoding(p InvalidUTF8) DecoderOption {
+	return func(c *decodeConfig) {
+		c.opts.RejectInvalidUTF8 = p == InvalidUTF8Reject
+		c.opts.ReplaceInvalidUTF8 = p == InvalidUTF8Replace
+		c.textLossless = p == InvalidUTF8Lossless
+	}
 }
 
 func RejectDuplicateMapKeys() DecoderOption {

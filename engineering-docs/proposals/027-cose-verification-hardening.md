@@ -453,6 +453,67 @@ runnable examples: `ExampleSigner_Sign`, `ExampleVerifier_VerifyDetached`,
 (`cose/example_payload_test.go`). The migration guide must call out the
 nil-vs-empty distinction.
 
+### Implementation notes (Phase 2, 2026-11-20)
+
+- **H2, as decided.** `bindAlg` (`cose/policy.go`) applies to Sign1,
+  each COSE_Sign signer layer, Mac0 and Encrypt0. For Mac0 and Encrypt0
+  the caller's `alg` argument plays the role of the key's algorithm. Any
+  `alg` header present, protected or unprotected-only, must equal that
+  algorithm; `alg` in both buckets, a non-integer `alg` (cose-wg
+  `sign-fail-04`'s `"unknown"`), or an `alg` outside
+  `WithAllowedAlgorithms`/`WithMACAlgorithms`/`WithEncryptAlgorithms`
+  is `ErrAlgorithmMismatch`. No `alg` uses the key's algorithm.
+- **H2 on multi-recipient bodies.** `VerifyMACMulti` and `DecryptMulti`
+  have no key that implies an algorithm, so the content `alg` must be
+  in the protected bucket and in the allowed set (`multiAlg`). An
+  unprotected-only `alg` there could steer verification, so it is
+  rejected. Defaults: HMAC 256/256, 384/384, 512/512 (256/64 only via
+  `WithMACAlgorithms`) and AES-GCM 128/192/256.
+- **H3.** `checkCrit` runs on every layer that is verified or used for
+  decryption: the body, each COSE_Sign signer, and the selected
+  recipient. Understood labels are the RFC 9052 labels 1–6 plus those
+  declared through `WithKnownCriticalHeaders`,
+  `WithMACKnownCriticalHeaders` or `WithEncryptKnownCriticalHeaders`.
+  Label 7 (RFC 8152 countersignature) is not processed by this package,
+  so a crit listing it fails unless declared. Recipient-layer crit fails
+  closed the same way.
+- **`VerifyMulti` with policy.** Each verifier's policy applies to the
+  body and to the signer layers it tries. A verifier that rejects a
+  layer verifies nothing there, and when the result fails the policy
+  the error wraps both `ErrVerification` and the policy sentinel
+  (`TestRFC9052CritExample`).
+- **H4.** Messages and protected header maps decode with
+  `RejectDuplicateMapKeys()`, reported as `ErrMalformed` wrapping
+  `ErrDuplicateLabel` (and the core `ErrDuplicateMapKey`). Labels are
+  also compared after conversion, so `01` and `1801` collide even in
+  maps large enough that the core decoder's encoded-byte dedup would
+  miss them (024). A label in both buckets of one layer is
+  `ErrDuplicateLabel`. The `DecodeLimits.AllowDuplicateLabels` selector
+  arrives with `Unmarshal*With` in Phase 3.
+- **H7.** `VerifyMACMulti` and `DecryptMulti` now apply
+  `WithMACExternalAAD`/`WithEncryptExternalAAD`.
+- **HMAC keys.** An empty key is `ErrInvalidKey` in `ComputeMAC0`,
+  `VerifyMAC0` and `ComputeMACMulti` (when a key is supplied), and a
+  recovered empty key fails `VerifyMACMulti`. `WithStrictMACKeyLength`
+  requires a key at least the hash length.
+- **Legacy selectors, deprecated with a v0.32.0 floor, never bundled.**
+  `WithLegacyAlgorithmFromKey` and `WithLegacyIgnoreCritical` (Verifier),
+  plus `WithLegacyMACHeaders` and `WithLegacyEncryptHeaders`, which
+  restore v0.2.2 header handling (alg unbound, crit ignored) for the
+  MAC and Encrypt paths. They were added because those paths take a
+  different option type. `WithLegacyMACHeaders` does not re-enable
+  header-selected HMAC 256/64, which is a safety defect.
+- **Vectors.** cose-wg/Examples `sign1-tests/sign-fail-01..04,06,07`
+  all fail (03 and 04 with `ErrAlgorithmMismatch`) and `sign-pass-01`
+  (unprotected-only `alg`) still verifies. RFC 9052 Appendix C.1.3
+  (crit `["reserved"]`) fails with `ErrCriticalHeader` until
+  `WithKnownCriticalHeaders("reserved")`, then verifies.
+- **Golden.** `cose/mac0/empty-key` and
+  `cose/mac0/verify-alg-param-mismatch` changed as intended.
+- **Fuzz.** New `FuzzVerifyNeverPanics` drives every
+  Unmarshal-then-verify path with policy options; it and the three
+  Phase 1 targets ran 60 s each clean.
+
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
@@ -526,7 +587,7 @@ entries):** `VerifyMulti(msg, verifiers, policy ...VerifyPolicy)`,
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
 | 1 | Panics and fail-open: H5, H6, H8, nil guards, DER bounds, H11, H1 (protected bstr retention) | Done | first nine panic/fail-open rows green |
-| 2 | Policy: H2 alg binding, H3 crit, H4 duplicates, H7 external AAD, HMAC key length | Pending | policy rows green |
+| 2 | Policy: H2 alg binding, H3 crit, H4 duplicates, H7 external AAD, HMAC key length | Done | policy rows green |
 | 3 | Hygiene: H9 Set typing, H10 concurrency docs and race test, H13 error chains, decode limits | Pending | remaining rows green |
 | 4 | Fuzz targets wired into `make fuzz` | Active (Phase 1 surfaces done) | CI 60s clean |
 
@@ -613,3 +674,4 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Phase 1 implemented (H1, H5, H6, H8, H11, nil guards, DER bounds, DecryptMulti IV); fuzz targets for Phase 1 surfaces; status In-Progress | corecbor maintainers |
 | 2026-11-20 | Decisions: H2 unprotected-alg rule; nil payload = detached; runnable payload examples | corecbor maintainers |
+| 2026-11-20 | Phase 2 done: alg binding (decided rule), crit, duplicate labels, multi external AAD and alg allow-lists, HMAC key checks; implementation notes | corecbor maintainers |

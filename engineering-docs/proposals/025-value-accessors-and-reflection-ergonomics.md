@@ -1,0 +1,403 @@
+# 025 — Value accessors and reflection ergonomics
+
+## Header
+
+| Field | Value |
+|---|---|
+| **Number** | 025 |
+| **Tier** | 2 (Phase D is tier-1: amends 008 — see below) |
+| **Status** | Draft |
+| **Filed** | 2026-11-20 |
+| **Owner** | corecbor maintainers |
+| **Depends on** | proposals: 016 (struct Value), 008 (Marshal/Unmarshal), 021 (core codec safety fixes — embedded-struct index paths), 034 (compatibility policy) |
+| **Supersedes** | none |
+| **Spec sections touched** | §4.1 (Value accessors, additive); §8.2 (known caller use cases); Phase D only: the 008 field-naming rule |
+
+---
+
+## TL;DR
+
+Every protocol layer built on corecbor (`cose`, `cwt`, `eat`, `edhoc`)
+and every anticipated external consumer (WebAuthn/CTAP2, mDL/ISO 18013-5,
+SCITT, ACE) re-implements the same handful of operations on `cbor.Value`:
+look up a map entry by integer or text label, convert an integer to
+`int64` with an overflow check, compare two values, and print a value for
+debugging. Reflection-based users additionally lack array-shaped structs
+(`toarray`), strict unknown-field rejection, `encoding.TextUnmarshaler` /
+`BinaryUnmarshaler` symmetry, and `omitzero`.
+
+This proposal adds those helpers, and four reflection features,
+additively. One item, Phase D, changes the default struct-field key
+from `strings.ToLower(f.Name)` to the Go field name as-is, matching
+`encoding/json` and `fxamacker/cbor`. That changes `Marshal` output, so
+per proposal 034 (Policy class) it ships in v0.30 with the
+`WithLowercaseFieldNames()` selector restoring v0.2 output, and decode
+accepts both spellings.
+
+**Acceptance:** the `cose`, `cwt`, `eat`, and `edhoc` modules can delete
+their private label-lookup / integer-conversion helpers in favor of the
+new API with no behavior change, and every new reflection feature
+round-trips through `Marshal`/`Unmarshal` under the existing fuzz targets.
+
+---
+
+## Motivation
+
+### Duplicated lookup and conversion code
+
+`cbor.Value` (`cbor/value.go:34-41`) exposes raw accessors only
+(`UintVal`, `NegIntVal`, `Map`, ...). There is no keyed lookup and no
+checked integer conversion, so each consumer hand-rolls them:
+
+- `cose/headers.go:211` (`cborToGo`) turns every label into `any`,
+  and wraps uint values above `math.MaxInt64` into negative numbers.
+- `cwt/claims.go:264` (`fromValue`) and its `switch` on claim keys
+  repeat the same pattern. Its `[]byte` return for byte-string keys is
+  what makes `DecodeClaimsSet` panic on a bstr claim key (see 021).
+- `reflect_decode.go:299` and `reflect_decode.go:379` show the in-tree
+  version of the same overflow mistake: `-1 - int64(n)` silently wraps
+  for `n >= 2^63`.
+
+Consumers that are *not* in this repo will make the same mistakes:
+
+| Consumer | Needs |
+|---|---|
+| WebAuthn / CTAP2 | `authData` COSE_Key lookup by labels `1, 3, -1, -2, -3`; checked `int64` for `alg` |
+| mDL (ISO 18013-5) | text-keyed `nameSpaces` maps; tag-24 wrapped items; `toarray` for `DeviceAuthentication` |
+| SCITT / COSE | integer-keyed header maps; value equality for duplicate-label detection across protected / unprotected |
+| ACE / CWT | mixed int/text claim keys; `DisallowUnknownFields` for profile-strict tokens |
+
+### Equality is already implemented, privately
+
+`rfc8949/decode.go:675` (`valuesEqual`) implements CBOR data-model
+equality for duplicate-key detection. Consumers need the same function
+(COSE RFC 9052 §3 forbids a label in both protected and unprotected
+buckets) and currently cannot reach it.
+
+### Reflection gaps
+
+- **No array-shaped structs.** COSE structures (`Sig_structure`,
+  `Enc_structure`), EDHOC messages, and mDL `DeviceAuthentication` are
+  CBOR arrays. `getStructFields` (`reflect_encode.go:278`) supports
+  maps only, so every one of these is hand-built from `Value`s.
+- **No unknown-field rejection.** `decodeMapToStruct`
+  (`reflect_decode.go:303`) silently `continue`s on unknown keys.
+- **Asymmetric marshaler support.** Encode honors
+  `encoding.BinaryMarshaler` and `TextMarshaler`
+  (`reflect_encode.go:80-110`), but decode has no counterpart, so
+  `netip.Addr`, `uuid.UUID`, and `big.Float` encode but never decode.
+- **No field metadata cache.** `getStructFields` runs on every
+  `Marshal`/`Unmarshal` and rebuilds two maps per struct
+  (`reflect_decode.go:268-278`). Proposal 008's risk table already
+  anticipated a "struct codec cache".
+- **Field-name casing diverges from the ecosystem.** With no `cbor`
+  tag, the key is `strings.ToLower(f.Name)` (`reflect_encode.go:303`).
+  `encoding/json` and `fxamacker/cbor` both use the field name as-is.
+  A `UserID` field is `"userid"` here and `"UserID"` everywhere else.
+- **No `omitzero`.** Go 1.24 `encoding/json` added `omitzero` (uses
+  `IsZero() bool` when present). `time.Time` is special-cased in
+  `isZero` (`reflect_encode.go:344`), but user types with an `IsZero`
+  method are not.
+
+---
+
+## Proposal
+
+### Phase A — `cbor.Value` accessors (additive)
+
+```go
+// Get returns the value associated with key in a Map, comparing keys by
+// CBOR data-model equality (see Equal). It returns false if v is not a
+// Map or the key is absent. If the map contains duplicate keys, the
+// first match wins — callers that must reject duplicates decode with
+// RejectDuplicateMapKeys.
+func (v Value) Get(key Value) (Value, bool)
+
+// GetInt is Get with an integer key: Uint for n >= 0, NegInt for n < 0.
+// This is the common case for COSE header labels and CWT claim keys.
+func (v Value) GetInt(n int64) (Value, bool)
+
+// GetText is Get with a Text key.
+func (v Value) GetText(s string) (Value, bool)
+
+// Int64 returns the integer value of a Uint or NegInt Value. It returns
+// ErrOverflow if the value is outside [math.MinInt64, math.MaxInt64]
+// and ErrTypeMismatch if v is not an integer kind.
+func (v Value) Int64() (int64, error)
+
+// Uint64 returns the value of a Uint. It returns ErrTypeMismatch for
+// any other kind, including NegInt.
+func (v Value) Uint64() (uint64, error)
+
+// Equal reports whether v and w are equal in the CBOR data model
+// (RFC 8949 §2): same kind, same value, element-wise for containers,
+// order-sensitive for maps. Float NaNs compare equal iff their bit
+// patterns match, including the sign bit (RFC 8949 erratum 8589).
+func (v Value) Equal(w Value) bool
+
+// String returns the compact diagnostic-notation form of v
+// (RFC 8949 §8). It implements fmt.Stringer.
+func (v Value) String() string
+```
+
+Sentinels: `ErrOverflow` and `ErrTypeMismatch` move into `cbor/errors.go`
+next to the existing catalog. The root package keeps aliases
+(`corecbor.ErrOverflow` already exists at `marshal.go:21`;
+`rfc8949.ErrTypeMismatch` at `rfc8949/cursor.go:18` becomes an alias of
+the `cbor` sentinel). Per §5, every error wraps a sentinel.
+
+**Moving `valuesEqual`.** `rfc8949` imports `cbor`, so `cbor` cannot
+call into `rfc8949`. The implementation moves to `cbor` as `Equal`, and
+`rfc8949/decode.go:675` calls `a.Equal(b)`. The erratum 8589 sign-bit
+rule is folded in at the same time (cross-ref 023).
+
+**Resolving the `String()` import cycle.** The diagnostic writer
+(`diagWrite`, `diagnostic.go:52`) lives in the root package and
+depends only on `cbor` and the standard library. It moves to
+`cbor/diag.go` as an unexported `appendDiag(b *strings.Builder, v Value,
+compact, indicators bool)`. The root package keeps `Diagnostic(data, ...)`
+(which needs the decoder) and `DiagnosticValue(v, ...)`, which delegates.
+No exported symbol is removed. `cbor` remains import-free of `rfc8949`.
+
+### Phase B — Reflection features (additive)
+
+1. **Struct-level `toarray`.** A blank-named field `_ struct{} \`cbor:",toarray"\``
+   switches the struct to array encoding: exported fields in declaration
+   order, no keys. This is the `fxamacker/cbor` spelling, which
+   consumers migrating from that library already know. `omitempty` is
+   rejected inside a `toarray` struct with `ErrUnsupportedType` (position
+   is the identity, so a field cannot be omitted). Decode requires
+   `len(array) == NumFields`, or `<=` when trailing fields are pointers
+   (models CDDL `? optional` tail items).
+
+2. **`DisallowUnknownFields()` decoder option.** A new `DecoderOption`
+   that makes `decodeMapToStruct` return a new
+   `ErrUnknownField` (wrapped with the offending key in diagnostic
+   form) instead of skipping it. Default remains forgiving (§3.1).
+
+3. **Unmarshaler symmetry.** In `valueToGo`, after the `Unmarshaler`
+   check: `encoding.BinaryUnmarshaler` accepts `KindBytes`;
+   `encoding.TextUnmarshaler` accepts `KindText`. Precedence mirrors
+   encode (`reflect_encode.go:80-110`): Marshaler, then the special
+   types (`time.Time`, `big.Int`), then Binary, then Text.
+
+4. **Field metadata cache with index paths.** Replace `getStructFields`
+   with a `sync.Map`-backed cache keyed by `reflect.Type`, storing
+   `[]fieldInfo` plus prebuilt `byText map[string]int` and
+   `byInt map[int64]int` lookup tables. `fieldInfo.index int` becomes
+   `index []int`, used with `FieldByIndex`. That is the fix for the
+   embedded-struct defect landed by 021; this phase carries the cache
+   and keeps the index paths. The cache is safe for concurrent use
+   (`sync.Map`, values immutable after store).
+
+5. **`omitzero`.** Field option that omits when the value has an
+   `IsZero() bool` method returning true, else when
+   `reflect.Value.IsZero()` is true. `omitempty` semantics are
+   unchanged.
+
+**Why no `keyasint`.** `fxamacker/cbor` needs a `keyasint` option
+because its tag name is a string by default. Here, a tag name that
+parses as an integer *is* the integer key (`reflect_encode.go:317`),
+so `cbor:"1"` already encodes as `Uint(1)` and `cbor:"-7"` as
+`NegInt(6)`. Adding `keyasint` would be a no-op alias. The one edge
+case — a caller who wants the *text* key `"1"` — is out of scope; they
+can use a `Marshaler`. Document this behavior in the package godoc.
+
+### Phase C — Consumer migration
+
+Replace private helpers in `cose`, `cwt`, `eat`, and `edhoc` with
+`Get`/`GetInt`/`Int64`/`Equal`. This is mechanical and gated on Phase A
+only. It is the acceptance check that the API is sufficient.
+
+### Phase D — Default field-name casing (contract-touching; amends 008)
+
+Changing the untagged default from lowercase to as-is changes the bytes
+`Marshal` emits for any struct without explicit tags. That alters a
+behavior proposal 008 defined, so Phase D is tier-1 work and this
+proposal records the amendment to 008. Under proposal 034 the default
+follows the deployed Go ecosystem (`encoding/json`, `fxamacker/cbor`:
+field name as-is) and v0.2 output stays selectable:
+
+```go
+// WithLowercaseFieldNames restores the v0.2 default: untagged struct
+// fields are keyed by strings.ToLower(field name). Policy-class
+// selector (proposal 034); not deprecated.
+func WithLowercaseFieldNames() Option
+
+// CompatV02 applies every encoder-side selector needed to reproduce
+// v0.2.x Marshal/Encode output: WithLowercaseFieldNames (025) and
+// WithLegacyBignumPassthrough (024).
+//
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+func CompatV02() Option
+
+// CompatV02Decoding applies every decoder-side selector needed to
+// reproduce v0.2.x acceptance: WithLegacyFloatKeyEquality (024).
+//
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+func CompatV02Decoding() DecoderOption
+```
+
+1. Default untagged key is the Go field name as-is.
+2. Decode matches the exact key first, then falls back to a
+   case-insensitive match (the `encoding/json` rule), so v0.2-encoded
+   data decodes with no selector. When a map carries two keys that
+   differ only by case, the exact match wins; with
+   `DisallowUnknownFields` the other one is an error.
+3. The package-level `Marshal` follows the new default. v0.2 callers
+   use `corecbor.New(ModeCoreDeterministic, WithLowercaseFieldNames())`
+   or `CompatV02()`.
+4. Entry in `migration-v0.2-to-v0.30.md`.
+
+### Behavior
+
+Phases A–C are purely additive; no existing output changes. Phase D
+changes encode output for untagged struct fields (selector:
+`WithLowercaseFieldNames()`) and widens what `Unmarshal` accepts
+(case-insensitive fallback).
+
+### Failure modes
+
+| Sentinel | When |
+|---|---|
+| `ErrOverflow` (moved to `cbor`) | `Int64()` outside range; existing reflect overflow paths |
+| `ErrTypeMismatch` (moved to `cbor`) | `Int64()`/`Uint64()` on a non-integer kind |
+| `ErrUnknownField` (new, root) | `DisallowUnknownFields` and an unmatched key |
+| `ErrUnsupportedType` (existing) | `omitempty` used inside a `toarray` struct |
+| `ErrArrayLength` (new, root) | `toarray` decode with too few/many items |
+
+---
+
+## Compatibility selection
+
+Classified per [034](034-standards-currency-and-legacy-compatibility.md).
+
+| Change | Class | Default (v0.30) | Selector |
+|---|---|---|---|
+| Untagged struct field key = Go field name as-is | Policy | as-is | `func WithLowercaseFieldNames() Option` |
+| Decode accepts case-insensitive field-name match | Additive (widening) | on | n/a |
+| `encoding.TextUnmarshaler`/`BinaryUnmarshaler` called on decode | Defect (asymmetry with encode, `reflect_encode.go:80-110`) | called | none — defect |
+| `Value` accessors, `toarray`, `DisallowUnknownFields`, `omitzero`, field cache | Additive | n/a | n/a |
+
+Root bundles defined here: `CompatV02() Option` = `WithLowercaseFieldNames()`
++ `WithLegacyBignumPassthrough()` (024). `CompatV02Decoding() DecoderOption`
+= `WithLegacyFloatKeyEquality()` (024). 021–023 contribute nothing (see
+their sections).
+
+---
+
+## Acceptance criteria
+
+| Criterion | Test mechanism | Gating? |
+|---|---|---|
+| `GetInt(-1)` finds a `NegInt(0)` key; `GetInt(1)` does not match a `Text("1")` key | table test in `cbor/value_test.go` | Yes |
+| `Int64()` returns `ErrOverflow` for `Uint(1<<63)` and `NegInt(1<<63)`; exact at `MinInt64`/`MaxInt64` | table test | Yes |
+| `Equal` agrees with the old `valuesEqual` for every pair in the compat vector set | test over `testdata/` vectors | Yes |
+| NaN keys with different sign bits are *not* equal (erratum 8589) | unit test | Yes |
+| `fmt.Sprint(v)` equals `DiagnosticValue(v, DiagCompact())` | `FuzzValueString` consistency target | Yes |
+| `cbor` package does not import `rfc8949` | `go list -deps` check in test | Yes |
+| `toarray` struct round-trips `Sig_structure` and matches RFC 9052 App. C vector bytes | test in `marshal_test.go` | Yes |
+| `DisallowUnknownFields` rejects an extra key with `errors.Is(err, ErrUnknownField)` | unit test | Yes |
+| `netip.Addr` and a `TextMarshaler` type round-trip via `Marshal`/`Unmarshal` | unit test | Yes |
+| Struct metadata is computed once per type (no per-call `getStructFields`) | `BenchmarkMarshalStruct` allocs/op drops; race test with 8 goroutines | Yes |
+| `cose`, `cwt`, `eat`, `edhoc` compile with private lookup helpers removed | Phase C PR | Yes (Phase C) |
+| Default encodes `UserID` as `"UserID"`; `WithLowercaseFieldNames()` encodes `"userid"` (v0.2.2 bytes) | `TestCompatFieldNames` vs `testdata/legacy-v0.2.2/` | Yes (Phase D) |
+| `Unmarshal` of v0.2.2 lowercase-keyed output into the same struct succeeds with no selector | `TestDecodeLowercaseFallback` | Yes (Phase D) |
+| `New(ModeCoreDeterministic, CompatV02()).Marshal(x)` equals v0.2.2 `Marshal(x)` byte-for-byte over the legacy fixture set (excluding 021 defect fixtures) | `TestCompatV02MarshalGolden` vs `testdata/legacy-v0.2.2/` | Yes |
+| `CompatV02` and `CompatV02Decoding` carry `// Deprecated:` with removal floor v0.32.0 | staticcheck SA1019 fixture | Yes |
+
+---
+
+## Phases
+
+| Phase | Scope | Status | Closes when |
+|---|---|---|---|
+| A | `Get`/`GetInt`/`GetText`/`Int64`/`Uint64`/`Equal`/`String`, diag move | Pending | Phase A rows green |
+| B | `toarray`, `DisallowUnknownFields`, Unmarshaler symmetry, cache, `omitzero` | Pending | Phase B rows green |
+| C | Migrate sibling modules to Phase A API | Pending | Helpers deleted, tests green |
+| D | Default flip to as-is + `WithLowercaseFieldNames()` + root `CompatV02`/`CompatV02Decoding` bundles; 008 amended | Pending | Phase D rows green; migration guide entry |
+
+---
+
+## Test surface
+
+| Test | Covers | Lives at |
+|---|---|---|
+| `TestValueGet*`, `TestValueInt64` | lookup + checked conversion | `cbor/value_test.go` |
+| `TestValueEqual`, `TestValueEqualNaNSign` | equality incl. erratum 8589 | `cbor/value_test.go` |
+| `FuzzValueString` | `String()` never panics; equals compact diagnostic | `cbor/fuzz_test.go` (new) |
+| `TestMarshalToArray`, `TestUnmarshalToArrayLength` | `toarray` | `marshal_test.go` |
+| `TestDisallowUnknownFields` | strict struct decode | `marshal_test.go` |
+| `TestTextBinaryUnmarshaler` | symmetry | `marshal_test.go` |
+| `FuzzUnmarshalStructNeverPanics` | extends §7.1 catalog with a struct target containing `toarray` and embedded fields | `fuzz_test.go` |
+| `TestStructCacheConcurrent` | cache under `-race` | `marshal_test.go` |
+
+---
+
+## Performance
+
+| Metric | Target | Test mechanism |
+|---|---|---|
+| `Marshal` of a 6-field struct | ≥ 30% fewer allocs/op than today | `go test -bench BenchmarkMarshalStruct -benchmem` |
+| `Value.GetInt` on 8-entry map | 0 allocs | `BenchmarkValueGetInt` |
+| §9 encode/decode benchmarks | no regression beyond noise (±3%) | `make bench` vs `bench-020-baseline.txt` |
+
+---
+
+## Risks
+
+| Risk | Likelihood | Impact | Mitigation |
+|---|---|---|---|
+| `Get` linear scan is slow on large maps | med | low | Document O(n); large-map users index once via `AsStringMap` or their own map |
+| `String()` on huge values allocates heavily inside `%v` logging | med | low | Document; no truncation by default; `DiagnosticValue` remains for control |
+| Phase D default flip changes bytes for callers hashing/signing reflection output | med | high | `WithLowercaseFieldNames()` / `CompatV02()`; case-insensitive decode fallback; called out first in the migration guide |
+| `toarray` + embedded struct ordering surprises | low | med | Define order as flattened declaration order; test it |
+| Moving `ErrTypeMismatch` changes `errors.Is` identity | low | med | Root/`rfc8949` names become aliases of the same variable |
+
+---
+
+## Alternatives considered
+
+- **Generic `Lookup[K]` helper.** `func Lookup[K int64 | string](v Value, k K)`
+  reads well but cannot be a method, and the int/text split covers every
+  known consumer. Rejected for API surface; revisit if a third key kind
+  (bstr labels) becomes common.
+- **Map index on decode** (attach a hash index to `Value`). Speeds up
+  `Get` but grows `Value` (already 104 bytes per 016/020) for every
+  caller. Rejected.
+- **Separate `diag` package** imported by both. Still a cycle if `cbor`
+  imports it for `String()`. Moving the writer into `cbor` is the
+  smallest fix.
+- **Keep lowercase as the default, as-is opt-in.** Avoids a wire
+  change, but keeps corecbor out of step with every other Go encoder.
+  Rejected under proposal 034's precedence (deployed ecosystem first),
+  given the v0.30 bump and the `WithLowercaseFieldNames()` selector.
+
+---
+
+## Open questions
+
+- Should `Get` return the *last* match instead, mirroring "last one
+  wins" duplicate handling in the forgiving decoder? Current lean:
+  first match, and push duplicate-sensitive callers to
+  `RejectDuplicateMapKeys`.
+- Should `toarray` decoding of a too-long array be an error or ignore
+  trailing items (forward compatibility for CDDL `* any` tails)?
+
+---
+
+## Cross-references
+
+- Spec: §4.1, §5, §7.1, §8.2 of `encoder-decoder-spec.md`
+- RFCs: `rfcs/rfc8949.txt` §2 (data model), §5.6.1 (+ erratum 8589), §8 (diagnostic notation); RFC 9052 §3, §4.4
+- Proposals: 008 (Marshal/Unmarshal, field naming), 016 (Value struct), 021 (embedded-struct fix), 023 (NaN equality / strict decode)
+- External: `fxamacker/cbor` struct tags (`toarray`, `keyasint`); Go 1.24 `encoding/json` `omitzero`
+
+---
+
+## Changelog
+
+| Date | Change | Author |
+|---|---|---|
+| 2026-11-20 | Initial draft | corecbor maintainers |
+| 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |

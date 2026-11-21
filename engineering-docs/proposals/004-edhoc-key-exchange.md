@@ -6,12 +6,19 @@
 |---|---|
 | **Number** | 004 |
 | **Tier** | 3 |
-| **Status** | Closed |
+| **Status** | Superseded |
 | **Filed** | 2026-05-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (corecbor primitives), 002 (COSE) |
 | **Supersedes** | none |
+| **Superseded by** | proposals: 033 (RFC 9528 conformance rewrite) |
 | **Spec sections touched** | none (tier-3; sibling module) |
+
+> **Superseded (2026-11-20).** The protocol core shipped under this
+> proposal follows a pre-RFC key schedule and message layout and never
+> met its RFC 9528 test-vector criterion (no RFC 9529 traces). Proposal
+> [033](033-edhoc-rfc9528-conformance-rewrite.md) replaces it; this
+> document's module layout and API sketch remain its starting point.
 
 ---
 

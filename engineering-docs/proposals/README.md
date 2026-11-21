@@ -17,6 +17,20 @@ proposal lifecycle.
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 | [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
 | [020](020-default-decode-recovery.md) | 1 | Draft | Default-path decode recovery and residual throughput fixes | corecbor maintainers | 016, 018, 019 | 2026-05-24 |
+| [021](021-core-codec-safety-fixes.md) | 1 | Draft | Core codec safety fixes | corecbor maintainers | 008, 016, 020 | 2026-11-20 |
+| [022](022-raw-byte-preservation.md) | 1 | Draft | Raw byte preservation through decode | corecbor maintainers | 014, 018, 020, 021 | 2026-11-20 |
+| [023](023-strict-decode-policy-and-errors.md) | 1 | Draft | Strict decode policy (tag allowlist) and structured errors | corecbor maintainers | 001 | 2026-11-20 |
+| [024](024-serialization-profiles-alignment.md) | 1 | Draft | Align encoder modes and checking decoders with CBOR Serialization | corecbor maintainers | 001, 021, 023 | 2026-11-20 |
+| [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
+| [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
+| [027](027-cose-verification-hardening.md) | 3 | Draft | COSE verification hardening | corecbor maintainers | 002, 011, 021, 022 | 2026-11-20 |
+| [028](028-cose-signing-and-key-api.md) | 3 | Draft | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 002, 011, 027 | 2026-11-20 |
+| [029](029-cose-algorithms-and-encryption-conformance.md) | 3 | Draft | COSE algorithm registry alignment and encryption conformance | corecbor maintainers | 002, 027, 028 | 2026-11-20 |
+| [030](030-cose-hash-envelope-and-receipts.md) | 3 | Draft | COSE Hash Envelope, COSE Receipts, and SCITT signed statements | corecbor maintainers | 027, 028, 029, 031 | 2026-11-20 |
+| [031](031-cwt-hardening-and-integration.md) | 3 | Draft | CWT hardening and ACE / SCITT integration | corecbor maintainers | 003, 012, 021, 022, 023, 027, 028 | 2026-11-20 |
+| [032](032-eat-rfc9711-conformance.md) | 3 | Draft | EAT: RFC 9711 conformance | corecbor maintainers | 005, 022, 027, 031 | 2026-11-20 |
+| [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Draft | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 004, 022, 028, 031 | 2026-11-20 |
+| [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Draft | Standards currency and legacy-compatibility selection policy | corecbor maintainers | — | 2026-11-20 |
 
 ## Closed proposals
 
@@ -25,7 +39,7 @@ proposal lifecycle.
 | [001](001-phase-1-foundational-primitives.md) | 1 | Closed | Phase 1: Foundational primitives | corecbor maintainers | 2026-05-20 | All acceptance criteria met. Phases 1-4 implemented. §9 perf targets exceeded. |
 | [002](002-cose-structures-and-signing.md) | 3 | Closed | COSE structures and cryptographic operations | corecbor maintainers | 2026-05-21 | Phases A-E complete. Sign1, Encrypt0, Mac0, multi-recipient, AES-KW, ECDH-ES, PBES2, HPKE, key escrow patterns. |
 | [003](003-cwt-cbor-web-tokens.md) | 3 | Closed | CWT: CBOR Web Tokens | corecbor maintainers | 2026-05-21 | Phases A-B complete. Sign/Verify/Encrypt/Decrypt/MAC + Validator. |
-| [004](004-edhoc-key-exchange.md) | 3 | Closed | EDHOC: Ephemeral DH Over COSE | corecbor maintainers | 2026-05-21 | Phases A-C complete. Suite 0+2, msg4, Exporter, CWT credentials. |
+| [004](004-edhoc-key-exchange.md) | 3 | Superseded | EDHOC: Ephemeral DH Over COSE | corecbor maintainers | 2026-05-21 | Superseded 2026-11-20 by [033](033-edhoc-rfc9528-conformance-rewrite.md): shipped protocol core is pre-RFC 9528 and never passed RFC 9529 traces. |
 | [005](005-eat-entity-attestation.md) | 3 | Closed | EAT: Entity Attestation Tokens | corecbor maintainers | 2026-05-21 | Phases A-C complete. Claims, SW measurements, profile, submodules. |
 | [006](006-iana-registry-sync-codegen.md) | 2 | Closed | IANA CBOR registry sync + codegen | corecbor maintainers | 2026-05-21 | Full IANA fetch (260 tags), codegen tool, go:embed registry. |
 | [007](007-cross-library-compatibility-testing.md) | 2 | Closed | Cross-library compatibility testing | corecbor maintainers | 2026-05-21 | 55 vectors (41 canonical + 14 quirky), 209 test cases. |
@@ -39,7 +53,7 @@ proposal lifecycle.
 
 ## Numbering
 
-Next available proposal number: **021**
+Next available proposal number: **035**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than
@@ -60,6 +74,16 @@ sequence compactness.
   - [003](003-cwt-cbor-web-tokens.md) — CWT (RFC 8392; depends on 001, 002)
   - [004](004-edhoc-key-exchange.md) — EDHOC (RFC 9528; depends on 001, 002)
   - [005](005-eat-entity-attestation.md) — EAT (RFC 9711; depends on 001, 002, 003)
+
+- **2026-11 review + upstream sync** (see [`../upstream-status-2026-11.md`](../upstream-status-2026-11.md)):
+  - Core safety / conformance (tier-1): 021 → 022, 023 → 024
+  - Core ergonomics (tier-2): 025, 026
+  - COSE (tier-3): 027 → 028 → 029 → 030
+  - CWT / EAT / EDHOC (tier-3): 031 → 032; 033 (supersedes 004)
+  - Cross-cutting policy (tier-1): 034 — every proposal above classifies its
+    changes and names legacy selectors per 034
+  - Release: deliver as **v0.30.0** or later — see
+    [`../release-notes-v0.30-maintainers.md`](../release-notes-v0.30-maintainers.md)
 
 ## Future considerations (not yet proposals)
 

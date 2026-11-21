@@ -84,6 +84,8 @@ func (a Algorithm) String() string {
 		return "ECDH-ES+HKDF-256"
 	case AlgPBES2_HS256_A128KW:
 		return "PBES2-HS256+A128KW"
+	case AlgHPKEBaseP256SHA256AES128GCM:
+		return "HPKE-Base-P256-SHA256-AES128GCM"
 	default:
 		return "unknown"
 	}

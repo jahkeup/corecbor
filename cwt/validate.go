@@ -6,7 +6,9 @@ package cwt
 import "time"
 
 type Validator struct {
-	Audience            string
+	Audience string
+	// Leeway is the clock-skew tolerance applied to exp and nbf. It must
+	// not be negative; Validate returns ErrInvalidValidator if it is.
 	Leeway              time.Duration
 	Now                 func() time.Time
 	RequireExpiration   bool
@@ -14,6 +16,11 @@ type Validator struct {
 }
 
 func (v *Validator) Validate(claims *ClaimsSet) error {
+	if v.Leeway < 0 {
+		// A negative tolerance would silently reject tokens that are
+		// still within their validity window.
+		return ErrInvalidValidator
+	}
 	now := time.Now()
 	if v.Now != nil {
 		now = v.Now()

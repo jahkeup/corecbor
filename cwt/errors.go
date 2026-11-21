@@ -12,4 +12,8 @@ var (
 	ErrMissingExpiration   = errors.New("cwt: missing required expiration")
 	ErrMissingConfirmation = errors.New("cwt: missing required confirmation claim")
 	ErrMalformedClaims     = errors.New("cwt: malformed claims")
+
+	// ErrInvalidValidator indicates a Validator configured with values
+	// that can't be applied, such as a negative Leeway.
+	ErrInvalidValidator = errors.New("cwt: invalid validator configuration")
 )

@@ -514,6 +514,35 @@ nil-vs-empty distinction.
   Unmarshal-then-verify path with policy options; it and the three
   Phase 1 targets ran 60 s each clean.
 
+### Implementation notes (Phase 3, 2026-11-20)
+
+- **H9.** `Set` keeps its v0.2.2 signature and is deprecated in favor of
+  `SetChecked`. Both normalize integer labels to `int64`, and `Get`
+  normalizes too, so `Get(1)` and `Get(int64(1))` find the same label
+  (v0.2.2 treated them as different keys). `SetChecked` also accepts
+  `[]any` of the listed types, so a crit array can be set directly. An
+  unencodable label or value stored with `Set` makes the next `Marshal*`
+  (or protected encoding) return `ErrUnsupportedHeader`. On decode,
+  integers outside the int64 range stay `corecbor.Value` instead of
+  wrapping (v0.2.2 read 2^64-1 as -1).
+- **H10.** `Set`/`SetChecked` write to a copy of the parameter map, so a
+  struct copy of `Headers` (which shares the old map) keeps its
+  parameters and `Raw()` consistent (`TestHeadersCopyIndependent`).
+  `Signer`/`Verifier` use the package's shared encoder;
+  `TestConcurrentSignVerify` covers concurrent signing and concurrent
+  verification of one message under `-race`.
+- **H13.** Every wrapped cause uses `%w`; `Error()` text is unchanged.
+- **Decode limits.** `Unmarshal{Sign1,Encrypt0,Mac0,Encrypt,Sign,Mac}With`
+  take a `DecodeLimits`; `DecodeLimits{}` is identical to the
+  `Unmarshal*` functions. `AllowDuplicateLabels` (deprecated) is the H4
+  selector. Applies to the message decode and the protected-map decode.
+- **Not changed (pre-existing).** Headers decoded with content the
+  deterministic encoder refuses (invalid UTF-8 text, non-finite floats)
+  verify fine, because verification uses the received bytes, but can't
+  be re-encoded after modification. Found by `FuzzHeadersDecode`
+  (corpus seed kept). Treating such input as invalid at decode belongs
+  with 023/024's strictness work.
+
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
@@ -588,8 +617,8 @@ entries):** `VerifyMulti(msg, verifiers, policy ...VerifyPolicy)`,
 |---|---|---|---|
 | 1 | Panics and fail-open: H5, H6, H8, nil guards, DER bounds, H11, H1 (protected bstr retention) | Done | first nine panic/fail-open rows green |
 | 2 | Policy: H2 alg binding, H3 crit, H4 duplicates, H7 external AAD, HMAC key length | Done | policy rows green |
-| 3 | Hygiene: H9 Set typing, H10 concurrency docs and race test, H13 error chains, decode limits | Pending | remaining rows green |
-| 4 | Fuzz targets wired into `make fuzz` | Active (Phase 1 surfaces done) | CI 60s clean |
+| 3 | Hygiene: H9 Set typing, H10 concurrency docs and race test, H13 error chains, decode limits | Done | remaining rows green |
+| 4 | Fuzz targets wired into `make fuzz` | Done locally (FuzzUnmarshalNeverPanics, FuzzHeadersDecode, FuzzSign1RoundTrip, FuzzVerifyNeverPanics); CI pending | CI 60s clean |
 
 ---
 
@@ -675,3 +704,4 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 | 2026-11-20 | Phase 1 implemented (H1, H5, H6, H8, H11, nil guards, DER bounds, DecryptMulti IV); fuzz targets for Phase 1 surfaces; status In-Progress | corecbor maintainers |
 | 2026-11-20 | Decisions: H2 unprotected-alg rule; nil payload = detached; runnable payload examples | corecbor maintainers |
 | 2026-11-20 | Phase 2 done: alg binding (decided rule), crit, duplicate labels, multi external AAD and alg allow-lists, HMAC key checks; implementation notes | corecbor maintainers |
+| 2026-11-20 | Phase 3 done: SetChecked + typed Set, copy-safe headers, error chains, Unmarshal*With/DecodeLimits; Phase 4 targets complete locally | corecbor maintainers |

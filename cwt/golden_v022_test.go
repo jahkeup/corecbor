@@ -150,7 +150,10 @@ func cwtGoldenCases() []g.Case {
 	add("cwt/decode/exp-float", func() string { return decode("a104fb41d954fc40200000") })
 	add("cwt/decode/exp-negative", func() string { return decode("a10429") })
 	add("cwt/decode/exp-uint-max", func() string { return decode("a1041bffffffffffffffff") })
-	add("cwt/decode/exp-nan", func() string { return decode("a104f97e00") })
+	// No exp-nan vector: v0.2.2 converts a NaN epoch with int64(f),
+	// which is implementation-specific (0 on arm64, MinInt64 on amd64),
+	// so there is no single v0.2.2 result to pin. Proposal 031 rejects
+	// non-finite NumericDates.
 	add("cwt/decode/exp-text", func() string { return decode("a1046161") })
 	add("cwt/decode/duplicate-exp", func() string { return decode("a2041a6553f100041a00000001") })
 	add("cwt/decode/private-text-key", func() string { return decode("a1646e616d6503") })

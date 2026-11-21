@@ -5,15 +5,8 @@ package edhoc
 
 import "fmt"
 
-type OSCOREContext struct {
-	MasterSecret []byte
-	MasterSalt   []byte
-	SenderID     []byte
-	RecipientID  []byte
-}
-
 // Export derives application keying material using the EDHOC Exporter.
-func (i *Initiator) Export(label int, context []byte, length int) ([]byte, error) {
+func (i *legacyInitiator) Export(label int, context []byte, length int) ([]byte, error) {
 	if i.state != initiatorStateComplete {
 		return nil, ErrStateViolation
 	}
@@ -21,7 +14,7 @@ func (i *Initiator) Export(label int, context []byte, length int) ([]byte, error
 }
 
 // Export derives application keying material using the EDHOC Exporter.
-func (r *Responder) Export(label int, context []byte, length int) ([]byte, error) {
+func (r *legacyResponder) Export(label int, context []byte, length int) ([]byte, error) {
 	if r.state != responderStateComplete {
 		return nil, ErrStateViolation
 	}
@@ -37,7 +30,7 @@ func edhocExport(prk, th4 []byte, label int, context []byte, length int) ([]byte
 	return hkdfExpand(prk, info, length)
 }
 
-func (i *Initiator) ExportOSCORE() (*OSCOREContext, error) {
+func (i *legacyInitiator) ExportOSCORE() (*OSCOREContext, error) {
 	if i.state != initiatorStateComplete {
 		return nil, ErrStateViolation
 	}
@@ -59,7 +52,7 @@ func (i *Initiator) ExportOSCORE() (*OSCOREContext, error) {
 	}, nil
 }
 
-func (r *Responder) ExportOSCORE() (*OSCOREContext, error) {
+func (r *legacyResponder) ExportOSCORE() (*OSCOREContext, error) {
 	if r.state != responderStateComplete {
 		return nil, ErrStateViolation
 	}

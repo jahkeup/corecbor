@@ -1,16 +1,35 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright The corecbor Authors
 
-// Package edhoc implements the EDHOC authenticated key exchange protocol
-// (RFC 9528) for Suite 0 (X25519, EdDSA, AES-CCM-16-64-128, SHA-256).
+// Package edhoc implements the EDHOC authenticated key exchange
+// (RFC 9528).
 //
-// EDHOC establishes an OSCORE security context between two peers using a
-// 3-message handshake. This implementation supports method 0 (signature/signature)
-// with raw public key (RPK) credentials.
+// Status: experimental until proposal 033 closes. The protocol core
+// reproduces the RFC 9529 traces byte-for-byte; the API around it
+// (credential resolution, transport helpers) may still change.
 //
-// Phase A implements the core protocol flow:
-//   - Initiator creates Message 1 (METHOD, SUITES_I, G_X, C_I)
-//   - Responder processes Message 1, returns Message 2 (G_Y, C_R, CIPHERTEXT_2)
-//   - Initiator processes Message 2, returns Message 3 (CIPHERTEXT_3)
-//   - Both parties export an OSCORE security context (Master Secret, Master Salt)
+// EDHOC is a three-message key exchange (an optional fourth confirms
+// keys) between an Initiator and a Responder:
+//
+//	Initiator                         Responder
+//	CreateMessage1      ── msg1 ──►   ProcessMessage1
+//	ProcessMessage2     ◄── msg2 ──
+//	                    ── msg3 ──►   ProcessMessage3
+//	ProcessMessage4     ◄── msg4 ──   CreateMessage4 (optional)
+//
+// Afterwards both sides call ExportOSCORE (RFC 9528 Appendix A.1) or
+// Export (EDHOC_Exporter) for application keys, and Close to zeroize
+// secrets. Any error is terminal for the session.
+//
+// All four authentication methods (InitiatorConfig.Method) and cipher
+// suites 0–6 and 24 are supported. A party authenticates with a
+// crypto.Signer (signature methods) or a static DH key (DHKey). The
+// peer's credential comes from Peers (a CredentialResolver), a pinned
+// PeerCredential, or a pinned PeerPublic matched against a credential
+// sent by value. SUITES_I lists the Initiator's preferences with the
+// selected suite last; after an ERR_CODE 2 error message, RetrySuites
+// builds the next SUITES_I.
+//
+// WithLegacyPreRFCProtocol selects the deprecated pre-RFC protocol of
+// corecbor v0.2, for upgrading deployed v0.2 peers in stages only.
 package edhoc

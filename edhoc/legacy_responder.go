@@ -4,7 +4,6 @@
 package edhoc
 
 import (
-	"crypto"
 	"crypto/ecdh"
 	"crypto/rand"
 	"fmt"
@@ -21,18 +20,7 @@ const (
 	responderStateComplete
 )
 
-type ResponderConfig struct {
-	Suites       []CipherSuite
-	PrivateKey   crypto.Signer
-	PeerPublic   crypto.PublicKey
-	ConnectionID []byte
-
-	Credential     *Credential
-	PeerCredential *Credential
-	CWTIssuerKey   crypto.PublicKey
-}
-
-type Responder struct {
+type legacyResponder struct {
 	cfg   ResponderConfig
 	suite CipherSuite
 	sp    suiteParams
@@ -55,7 +43,7 @@ type Responder struct {
 	ciphertext2 []byte
 }
 
-func NewResponder(cfg ResponderConfig) (*Responder, error) {
+func newLegacyResponder(cfg ResponderConfig) (*legacyResponder, error) {
 	if len(cfg.Suites) == 0 {
 		return nil, fmt.Errorf("%w: no suites specified", ErrUnsupportedSuite)
 	}
@@ -77,14 +65,14 @@ func NewResponder(cfg ResponderConfig) (*Responder, error) {
 		cid[0] = cid[0] % 24
 	}
 
-	return &Responder{
+	return &legacyResponder{
 		cfg:          cfg,
 		state:        responderStateInit,
 		connectionID: cid,
 	}, nil
 }
 
-func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
+func (r *legacyResponder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	if r.state != responderStateInit {
 		return nil, ErrStateViolation
 	}
@@ -148,7 +136,7 @@ func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	})
 }
 
-func (r *Responder) negotiateSuite(proposed []CipherSuite) (CipherSuite, bool) {
+func (r *legacyResponder) negotiateSuite(proposed []CipherSuite) (CipherSuite, bool) {
 	for _, ps := range proposed {
 		for _, rs := range r.cfg.Suites {
 			if ps == rs {
@@ -159,7 +147,7 @@ func (r *Responder) negotiateSuite(proposed []CipherSuite) (CipherSuite, bool) {
 	return 0, false
 }
 
-func (r *Responder) encryptMessage2() ([]byte, error) {
+func (r *legacyResponder) encryptMessage2() ([]byte, error) {
 	var idCredR []byte
 	var err error
 	if r.cfg.Credential != nil && r.cfg.Credential.Type == CredentialCWT {
@@ -215,7 +203,7 @@ func (r *Responder) encryptMessage2() ([]byte, error) {
 	return aead.Seal(nil, iv2e, plaintext2, aad), nil
 }
 
-func (r *Responder) ProcessMessage3(msg3Raw []byte) error {
+func (r *legacyResponder) ProcessMessage3(msg3Raw []byte) error {
 	if r.state != responderStateSentMsg2 {
 		return ErrStateViolation
 	}
@@ -260,7 +248,7 @@ func (r *Responder) ProcessMessage3(msg3Raw []byte) error {
 
 // CreateMessage4 creates an optional message_4 for explicit key confirmation.
 // Only callable after ProcessMessage3 succeeds (responder is in complete state).
-func (r *Responder) CreateMessage4() ([]byte, error) {
+func (r *legacyResponder) CreateMessage4() ([]byte, error) {
 	if r.state != responderStateComplete {
 		return nil, ErrStateViolation
 	}
@@ -289,7 +277,7 @@ func (r *Responder) CreateMessage4() ([]byte, error) {
 	return cborEncodeValue(nil, cbor.Bytes(ciphertext4))
 }
 
-func (r *Responder) verifyInitiatorSignature(plaintext3 []byte) error {
+func (r *legacyResponder) verifyInitiatorSignature(plaintext3 []byte) error {
 	idCred, rest, err := decodeOneValue(plaintext3)
 	if err != nil {
 		return fmt.Errorf("%w: decoding ID_CRED_I: %v", ErrMessageFormat, err)

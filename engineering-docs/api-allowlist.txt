@@ -23,3 +23,9 @@ github.com/jahkeup/corecbor/cose: VerifyMulti: changed from func(*Sign, []*Verif
 # HMAC 256/64, which is rejected (safety defect: attacker-chosen truncation).
 github.com/jahkeup/corecbor/cose: DecryptMulti: changed from func(*Encrypt, KeyDeriver, int) ([]byte, error) to func(*Encrypt, KeyDeriver, int, ...EncryptOption) ([]byte, error)
 github.com/jahkeup/corecbor/cose: VerifyMACMulti: changed from func(*Mac, KeyDeriver, int) error to func(*Mac, KeyDeriver, int, ...MACOption) error
+
+# Proposal 033: NewInitiator/NewResponder gain ...Option
+# (WithLegacyPreRFCProtocol). With no options they run RFC 9528, which is
+# the contract-defect fix 033 makes; there is no other no-option change.
+github.com/jahkeup/corecbor/edhoc: NewInitiator: changed from func(InitiatorConfig) (*Initiator, error) to func(InitiatorConfig, ...Option) (*Initiator, error)
+github.com/jahkeup/corecbor/edhoc: NewResponder: changed from func(ResponderConfig) (*Responder, error) to func(ResponderConfig, ...Option) (*Responder, error)

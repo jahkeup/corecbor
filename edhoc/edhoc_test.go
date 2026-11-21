@@ -174,8 +174,10 @@ func TestSuiteNegotiation_Match(t *testing.T) {
 	iPriv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	rPriv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 
+	// SUITES_I lists the Initiator's preference with the selected suite
+	// LAST (RFC 9528 §5.2.2): prefer 0, select 2.
 	initiator, err := NewInitiator(InitiatorConfig{
-		Suites:       []CipherSuite{Suite2, Suite0},
+		Suites:       []CipherSuite{Suite0, Suite2},
 		PrivateKey:   iPriv,
 		PeerPublic:   &rPriv.PublicKey,
 		ConnectionID: []byte{0x05},

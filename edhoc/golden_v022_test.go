@@ -35,6 +35,15 @@ var edhocSentinels = []g.Sentinel{
 
 func okOf(err error) string { return g.OK(err, edhocSentinels) }
 
+// newInitiator and newResponder build the endpoints the cases use, so
+// the same cases can also run under WithLegacyPreRFCProtocol
+// (golden_legacy_test.go). They're plain wrappers here because this
+// file is also compiled against v0.2.2 by tools/golden-regen.sh.
+var (
+	newInitiator = func(c edhoc.InitiatorConfig) (*edhoc.Initiator, error) { return edhoc.NewInitiator(c) }
+	newResponder = func(c edhoc.ResponderConfig) (*edhoc.Responder, error) { return edhoc.NewResponder(c) }
+)
+
 type party struct {
 	priv crypto.Signer
 	pub  crypto.PublicKey
@@ -99,13 +108,13 @@ func runHandshake(suite edhoc.CipherSuite, i, r party, iPeer, rPeer crypto.Publi
 	h := &handshake{}
 	fail := func(step string, err error) *handshake { h.step, h.err = step, err; return h }
 	var err error
-	h.init, err = edhoc.NewInitiator(edhoc.InitiatorConfig{
+	h.init, err = newInitiator(edhoc.InitiatorConfig{
 		Suites: []edhoc.CipherSuite{suite}, PrivateKey: i.priv, PeerPublic: iPeer, ConnectionID: []byte{0x0a},
 	})
 	if err != nil {
 		return fail("new-initiator", err)
 	}
-	h.resp, err = edhoc.NewResponder(edhoc.ResponderConfig{
+	h.resp, err = newResponder(edhoc.ResponderConfig{
 		Suites: []edhoc.CipherSuite{suite}, PrivateKey: r.priv, PeerPublic: rPeer, ConnectionID: []byte{0x0b},
 	})
 	if err != nil {
@@ -205,11 +214,11 @@ func edhocGoldenCases() []g.Case {
 			return runHandshake(s.suite, i, r, other.pub, i.pub).outcome()
 		})
 		add("edhoc/handshake/"+s.name+"/tampered-message2", func() string {
-			init, err := edhoc.NewInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{s.suite}, PrivateKey: i.priv, PeerPublic: r.pub, ConnectionID: []byte{0x0a}})
+			init, err := newInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{s.suite}, PrivateKey: i.priv, PeerPublic: r.pub, ConnectionID: []byte{0x0a}})
 			if err != nil {
 				return okOf(err)
 			}
-			resp, err := edhoc.NewResponder(edhoc.ResponderConfig{Suites: []edhoc.CipherSuite{s.suite}, PrivateKey: r.priv, PeerPublic: i.pub, ConnectionID: []byte{0x0b}})
+			resp, err := newResponder(edhoc.ResponderConfig{Suites: []edhoc.CipherSuite{s.suite}, PrivateKey: r.priv, PeerPublic: i.pub, ConnectionID: []byte{0x0b}})
 			if err != nil {
 				return okOf(err)
 			}
@@ -229,35 +238,35 @@ func edhocGoldenCases() []g.Case {
 
 	ed1, ed2 := edParty(1), edParty(2)
 	add("edhoc/config/initiator-no-suites", func() string {
-		_, err := edhoc.NewInitiator(edhoc.InitiatorConfig{PrivateKey: ed1.priv, PeerPublic: ed2.pub})
+		_, err := newInitiator(edhoc.InitiatorConfig{PrivateKey: ed1.priv, PeerPublic: ed2.pub})
 		return okOf(err)
 	})
 	add("edhoc/config/initiator-unsupported-suite", func() string {
-		_, err := edhoc.NewInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{1}, PrivateKey: ed1.priv, PeerPublic: ed2.pub})
+		_, err := newInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{1}, PrivateKey: ed1.priv, PeerPublic: ed2.pub})
 		return okOf(err)
 	})
 	add("edhoc/config/initiator-missing-keys", func() string {
-		_, err := edhoc.NewInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{edhoc.Suite0}})
+		_, err := newInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{edhoc.Suite0}})
 		return okOf(err)
 	})
 	add("edhoc/config/responder-missing-keys", func() string {
-		_, err := edhoc.NewResponder(edhoc.ResponderConfig{Suites: []edhoc.CipherSuite{edhoc.Suite0}})
+		_, err := newResponder(edhoc.ResponderConfig{Suites: []edhoc.CipherSuite{edhoc.Suite0}})
 		return okOf(err)
 	})
 	add("edhoc/config/responder-no-suites", func() string {
-		_, err := edhoc.NewResponder(edhoc.ResponderConfig{PrivateKey: ed2.priv, PeerPublic: ed1.pub})
+		_, err := newResponder(edhoc.ResponderConfig{PrivateKey: ed2.priv, PeerPublic: ed1.pub})
 		return okOf(err)
 	})
 
 	newResp := func(suites ...edhoc.CipherSuite) *edhoc.Responder {
-		r, err := edhoc.NewResponder(edhoc.ResponderConfig{Suites: suites, PrivateKey: ed2.priv, PeerPublic: ed1.pub, ConnectionID: []byte{0x0b}})
+		r, err := newResponder(edhoc.ResponderConfig{Suites: suites, PrivateKey: ed2.priv, PeerPublic: ed1.pub, ConnectionID: []byte{0x0b}})
 		if err != nil {
 			panic(err)
 		}
 		return r
 	}
 	newInit := func() *edhoc.Initiator {
-		i, err := edhoc.NewInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{edhoc.Suite0}, PrivateKey: ed1.priv, PeerPublic: ed2.pub, ConnectionID: []byte{0x0a}})
+		i, err := newInitiator(edhoc.InitiatorConfig{Suites: []edhoc.CipherSuite{edhoc.Suite0}, PrivateKey: ed1.priv, PeerPublic: ed2.pub, ConnectionID: []byte{0x0a}})
 		if err != nil {
 			panic(err)
 		}

@@ -22,9 +22,28 @@ const (
 	CredentialCWT
 )
 
+// Credential is an authentication credential (CRED_x, RFC 9528 §3.5.2).
+//
+// Type and CWTBytes are the v0.2 fields. The RFC 9528 path uses Raw,
+// IDCred and PublicKey; when they are empty it derives them: from
+// CWTBytes for CredentialCWT, or from the configured key as a CWT
+// Claims Set sent by value (kccs) for CredentialRPK.
 type Credential struct {
 	Type     CredentialType
 	CWTBytes []byte
+
+	// Raw is CRED_x exactly as it enters the transcript: the encoded
+	// CBOR item. For X.509 it is a byte string holding the DER
+	// certificate; for a CCS, the encoded claims set; for a CWT, the
+	// encoded token.
+	Raw []byte
+	// IDCred is how this credential is identified on the wire.
+	IDCred IDCred
+	// PublicKey is the authentication key bound by Raw: an
+	// ed25519.PublicKey or *ecdsa.PublicKey for signature methods, or
+	// a static DH key (*ecdh.PublicKey, or *ecdsa.PublicKey on the
+	// suite's curve) for static DH methods.
+	PublicKey crypto.PublicKey
 }
 
 const claimCnf = 8

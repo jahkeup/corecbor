@@ -25,18 +25,7 @@ const (
 	initiatorStateComplete
 )
 
-type InitiatorConfig struct {
-	Suites       []CipherSuite
-	PrivateKey   crypto.Signer
-	PeerPublic   crypto.PublicKey
-	ConnectionID []byte
-
-	Credential     *Credential
-	PeerCredential *Credential
-	CWTIssuerKey   crypto.PublicKey
-}
-
-type Initiator struct {
+type legacyInitiator struct {
 	cfg   InitiatorConfig
 	suite CipherSuite
 	sp    suiteParams
@@ -57,7 +46,7 @@ type Initiator struct {
 	prk4e3m     []byte
 }
 
-func NewInitiator(cfg InitiatorConfig) (*Initiator, error) {
+func newLegacyInitiator(cfg InitiatorConfig) (*legacyInitiator, error) {
 	if len(cfg.Suites) == 0 {
 		return nil, fmt.Errorf("%w: no suites specified", ErrUnsupportedSuite)
 	}
@@ -78,7 +67,7 @@ func NewInitiator(cfg InitiatorConfig) (*Initiator, error) {
 		cid[0] = cid[0] % 24
 	}
 
-	return &Initiator{
+	return &legacyInitiator{
 		cfg:          cfg,
 		suite:        selectedSuite,
 		sp:           getSuiteParams(selectedSuite),
@@ -87,7 +76,7 @@ func NewInitiator(cfg InitiatorConfig) (*Initiator, error) {
 	}, nil
 }
 
-func (i *Initiator) CreateMessage1() ([]byte, error) {
+func (i *legacyInitiator) CreateMessage1() ([]byte, error) {
 	if i.state != initiatorStateInit {
 		return nil, ErrStateViolation
 	}
@@ -116,7 +105,7 @@ func (i *Initiator) CreateMessage1() ([]byte, error) {
 	return raw, nil
 }
 
-func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
+func (i *legacyInitiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 	if i.state != initiatorStateSentMsg1 {
 		return nil, ErrStateViolation
 	}
@@ -167,7 +156,7 @@ func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 
 // ProcessMessage4 verifies optional message_4 key confirmation from the responder.
 // Only callable after ProcessMessage2 succeeds (initiator is in complete state).
-func (i *Initiator) ProcessMessage4(msg4 []byte) error {
+func (i *legacyInitiator) ProcessMessage4(msg4 []byte) error {
 	if i.state != initiatorStateComplete {
 		return ErrStateViolation
 	}
@@ -208,7 +197,7 @@ func (i *Initiator) ProcessMessage4(msg4 []byte) error {
 	return nil
 }
 
-func (i *Initiator) decryptMessage2(ciphertext []byte) ([]byte, error) {
+func (i *legacyInitiator) decryptMessage2(ciphertext []byte) ([]byte, error) {
 	k2e, err := edhocKDF(i.prk2e, i.th2, "K_2e", i.sp.AEADKeySize)
 	if err != nil {
 		return nil, err
@@ -235,7 +224,7 @@ func (i *Initiator) decryptMessage2(ciphertext []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
+func (i *legacyInitiator) verifyResponderSignature(plaintext2 []byte) error {
 	idCred, rest, err := decodeOneValue(plaintext2)
 	if err != nil {
 		return fmt.Errorf("%w: decoding ID_CRED_R: %v", ErrMessageFormat, err)
@@ -288,7 +277,7 @@ func (i *Initiator) verifyResponderSignature(plaintext2 []byte) error {
 	return nil
 }
 
-func (i *Initiator) encryptMessage3() ([]byte, error) {
+func (i *legacyInitiator) encryptMessage3() ([]byte, error) {
 	var idCredI []byte
 	var err error
 	if i.cfg.Credential != nil && i.cfg.Credential.Type == CredentialCWT {

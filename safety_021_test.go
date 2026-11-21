@@ -18,15 +18,6 @@ import (
 
 // Proposal 021: regression tests for the core codec safety fixes.
 
-func mustHex(t *testing.T, s string) []byte {
-	t.Helper()
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
 // D1: package-level Marshal/Unmarshal are safe for concurrent use.
 // Run under -race.
 func TestD1_PackageLevelConcurrency(t *testing.T) {

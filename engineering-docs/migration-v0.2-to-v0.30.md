@@ -154,6 +154,40 @@ unchanged): `VerifyMulti(..., ...VerifyPolicy)`,
 - `Validator.Validate` returns `ErrInvalidValidator` for a negative
   `Leeway` (021 D17); it used to tighten the validity window silently.
 
+## edhoc (033)
+
+The package implements RFC 9528 by default and reproduces the RFC 9529
+traces byte-for-byte. v0.2 implemented a pre-RFC draft, so **a v0.30
+peer does not interoperate with a v0.2 peer** unless one side passes
+`WithLegacyPreRFCProtocol()`.
+
+- **Wire and key schedule:** message_2 is one byte string with C_R
+  inside PLAINTEXT_2; transcript hashes, PRKs and MACs follow RFC 9528
+  and bind the credentials (CRED_x) and EAD; P-256 keys are sent as the
+  x-coordinate.
+- **OSCORE:** `ExportOSCORE` follows Appendix A.1. `SenderID` is now the
+  peer's connection identifier and `RecipientID` your own (v0.2 had them
+  swapped); `Export` is EDHOC_Exporter.
+- **SUITES_I:** `InitiatorConfig.Suites` lists preferences with the
+  selected suite **last** (v0.2 selected the first). Single-suite
+  configurations are unaffected. After an error message with ERR_CODE 2,
+  build the next value with `RetrySuites`.
+- **Errors:** a Responder that can't continue returns an `*ErrorMessage`
+  (send `MarshalCBOR()` to the peer); an Initiator that receives one
+  returns it. Both match `ErrPeerError`, and still `ErrUnsupportedSuite`
+  where v0.2 returned it.
+- **Credentials:** v0.2-style configs (signer + `PeerPublic`) keep
+  working: each side sends a CWT Claims Set holding its key by value,
+  and the peer checks it against `PeerPublic`. New: `Credential.Raw`,
+  `IDCred` and `PublicKey`; `Peers` (a `CredentialResolver`); methods 1–3
+  with `DHKey`; suites 1, 3–6 and 24; EAD items; `PRKOut`, `KeyUpdate`,
+  `OSCORE`, `Close`.
+- **State:** any error is terminal for the session and zeroizes its
+  secrets.
+
+`NewInitiator(cfg, ...Option)` and `NewResponder(cfg, ...Option)` gain
+optional parameters; existing calls compile unchanged.
+
 ## Deprecated legacy selectors
 
 All are `// Deprecated:` on arrival and removed no earlier than v0.32.0.
@@ -170,3 +204,4 @@ Selectors that weaken verification are never included in a
 | `WithLegacyIgnoreCritical()` | cose | ignore `crit` |
 | `WithLegacyMACHeaders()` | cose | v0.2 MAC header handling |
 | `WithLegacyEncryptHeaders()` | cose | v0.2 encrypt header handling |
+| `WithLegacyPreRFCProtocol()` | edhoc | the v0.2 pre-RFC protocol (talks only to v0.2 peers; never bundled) |

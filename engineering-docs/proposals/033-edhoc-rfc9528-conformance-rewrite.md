@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 033 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 004 (EDHOC), 022 (raw-byte preservation), 028 (COSE key API: `ParseKey`, ID_CRED header parsing), 031 (CWT hardening — CCS/CWT credential validation), 034 (compatibility policy) |
@@ -379,6 +379,70 @@ must be told about. Every wrap uses `%w`. The current
 
 ---
 
+## Implementation notes (protocol core, 2026-11-21)
+
+**Gate met.** Both RFC 9529 traces reproduce byte-for-byte
+(`edhoc/rfc9529_test.go`, which parses the vendored
+`engineering-docs/rfcs/rfc9529.txt` directly): message_1–4, TH_2/3/4,
+G_XY, PRK_2e/3e2m/4e3m, context_2/3, MAC_2/3, Signature_or_MAC_2/3,
+PLAINTEXT_2/3, KEYSTREAM_2, CIPHERTEXT_2/3, A_3/A_4, K_3/IV_3, K_4/IV_4,
+PRK_out, PRK_exporter, OSCORE Master Secret/Salt and Sender IDs, and the
+KeyUpdate outputs.
+
+- Trace 1 (§2): method 0, suite 0, x5t — full handshake in both roles.
+- Trace 2 (§3): method 3, suite 2, kid + CCS, including the ERR_CODE 2
+  round. **RFC inconsistency:** the rejected first message_1 (§3.1)
+  selects suite 6 (X25519) but carries a P-256 G_X. Our X25519 key is
+  right for suite 6; the test compares that message with G_X masked and
+  feeds the RFC's own bytes to the Responder.
+
+**Scope delivered beyond the Phase plan:** all four methods (static DH
+needs `DHKey`, or an `*ecdsa.PrivateKey` signer on the suite curve), and
+suites 0–6 and 24 (25 needs X448, which neither std nor x/crypto has).
+
+**API as implemented** (additive; apicheck clean with the two appended
+`...Option` parameters allowlisted):
+
+- New config fields: `Method`, `DHKey`, `Peers`, `EAD1`/`EAD3`
+  (`EAD2`/`EAD4` on the Responder), `AcceptCriticalEAD`, `Rand`, and on
+  `ResponderConfig` `AnyMethod` (the zero value still accepts only
+  method 0, as v0.2 did).
+- `Credential` gains `Raw`, `IDCred`, `PublicKey`. A v0.2-style config
+  (signer + `PeerPublic`) derives a CCS `{8: {1: COSE_Key}}` and sends
+  it by value (kccs); the peer checks its key against `PeerPublic`.
+- `IDCred` (KID, X5T, X5Chain, KCCS, KCWT), `ParseIDCred`, `EADItem`,
+  `ConnectionID`/`ConnectionIDFromInt`, `ErrorMessage` (+ `ErrPeerError`,
+  `ErrCode*`), `RetrySuites`, `OSCOREParams`, `PRKOut`, `KeyUpdate`,
+  `OSCORE`, `Close`, `PeerEAD`, `PeerCredential`,
+  `ProcessMessage2Context`/`ProcessMessage3Context`.
+- `OSCOREParams` carries `MasterSecretLen`/`MasterSaltLen` instead of the
+  sketch's AEAD/HKDF; `OSCOREContext` gains `AEAD` and `HKDF` as
+  proposed (HKDF is 0 for SHA-384 suites, which have no registered COSE
+  HKDF identifier).
+- **Replace when 028 lands:** `edhoc.X5T` is local and
+  `coseKeyOf`/`publicFromCOSEKey` (`edhoc/credrfc.go`) are minimal local
+  COSE_Key helpers. Both should move to cose's key API; since v0.30 is
+  unreleased, swapping `IDCred.X5T` to `*cose.X5T` before release is not
+  an API break against v0.2.2.
+
+**Compatibility:**
+
+- `NewInitiator`/`NewResponder` still fail fast with `ErrStateViolation`
+  when a party has no key or nothing to authenticate the peer against.
+- Error messages match `ErrPeerError`, plus `ErrUnsupportedSuite` for
+  ERR_CODE 2 and for an unsupported method (what v0.2 returned).
+- `WithLegacyPreRFCProtocol()` reproduces every v0.2.2 golden vector
+  with no allowlist (`TestGoldenLegacyReproducesV022`). The default path's
+  golden diffs are allowlisted under "proposal 033".
+- `Suites` now selects the LAST entry (RFC 9528 §5.2.2), a contract
+  defect fix; multi-suite v0.2 configs that relied on "first" need
+  reordering (migration guide).
+
+**Not yet done (033 stays In-Progress):** RFC 9668 CoAP transport
+helpers; x5chain path validation and x5t lookup beyond a resolver or a
+pinned `PeerCredential`; the README module row still needs the
+"experimental" label (outside the protocol-core change).
+
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
@@ -554,3 +618,4 @@ Phase A doesn't land in a reasonable window, mark the module
 | 2026-11-20 | Initial draft from 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | In-Progress: protocol core per RFC 9528, gated on RFC 9529 traces (both pass); implementation notes | corecbor maintainers |

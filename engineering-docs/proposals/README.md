@@ -16,7 +16,6 @@ proposal lifecycle.
 | [017](017-cose-encoder-reuse.md) | 2 | Draft | COSE encoder reuse strategy | corecbor maintainers | 001, 016 | 2026-05-22 |
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 | [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
-| [020](020-default-decode-recovery.md) | 1 | Draft | Default-path decode recovery and residual throughput fixes | corecbor maintainers | 016, 018, 019 | 2026-05-24 |
 | [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
 | [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
 | [028](028-cose-signing-and-key-api.md) | 3 | Draft | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 002, 011, 027 | 2026-11-20 |
@@ -31,6 +30,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [020](020-default-decode-recovery.md) | 1 | Closed | Default-path decode recovery | corecbor maintainers | 2026-11-21 | Internal auto-reset arena by default; all §9 targets met on the default path (re-verified 2026-11-21). |
 | [035](035-invalid-utf8-text-policy.md) | 1 | Closed | Caller-selected representation of text that is not valid UTF-8 | corecbor maintainers | 2026-11-21 | Reject/Allow/Replace/Lossless on encoder and decoder; TextLossless/AsText; tags 272–274; nested-text validation fixed. |
 | [024](024-serialization-profiles-alignment.md) | 1 | Closed | Serialization alignment and caller-selected map key identity | corecbor maintainers | 2026-11-21 | Erratum 8589; one key-identity rule at every map size + WithMapKeyIdentity/KeepDuplicateMapKeys; preferred bignums; CTAP2 NaN; RequireDeterministic; Experimental PreferredPlus. Strict >16-key decode ~+15% accepted. |
 | [023](023-strict-decode-policy-and-errors.md) | 1 | Closed | Strict decode policy (tag allowlist) and structured errors | corecbor maintainers | 2026-11-21 | StrictDecoder matches spec §3.2; WithAllowedTags/TagsModeled/TagsWellKnown; *DecodeError with offset (+ optional path), *UnmarshalTypeError; err113 enforces sentinel wrapping. |

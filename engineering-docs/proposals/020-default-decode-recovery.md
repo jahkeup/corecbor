@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 020 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-05-24 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 016 (struct Value), 018 (arena), 019 (encode recovery) |
@@ -347,3 +347,7 @@ the rare case cleanly.
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-24 | Initial draft | corecbor maintainers |
+
+## Closure (2026-11-21)
+
+Implemented in `deb69de`; acceptance re-verified on main `515e4f8` (Apple M4 Pro): DecodeScalars ≈1.37 GiB/s (≥400 MB/s), DecodeNestedMapStrict ≈124 MiB/s (≥80 MB/s), EncodeScalars ≈2.4 GiB/s (≥1700 MB/s), StreamWriteValueUint ≈3 ns / 0 allocs (≤5 ns); `make check` and `make fuzz` green in CI. Arena-lifetime semantics are documented on `Decoder` (021 D1/D2 made `Unmarshal` results independent of the arena).

@@ -67,11 +67,18 @@ new encoder.
 | Mode | Determinism | Map sort | Float encoding | Length encoding | Use case |
 |---|---|---|---|---|---|
 | `Permissive` (default) | none guaranteed | insertion order | shortest preserving | shortest | Casual encoding; round-trip safe but bytes may vary across runs |
-| `Canonical` | byte-identical for equal inputs | bytewise-lex on bytes of encoded keys | shortest preserving | shortest | RFC 7049 "Canonical CBOR" (legacy spec) |
-| `CTAP2` | byte-identical for equal inputs | bytewise-lex on encoded keys, then by length | float64 only | shortest | FIDO/WebAuthn |
+| `Canonical` | byte-identical for equal inputs | length-first (shorter encoded key first), then bytewise-lex | shortest preserving | shortest | RFC 7049 §3.9 "Canonical CBOR" (legacy spec) |
+| `CTAP2` | byte-identical for equal inputs | length-first, then bytewise-lex | float64 only (NaN as `fb7ff8000000000000`) | shortest | FIDO/WebAuthn |
 | `CoreDeterministic` | byte-identical for equal inputs | bytewise-lex on encoded keys (keys sorted as encoded byte strings) | shortest preserving (incl. float16 if lossless) | shortest preserving | RFC 8949 §4.2.1 — the modern default for new protocols |
+| `PreferredPlus` (Experimental) | byte-identical scalars; map order as supplied | insertion order | shortest preserving, NaN as `f97e00` | shortest | draft-ietf-cbor-serialization-13 §4 "Preferred-Plus"; provisional until the draft is published (proposal 024, 034 Draft class) |
 
 Mode names match RFC terminology; do not invent synonyms.
+
+Serialization references: `CoreDeterministic` output is byte-identical
+to the Deterministic Serialization of draft-ietf-cbor-serialization-13
+§5 (RFC 8949 §4.2.1 with NaN as `f97e00`), and `PreferredPlus` to its
+Preferred-Plus Serialization. Checking decoders for both are opt-in
+(`RequireDeterministic()`, `RequirePreferredPlus()`, proposal 024).
 
 ### 2.2 Required RFC 8949 conformance
 
@@ -87,7 +94,12 @@ The strict encoder MUST:
   (`AllowNonFiniteFloats bool`) to permit NaN/Inf encoding for callers who
   consciously want it.
 - For deterministic modes, normalize NaN to a single canonical bit pattern
-  (RFC 8949 §3.4.7.2 / §4.2.2).
+  (RFC 8949 §3.4.7.2 / §4.2.2): `f97e00`, or `fb7ff8000000000000` in CTAP2
+  (float64 only).
+- For deterministic modes, write tag 2/3 bignums in preferred
+  serialization (RFC 8949 §3.4.3): no leading zero bytes, and values that
+  fit 64 bits as major type 0/1. `WithLegacyBignumPassthrough()`
+  (Deprecated) restores v0.2 output.
 - Encode strings (major 3) as valid UTF-8. Reject non-UTF-8 input strings
   with a typed error in strict modes; offer a per-encoder knob
   (`AllowInvalidUTF8 bool`) to permit them in Permissive mode.
@@ -234,7 +246,7 @@ decoder accepts; the strict decoder (or relevant `Reject*` knob) refuses.
 | Indefinite-length arrays/maps | same | accumulate to definite-length Value | `RejectIndefiniteLength()` |
 | Non-shortest argument encoding (e.g., `1` encoded as `0x18 0x01` instead of `0x01`) | older encoders, manual byte-construction | accept | `RejectNonShortestArgs()` |
 | Float16 → Float32 promotion on decode | RFC 8949 permits decoders to promote | promote, no precision loss | n/a (always promotes; Float16 is read-only) |
-| Duplicate map keys | RFC 8949 §5.6 says "MUST NOT" but doesn't say "decoder MUST reject" | last-write-wins | `RejectDuplicateMapKeys()` |
+| Duplicate map keys | RFC 8949 §5.6 says "MUST NOT" but doesn't say "decoder MUST reject" | last-write-wins; keys compared in the data model (RFC 8949 §5.6.1 + erratum 8589) at every map size | `RejectDuplicateMapKeys()`, `KeepDuplicateMapKeys()`; `WithMapKeyIdentity(KeyIdentityEncoded)` compares encoded bytes instead (proposal 024) |
 | Invalid UTF-8 in text strings | strict spec violation; common in older libs | accept; preserve raw bytes | `RejectInvalidUTF8()` |
 | Unknown tag IDs | spec permits | wrap in opaque `Tag{ID, Value}` | `RejectUnknownTags()` |
 | Self-describe tag (55799) at the head | RFC 8949 §3.4.6 magic | strip silently | n/a |
@@ -359,6 +371,9 @@ forbidden.
 | `ErrInvalidMode` | encoder constructed with unknown mode | encoder |
 | `ErrTypeMismatch` | CBOR value can't be stored in the Go target type; Cursor read of the wrong major type | reflection / cursor (proposal 023) |
 | `ErrInvalidKind` | `Value` with a Kind the encoder doesn't support | encoder (proposal 023) |
+| `ErrNotPreferred` | input not in preferred serialization (wraps `ErrNonShortest` / `ErrIndefiniteLength` where they apply) | decoder (checking, proposal 024) |
+| `ErrNotDeterministic` | map keys out of deterministic order, in a checking decoder or deterministic `StreamEncoder` | decoder (checking) / stream encoder |
+| `ErrInvalidOption` | contradictory options (e.g. `KeepDuplicateMapKeys` + `RejectDuplicateMapKeys`) | decoder |
 
 Decoder errors for malformed or rejected input are `*DecodeError`
 (`Offset`, optional `Path` via `WithErrorPath()`, `Err` = the sentinel);
@@ -494,7 +509,7 @@ Each MUST have a typed test plus fuzz coverage.
 | Float negative-zero | Encoded as `0xf90000` in float16-shortest; round-trip MUST distinguish from `+0.0`. |
 | NaN bit-pattern variants | Strict mode normalizes; permissive mode preserves. |
 | Indefinite-length text-string with chunks containing partial UTF-8 codepoints | Reassembly MUST validate the concatenated string, not each chunk individually. |
-| Map with duplicate keys at different positions | Last-write-wins under default; rejection under `RejectDuplicateMapKeys()`. Both MUST be deterministic. |
+| Map with duplicate keys at different positions | Last-write-wins under default (the repeated key keeps its first position); rejection under `RejectDuplicateMapKeys()`; every entry kept under `KeepDuplicateMapKeys()`. "Same key" follows the configured `KeyIdentity` and doesn't depend on map size. All MUST be deterministic. |
 | Adversarially nested array (depth 10000) | `MaxNestingDepth` triggers BEFORE stack overflow. |
 | Adversarial array length (`9b ffffffffffffffff`) declaring 2^64 elements | Length is read but the allocation is gated on the arrival of bytes; never pre-allocates. |
 | Truncated input mid-tag | `ErrTruncated` with offset; no partial Value returned. |

@@ -15,6 +15,11 @@
 //     encoding, map keys sorted length-first then bytewise-lex.
 //   - [ModeCTAP2]: FIDO/WebAuthn CTAP2 canonical — map keys sorted
 //     length-first, all floats forced to float64.
+//   - [ModePreferredPlus] (Experimental): draft-ietf-cbor-serialization-13
+//     preferred-plus — deterministic scalars, maps in insertion order.
+//
+// The deterministic modes write tag 2/3 bignums in RFC 8949 §3.4.3
+// preferred form (integers when they fit 64 bits).
 //
 // Options [AllowNonFiniteFloats] and [AllowInvalidUTF8] relax the default
 // strict validation on the encoder side.

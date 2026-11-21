@@ -96,8 +96,9 @@ func (h *Headers) put(label, value any) {
 }
 
 // Raw returns the protected bucket bytes these headers were decoded
-// from, or nil for headers built locally or modified since decoding.
-// The returned slice must not be modified.
+// from, or that a Signer signed over, or nil for headers built locally
+// and not yet signed, or modified since. The returned slice must not be
+// modified.
 func (h *Headers) Raw() []byte {
 	return h.raw
 }

@@ -144,6 +144,25 @@ goroutine (for example from a `sync.Pool`).
 | Multi-recipient MAC/decrypt require a protected, allow-listed `alg` (027 H2/H7) | header `alg` trusted, including HMAC 256/64 | `WithMACAlgorithms(...)` to allow more; legacy selectors above |
 | Empty HMAC keys are rejected; PBES2 iteration count capped at 1,000,000 by default (`PBES2Key.MaxCount`) (027) | accepted / unbounded | `MaxCount: -1` disables the cap |
 | `Headers.Set(1, AlgES256)` encodes the value (−7), not null; `SetChecked` returns errors; `Set` is deprecated (027 H9) | typed values became null | n/a |
+| `SignMulti` honors its `opts` for body headers and external AAD (028) | accepted and ignored | none (calls without opts are unchanged) |
+| Ed25519 signing works with any `crypto.Signer` (KMS/HSM), not only `ed25519.PrivateKey` (028) | `ErrInvalidKey` | n/a (newly accepted) |
+| `NewVerifier` accepts `*rsa.PublicKey` (≥ 2048 bits): PS256/384/512 by default, RS256/384/512 only via `WithAllowedAlgorithms`; the `alg` must be protected (028) | unsupported key type | n/a (newly accepted) |
+| `(*Key).PublicKey` rejects EC2 coordinates longer than the curve size (028) | silently truncated into a different point | none (short coordinates are still left-padded) |
+| `*cose.Key` implements `corecbor.Marshaler`/`Unmarshaler`, so `Marshal` of a struct holding a `Key` writes the COSE_Key (028) | an empty map (only unexported fields) | n/a |
+| A signed message's `Protected.Raw()` returns the bytes the signature covers (028) | nil until decoded | n/a |
+
+New in 028 (additive): `WithProtectedHeaders`, `WithUnprotectedHeaders`,
+`Signer.Sign1`/`Sign1Context`, `SignContext`, `SignDetached`,
+`SignMultiDetached`, `VerifyMultiDetached`, `ContextSigner`; typed
+header accessors (content type, typ, CWT Claims, x5bag/x5chain/x5t/x5u,
+IV, Partial IV, kid context, kcwt, kccs, 3161-ttc/ctt), `CertHash`,
+`Lookup`; COSE_Key `ParseKey`, `ParseKeyPrefix`, `MarshalCBOR`,
+accessors, `Thumbprint` (RFC 9679), `Public`, `KeyDeriver`, `KeySet`,
+`ParseKeySet`, `NewSignerFromKey`/`NewVerifierFromKey` (enforce
+`key_ops`), `KeyFromJWK`/`JWK`; `KeyResolver`, `KeySetResolver`,
+`VerifySign1`/`VerifySign1Detached`; RSA, AKP key types; X448/Ed448
+curves (parse only). `ParseKey` rejects short EC2 coordinates unless
+`AllowShortCoordinates()`.
 
 Functions with appended optional parameters (existing calls compile
 unchanged): `VerifyMulti(..., ...VerifyPolicy)`,

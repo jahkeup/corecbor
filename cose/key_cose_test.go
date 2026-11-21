@@ -15,6 +15,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/jahkeup/corecbor"
@@ -81,6 +82,23 @@ func TestParseKeyPrefixWebAuthn(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ParseKey shares one decoder; concurrent parses must not race (-race).
+func TestParseKeyConcurrent(t *testing.T) {
+	data := mustHexBytes(t, webauthnES256AuthData)[32+1+4+16+2+32:]
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 200 {
+				if _, _, err := ParseKeyPrefix(data); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		})
+	}
+	wg.Wait()
 }
 
 // RFC 9679 §6.

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 028 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002, 011, 027 (verification policy, `Headers.SetChecked`), 034 (compatibility policy) |
@@ -283,6 +283,66 @@ No new sentinels beyond 027. `ErrInvalidKey` gains these cases:
 
 `ErrMalformed` covers a COSE_Key that is not a map and duplicate labels.
 
+### Implementation notes (2026-11-21)
+
+Decisions taken while implementing, for review:
+
+- **Open questions resolved.** `KeyResolver` returns `[]*Key`, so each
+  key's `alg` and `key_ops` apply (via `NewVerifierFromKey`).
+  `Sign1(msg)` merges the message's headers over the Signer's defaults
+  (message values win); `Sign1Context` is its context variant.
+- **Header labels** were re-verified against the IANA COSE registry
+  (fetched 2026-11-21); all match the table above. Hash and RSA
+  algorithm identifiers (`AlgSHA*`, `AlgPS*`, `AlgRS*`) were verified the
+  same way and added, because x5t matching and RSA verification need
+  them.
+- **RSA keys** don't imply one algorithm, so an RSA `Verifier` takes the
+  `alg` from the protected bucket only and accepts it if allowed:
+  PS256/384/512 by default, RS256/384/512 only via
+  `WithAllowedAlgorithms` (or a COSE_Key `alg`). `NewVerifier` now accepts
+  `*rsa.PublicKey` of at least 2048 bits (input v0.2.2 rejected).
+- **Signed messages carry their protected bytes.** `Sign` reuses the
+  Signer's pre-encoded bucket as the message's `Raw()`, so marshaling
+  writes exactly the signed bytes. `Raw()`'s doc was updated (it was
+  added in 027, after v0.2.2).
+- **`SignMulti` opts:** `WithProtectedHeaders`/`WithUnprotectedHeaders`
+  set the body headers; `WithSignerExternalData` sets the external AAD
+  for every signature, overriding each signer's own.
+- **COSE_Key parsing** also rejects text that isn't valid UTF-8 (found by
+  `FuzzParseKey`: such keys couldn't be re-encoded). Compressed EC2
+  points are stored decompressed, so `MarshalCBOR` writes the
+  uncompressed form. Text-labeled parameters are kept for round trips.
+- **`KeyDeriver`** covers symmetric keys (direct, AES-KW). ECDH-ES from
+  EC2/OKP keys is left to 029.
+- **JWK:** a JWK `use` member becomes the equivalent `key_ops`, so a
+  usage restriction survives conversion; oct `sign`/`verify` mean MAC
+  create/verify; a kid that isn't UTF-8 is written base64url; an unknown
+  JOSE `alg` is `ErrUnsupportedAlgorithm`.
+
+Vectors used: RFC 9679 §6 (thumbprint), W3C WebAuthn L3 §16.7 packed
+ES256 (`ParseKeyPrefix`; the parsed key verifies the vector's assertion
+signature), RFC 7517 Appendix A and RFC 8037 Appendix A (JWK),
+cose-wg/Examples `x509-examples/signed-01..05` and
+`rsa-pss-examples/rsa-pss-01..03`.
+
+Not done in this pass:
+
+- **RSA signing.** It's verify-only; `NewSigner` with an RSA key returns
+  `ErrUnsupportedAlgorithm`.
+- **Ed448 and X448.** They parse and marshal, but have no stdlib
+  implementation, so there's no sign/verify or ECDH.
+- **`TestMDLIssuerAuth`** (non-gating; the vector's license is unconfirmed).
+- **Legacy v0.2.2 key fixtures.** Short-coordinate behavior is tested
+  directly, not against `testdata/legacy-v0.2.2/` files.
+- **`BenchmarkParseKeyEC2` misses its ≤10 allocs target:** it measures
+  20 allocs, 2.1 KB, ~0.84 µs (Apple M4 Pro). About half are the
+  mandatory on-curve check (`ecdsa.ParseUncompressedPublicKey`
+  internals). Getting there took a shared arena-free decoder (the first
+  version built a decoder with its 40 KB internal arena per call:
+  29 allocs, 42 KB, 13.9 µs), no redundant `Clone`, and unboxed labels.
+  `BenchmarkSign1ES256` with extra protected headers is +1 alloc over
+  alg-only, meeting its target.
+
 ---
 
 ## Compatibility selection
@@ -430,3 +490,4 @@ No `...Option` parameters are appended to existing functions.
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | Phases 1–3 implemented (RSA signing, mDL vector, benchmarks remain); implementation notes; status In-Progress | corecbor maintainers |

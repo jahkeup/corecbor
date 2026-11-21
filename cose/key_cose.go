@@ -71,9 +71,12 @@ func AllowShortCoordinates() KeyOption {
 // newKeyDecoder is the decoder for COSE_Key and COSE_KeySet: duplicate
 // labels are rejected (RFC 9052 §7), and so is text that isn't valid
 // UTF-8 (RFC 8949 §3.1), so every parsed key can be re-encoded.
-func newKeyDecoder() *corecbor.Decoder {
-	return corecbor.NewDecoder(corecbor.RejectDuplicateMapKeys(), corecbor.RejectInvalidUTF8())
-}
+//
+// Without the internal arena a Decoder keeps no per-call state, so one
+// shared instance is safe for concurrent use.
+func newKeyDecoder() *corecbor.Decoder { return keyDecoder }
+
+var keyDecoder = corecbor.NewDecoder(corecbor.RejectDuplicateMapKeys(), corecbor.RejectInvalidUTF8(), corecbor.WithoutInternalArena())
 
 // ParseKey decodes one COSE_Key (RFC 9052 §7). data must hold exactly
 // one item. Duplicate labels are ErrMalformed; a missing or unsupported
@@ -140,6 +143,26 @@ func (k *Key) toValue() (corecbor.Value, error) {
 	return corecbor.MakeMapFromSlice(entries), nil
 }
 
+// intLabel reads an integer COSE label without boxing it.
+func intLabel(k corecbor.Value) (int64, error) {
+	switch k.Kind {
+	case corecbor.KindUint:
+		if k.UintVal() <= math.MaxInt64 {
+			return int64(k.UintVal()), nil
+		}
+	case corecbor.KindNegInt:
+		if k.NegIntVal() <= math.MaxInt64 {
+			return -1 - int64(k.NegIntVal()), nil
+		}
+	default:
+		return 0, fmt.Errorf("%w: key label must be int or tstr", ErrMalformed)
+	}
+	return 0, fmt.Errorf("%w: key label out of range", ErrMalformed)
+}
+
+// keyFromValue builds a Key from a decoded COSE_Key. v must own its
+// memory (decoded by newKeyDecoder: no arena, no zero-copy), because the
+// Key keeps references to its byte strings and nested values.
 func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 	var cfg keyParseConfig
 	for _, o := range opts {
@@ -158,18 +181,17 @@ func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 			if _, dup := k.text[e.Key.TextVal()]; dup {
 				return nil, fmt.Errorf("%w: key label %q repeated", ErrMalformed, e.Key.TextVal())
 			}
-			k.text[e.Key.TextVal()] = e.Value.Clone()
+			k.text[e.Key.TextVal()] = e.Value
 			continue
 		}
-		label, err := labelToGo(e.Key)
+		n, err := intLabel(e.Key)
 		if err != nil {
 			return nil, err
 		}
-		n := label.(int64)
 		if _, dup := k.params[n]; dup {
 			return nil, fmt.Errorf("%w: key label %d repeated", ErrMalformed, n)
 		}
-		k.params[n] = cborToGo(e.Value.Clone())
+		k.params[n] = cborToGo(e.Value)
 	}
 	if err := k.validate(cfg); err != nil {
 		return nil, err

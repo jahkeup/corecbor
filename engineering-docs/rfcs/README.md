@@ -42,6 +42,7 @@ The files are checked in for three reasons:
 | `rfc8392.txt` | CBOR Web Token (CWT) | Proposed Standard | The `cwt` module's base spec: claims, tag 61, validation (031). |
 | `rfc8747.txt` | Proof-of-Possession Key Semantics for CBOR Web Tokens (CWTs) | Proposed Standard | `cnf` claim: COSE_Key, Encrypted_COSE_Key, kid (031). |
 | `rfc9200.txt` | Authentication and Authorization for Constrained Environments Using the OAuth 2.0 Framework (ACE-OAuth) | Proposed Standard | `aud` arrays, `scope`, `ace_profile`, `cnonce`, `exi` claims (031). |
+| `rfc9668.txt` | Using EDHOC with CoAP and OSCORE | Proposed Standard | EDHOC + OSCORE combined request framing and the EDHOC option; the §3.4 example is a test vector (`edhoc/coap_test.go`, proposal 033). |
 
 ## Refresh procedure
 
@@ -50,7 +51,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200 9668; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

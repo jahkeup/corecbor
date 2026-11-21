@@ -303,6 +303,18 @@ func FuzzTagPreservation(f *testing.F) {
 			t.Fatalf("re-decode failed: %v (encoded: %x)", err, encoded)
 		}
 
+		// Deterministic modes write tag 2/3 bignums in RFC 8949 §3.4.3
+		// preferred form, as integers when they fit 64 bits (proposal
+		// 024), so a bignum keeps its numeric value rather than its tag.
+		if (tag.TagID() == TagUnsignedBignum || tag.TagID() == TagNegativeBignum) && tag.TagInner().Kind == KindBytes {
+			want, err1 := AsBigIntAny(tag)
+			got, err2 := AsBigIntAny(v2)
+			if err1 != nil || err2 != nil || want.Cmp(got) != 0 {
+				t.Fatalf("bignum value changed: %v -> %v (%v, %v; encoded %x)", want, got, err1, err2, encoded)
+			}
+			return
+		}
+
 		tag2 := v2
 		if v2.Kind != KindTag {
 			t.Fatalf("re-decoded value is kind %d, not Tag", v2.Kind)

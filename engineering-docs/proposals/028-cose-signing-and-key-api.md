@@ -9,7 +9,7 @@
 | **Status** | Draft |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
-| **Depends on** | proposals: 002, 011, 027 (verification policy, `Headers.Set` error), 034 (compatibility policy) |
+| **Depends on** | proposals: 002, 011, 027 (verification policy, `Headers.SetChecked`), 034 (compatibility policy) |
 | **Supersedes** | none (fills the `Key`/`KeySet` surface promised in 002:347) |
 | **Spec sections touched** | none in `encoder-decoder-spec.md`; cose module contract only |
 
@@ -104,7 +104,7 @@ chain.
 ### Public API surface
 
 ```go
-// ---- header construction (all return error per 027)
+// ---- header construction (new methods; all return error, following 027's SetChecked)
 func (h *Headers) SetContentType(ct any) error  // uint64 or string
 func (h *Headers) SetType(typ any) error        // RFC 9596
 func (h *Headers) SetCWTClaims(claims corecbor.Value) error // RFC 9597; must be a map
@@ -138,7 +138,9 @@ type ContextSigner interface {
 	SignContext(ctx context.Context, rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
 }
 
-// SignMulti honors per-call options for body headers.
+// SignMulti (signature unchanged from v0.2.2) starts honoring its
+// existing opts parameter for body headers. v0.2.2 accepted and ignored
+// it, so calls that pass no options are unchanged.
 func SignMulti(payload []byte, signers []*Signer, opts ...SignerOption) (*Sign, error)
 
 // ---- COSE_Key
@@ -172,18 +174,13 @@ func ParseKeyPrefix(data []byte, opts ...KeyOption) (k *Key, rest []byte, err er
 // KeyOption adjusts COSE_Key parsing.
 type KeyOption func(*keyParseConfig)
 
-// WithLegacyShortCoordinates left-pads EC2/OKP coordinates shorter than
-// the curve size instead of rejecting them, as v0.2 did. RFC 9053
-// §7.1.1 requires leading zero octets to be preserved.
-//
-// Deprecated: non-conformant input; removed no earlier than v0.32.0.
-func WithLegacyShortCoordinates() KeyOption
-
-// CompatV02Keys bundles the KeyOption selectors that reproduce v0.2
-// COSE_Key acceptance: WithLegacyShortCoordinates.
-//
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
-func CompatV02Keys() KeyOption
+// AllowShortCoordinates makes ParseKey/ParseKeyPrefix left-pad EC2
+// coordinates shorter than the curve size instead of rejecting them,
+// for peers that strip leading zeros. RFC 9053 §7.1.1 requires the
+// zeros to be preserved, so the new parsers reject short coordinates by
+// default. The existing (*Key).PublicKey keeps left-padding, as in
+// v0.2.2.
+func AllowShortCoordinates() KeyOption
 func (k *Key) MarshalCBOR() ([]byte, error) // CoreDeterministic
 func (k *Key) UnmarshalCBOR(data []byte) error
 
@@ -252,17 +249,20 @@ func VerifySign1(ctx context.Context, msg *Sign1, r KeyResolver, opts ...Verifie
 4. **COSE_Key parsing.**
    - Parsing goes through the 027 decode limits, rejects duplicate labels,
      and requires `kty`.
-   - Coordinates must be exactly the curve size (RFC 9053 §7.1.1); fixes
-     the truncation row above. Oversize coordinates are always rejected
-     (v0.2 silently truncated them, which is a defect). Short coordinates
-     are rejected by default; `WithLegacyShortCoordinates()` left-pads
-     them, as v0.2's `padLeft` did.
+   - In the new `ParseKey`/`ParseKeyPrefix`, coordinates must be exactly
+     the curve size (RFC 9053 §7.1.1); `AllowShortCoordinates()` left-pads
+     short ones.
+   - Oversize coordinates are rejected everywhere, including the existing
+     `(*Key).PublicKey` (v0.2.2 silently truncated them via `padLeft` +
+     `copy`, `key.go:95-96`, producing a different point — a Safety
+     defect). Short coordinates keep being left-padded by
+     `(*Key).PublicKey`, as in v0.2.2.
    - EC2 point compression (`y` as bool, RFC 9053 §7.1.1) is decompressed
      via `crypto/ecdh` or `elliptic`, then validated as on-curve.
    - Private keys are validated against their public part when both are
      present.
 5. **`key_ops`.**
-   - `NewSigner` and `NewVerifier` grow `FromKey` variants:
+   - `NewSigner` and `NewVerifier` are unchanged. New `FromKey` variants:
      `NewSignerFromKey(*Key)` and `NewVerifierFromKey(*Key)`.
    - These check `Permits(KeyOpSign)` or `Permits(KeyOpVerify)`, and the
      key's `alg` when present. A failed check returns `ErrInvalidKey`.
@@ -288,23 +288,29 @@ No new sentinels beyond 027. `ErrInvalidKey` gains these cases:
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
-Most of this proposal is new API. The visible changes are in COSE_Key
-parsing. Signing-algorithm emission defaults are owned by 029.
+Almost all of this proposal is new API. Existing identifiers
+(`NewSigner`, `NewVerifier`, `SignMulti`, `(*Key).PublicKey`,
+`(*Key).Signer`, `Headers` accessors) keep their v0.2.2 signatures and
+semantics except for the defect rows below. Signing-algorithm emission
+is owned by 029.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| EC2/OKP coordinates longer than the curve size rejected | Defect (silent truncation, `key.go:95-96`) | rejected | none — defect |
-| EC2/OKP coordinates shorter than the curve size rejected | Conformance (RFC 9053 §7.1.1) | rejected | `func WithLegacyShortCoordinates() KeyOption` — Deprecated |
-| COSE_Key duplicate labels rejected; `kty` required | Conformance (RFC 9052 §7) | rejected | none beyond 027's `DecodeLimits.AllowDuplicateLabels` (not bundled) |
-| `key_ops` / key `alg` enforced | Additive — only through new `NewSignerFromKey`/`NewVerifierFromKey` | n/a | n/a (existing constructors unchanged) |
-| RS256 verify only when listed in `WithAllowedAlgorithms` | Additive (new algorithm) | not accepted | `WithAllowedAlgorithms(AlgRS256)` |
-| Ed25519 `crypto.Signer` (KMS) support | Defect (type assertion, `sign.go:80`) | supported | none — defect |
-| Caller-supplied protected `alg` mismatching the key → `ErrAlgorithmMismatch` | Additive (new option) | error | n/a |
-| Headers, detached signing, KeySet, resolvers, JWK, thumbprint, RSA/AKP key types | Additive | n/a | n/a |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| `(*Key).PublicKey` rejects EC2 coordinates longer than the curve size | Safety defect (silent truncation to a different point, `key.go:95-96`) | — | error | none |
+| `(*Key).PublicKey` short coordinates | unchanged | — | left-padded, as v0.2.2 | n/a |
+| New `ParseKey`/`ParseKeyPrefix` reject short coordinates | Additive (new identifier at current standard, RFC 9053 §7.1.1) | — | n/a | `AllowShortCoordinates() KeyOption` (interop, not deprecated) |
+| New parsers reject duplicate labels and require `kty` | Additive (RFC 9052 §7) | — | n/a | none |
+| `SignMulti` honors its existing `opts` for body headers | Contract defect | `cose/sign_multi.go:12` signature accepts `opts ...SignerOption` but v0.2.2 ignored them | no-option calls unchanged | none |
+| Ed25519 `crypto.Signer` that isn't `ed25519.PrivateKey` (KMS) | Contract defect | `NewSigner(key crypto.Signer, …)` (`sign.go:35`) accepts any `crypto.Signer`; v0.2.2 failed at `sign.go:80` | supported (v0.2.2 errored; now succeeds) | none |
+| `(*Key).MarshalCBOR`/`UnmarshalCBOR` | Additive | — | changes reflection output for a struct embedding `cose.Key` from `{}` (v0.2.2: only unexported fields, so an empty map) to the real COSE_Key. Listed in the migration guide | n/a |
+| `key_ops` / key `alg` enforced | Additive — only through new `NewSignerFromKey`/`NewVerifierFromKey` | — | existing constructors unchanged | n/a |
+| RS256 verify only when listed in `WithAllowedAlgorithms` | Additive (new algorithm) | — | n/a | `WithAllowedAlgorithms(AlgRS256)` |
+| Caller-supplied protected `alg` mismatching the key → `ErrAlgorithmMismatch` | Additive (new option) | — | n/a | n/a |
+| Headers, detached signing, KeySet, resolvers, JWK, thumbprint, RSA/AKP key types | Additive | — | n/a | n/a |
 
-Bundle: `cose.CompatV02Keys() KeyOption` = `WithLegacyShortCoordinates()`.
-It is interop-only (padding doesn't weaken verification), so it is
-eligible for bundling under 027's rule.
+No `CompatV02Keys` bundle is needed: existing key identifiers keep their
+v0.2.2 acceptance, and the stricter behavior lives only in new parsers.
+No `...Option` parameters are appended to existing functions.
 
 ---
 
@@ -329,8 +335,10 @@ eligible for bundling under 027's rule.
 | X5Chain accepts single-bstr and array forms | `TestX5ChainForms` | Yes |
 | RFC 9360, 9596, 9597, 9679, 9921 vendored under `engineering-docs/rfcs/` | files present + README rows | Yes |
 | mDL MSO vector (ISO 18013-5 Annex D) verifies | `TestMDLIssuerAuth` | No (license of the vector to be confirmed) |
-| A v0.2.2-accepted COSE_Key with a 31-byte P-256 `x` fails `ParseKey` by default and parses with `WithLegacyShortCoordinates()` (same public key as v0.2.2) | `TestCompatShortCoordinates` vs `testdata/legacy-v0.2.2/` | Yes |
-| `WithLegacyShortCoordinates` and `CompatV02Keys` carry `// Deprecated:` with removal floor v0.32.0 | staticcheck SA1019 fixture | Yes |
+| A v0.2.2-accepted COSE_Key with a 31-byte P-256 `x` fails `ParseKey` by default and parses with `AllowShortCoordinates()` to the same public key v0.2.2 produced | `TestParseKeyShortCoordinates` vs `testdata/legacy-v0.2.2/` | Yes |
+| `(*Key).PublicKey` left-pads a 31-byte EC2 `x` exactly as v0.2.2 and rejects a 33-byte one; `ParseKey` rejects the 31-byte one unless `AllowShortCoordinates()` | `TestKeyCoordinatesLegacy`, `TestParseKeyCoordinates` | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 
 ---
 
@@ -421,3 +429,4 @@ eligible for bundling under 027's rule.
 |---|---|---|
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

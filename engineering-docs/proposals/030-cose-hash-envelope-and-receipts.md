@@ -276,16 +276,19 @@ func VerifyTransparent(ctx context.Context, data []byte, issuerKeys, serviceKeys
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
 Everything here is new API built on published RFCs (9942, 9943, 9995),
-so no existing wire output or default changes and no legacy selector is
-needed.
+so no existing identifier changes signature or semantics and no legacy
+selector is needed. New `Signer`/`Verifier` methods are added to
+existing struct types (allowed: no interface gains a method).
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| `cose` hash envelope (RFC 9995), `cose/receipt` (RFC 9942), `scitt` signed statements (RFC 9943) | Additive (published RFCs) | n/a | n/a |
-| Algorithm emission inside signed statements and receipts | follows 029 | polymorphic (`-7`/`-8`) | `WithFullySpecifiedAlgorithms()` (029) passes through |
-| SCRAPI (`draft-ietf-scitt-scrapi-11`), CCF receipt profile (`draft-ietf-scitt-receipts-ccf-profile-06`) | Draft | not implemented | when implemented before publication: `WithDraftSCRAPI11()` / `WithDraftCCFProfile06()`, Experimental, never default |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| `cose` hash envelope (RFC 9995): `SignHashEnvelope`, `SignHashEnvelopeDigest`, `VerifyHashEnvelope` | Additive (published RFC) | — | `Sign`/`Verify` unchanged | n/a |
+| `cose/receipt` (RFC 9942), `scitt` signed statements (RFC 9943) | Additive (new packages) | — | n/a | n/a |
+| Algorithm emission inside signed statements and receipts | Additive, current standards state | — | the caller's `*cose.Signer` decides, as everywhere in `cose` | godoc and examples build signers with `WithFullySpecifiedAlgorithms()` (029), the RFC 9864 path; verification accepts both families |
+| SCRAPI (`draft-ietf-scitt-scrapi-11`), CCF receipt profile (`draft-ietf-scitt-receipts-ccf-profile-06`) | Draft | — | n/a | if implemented before publication: `WithDraftSCRAPI11()` / `WithDraftCCFProfile06()`, Experimental, never default |
 
-No `CompatV02*` bundle content (nothing existed in v0.2).
+No `CompatV02*` bundle content (nothing existed in v0.2). No `...Option`
+parameters are appended to existing functions.
 
 ---
 
@@ -305,6 +308,8 @@ No `CompatV02*` bundle content (nothing existed in v0.2).
 | RFC 9942, 9943, 9995 (and RFC 9162 for Merkle) vendored under `engineering-docs/rfcs/` | files + README rows | Yes |
 | Signed statements built with and without `WithFullySpecifiedAlgorithms()` both verify, and receipts over each verify | `TestSignedStatementAlgorithmEmission` | Yes |
 | No draft-only behavior (SCRAPI, CCF profile) is reachable without a `WithDraft…` selector | API review | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 
 ---
 
@@ -398,3 +403,4 @@ No `CompatV02*` bundle content (nothing existed in v0.2).
 |---|---|---|
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

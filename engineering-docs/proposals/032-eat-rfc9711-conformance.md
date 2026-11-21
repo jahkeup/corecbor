@@ -37,18 +37,20 @@ There are three other problems:
 - Nested submodule tokens are appraised **without signature
   verification** when no verifier is configured.
 - Unknown claims, plus `cnf` and private claims, are dropped on decode.
-- Several RFC 9711 value constraints aren't enforced: nonce length,
-  UEID type and length, the `dbgstat` range, and the `eat_profile` OID
-  form.
+- Several RFC 9711 value constraints aren't checked anywhere: nonce
+  length, UEID type and length, the `dbgstat` range, and the
+  `eat_profile` OID form.
 
 This proposal renumbers to the registry, adds the missing claims, makes
-submodule appraisal fail closed, and preserves unknown claims. Per
-proposal 034 (Conformance class), the RFC 9711 numbering is the default
-and the v0.2 numbering stays selectable through the deprecated
-`WithLegacyDraftClaimKeys()`. Selection is always explicit and never
-auto-detected. It also
-moves the PSA-shaped software-components structure to an `eat/psa`
-package under its real claim key, 2399 (RFC 9783).
+submodule appraisal fail closed, and preserves unknown claims. The
+package documents RFC 9711, so per proposal 034 the numbering is a
+Contract defect fixed in place, and the v0.2 numbering stays selectable
+through the deprecated `WithLegacyDraftClaimKeys()`. Selection is always
+explicit and never auto-detected. No exported field, type or function
+signature changes (034 API stability): new claims are new fields, value
+checks are a new opt-in `Claims.Validate()` / `NewAppraiser()`, and the
+PSA-shaped `SWComponents` field now maps to its real claim key, 2399
+(RFC 9783), with an `eat/psa` view of the PSA claims.
 
 Acceptance:
 
@@ -167,33 +169,43 @@ const (
 	ClaimIntUse       int64 = 275
 )
 
+// Claims keeps every v0.2.2 field with its type (proposal 034). The
+// claim *keys* they map to are fixed to RFC 9711; new claims are
+// appended as new fields whose zero value means "absent".
 type Claims struct {
-	cwt.ClaimsSet // decoded and encoded via cwt (proposal 031), incl. cnf + Private
+	cwt.ClaimsSet // incl. cnf, Private, PrivateClaims (proposal 031) — now encoded/decoded
 
-	Nonce        [][]byte          // 10; each 8..64 bytes
-	UEID         UEID              // 256
-	SUEIDs       map[string]UEID   // 257
-	OEMID        OEMID             // 258
-	HWModel      []byte            // 259
-	HWVersion    *Version          // 260
-	Uptime       *uint64           // 261, seconds
-	OEMBoot      *bool             // 262 (was SecureBoot)
-	DbgStat      *DebugStatus      // 263; nil = absent (was DebugStatus, 0 = absent)
-	Location     *Location         // 264
-	Profile      *Profile          // 265
-	Submods      map[string]Submod // 266
-	BootCount    *uint64           // 267
-	BootSeed     []byte            // 268
-	DLOAs        []DLOA            // 269
-	SWName       string            // 270
-	SWVersion    *Version          // 271
-	Manifests    []TypedBytes      // 272: [content-format, bstr]
-	Measurements []TypedBytes      // 273: [content-format, bstr]
-	MeasRes      []MeasResGroup    // 274
-	IntUse       *IntendedUse      // 275
+	Nonce         [][]byte          // 10 — unchanged
+	UEID          []byte            // 256 — unchanged type; see UEID helpers below
+	OEMId         []byte            // 258 — unchanged
+	SecurityLevel SecurityLevel     // Deprecated: not an RFC 9711 claim; populated only under WithLegacyDraftClaimKeys
+	SecureBoot    *bool             // 262 oemboot — unchanged (same key; RFC 9711 name is "oemboot")
+	Debug         DebugStatus       // 263 — unchanged; 0 still means "enabled or absent" (see DbgStat)
+	Uptime        *uint64           // now 261 (RFC 9711); was 266
+	Profile       string            // 265 — unchanged; URI / text form
+	SWComponents  []SWComponent     // now RFC 9783 claim 2399 (psa-software-components); was 267
+	Submods       map[string]Submod // now 266 (RFC 9711); was 268
+
+	// --- new in v0.30 ---
+	DbgStat      *DebugStatus    // 263 with explicit presence; takes precedence over Debug on encode
+	ProfileOID   []byte          // 265 OID form (RFC 9711 §4.3.2)
+	SUEIDs       map[string][]byte // 257
+	HWModel      []byte          // 259
+	HWVersion    *Version        // 260
+	Location     *Location       // 264
+	BootCount    *uint64         // 267
+	BootSeed     []byte          // 268
+	DLOAs        []DLOA          // 269
+	SWName       string          // 270
+	SWVersion    *Version        // 271
+	Manifests    []TypedBytes    // 272: [content-format, bstr]
+	Measurements []TypedBytes    // 273: [content-format, bstr]
+	MeasRes      []MeasResGroup  // 274
+	IntUse       *IntendedUse    // 275
 }
 
-// UEID is a Universal Entity ID (RFC 9711 §4.2.1).
+// UEID is a Universal Entity ID (RFC 9711 §4.2.1). The Claims.UEID
+// field keeps its []byte type; convert with eat.UEID(c.UEID).
 type UEID []byte
 
 type UEIDType uint8
@@ -207,21 +219,9 @@ const (
 func (u UEID) Type() UEIDType
 func (u UEID) Validate() error // type byte + length 7..33
 
-type DebugStatus uint8
-
-const (
-	DebugEnabled                     DebugStatus = 0
-	DebugDisabled                    DebugStatus = 1
-	DebugDisabledSinceBoot           DebugStatus = 2
-	DebugDisabledPermanently         DebugStatus = 3
-	DebugDisabledFullyAndPermanently DebugStatus = 4
-)
-
-// Profile is eat_profile: a URI or an OID (RFC 9711 §4.3.2).
-type Profile struct {
-	URI string
-	OID []byte // DER-encoded OID content octets, no tag/length
-}
+// DebugStatus keeps its v0.2.2 underlying type (int64) and constants.
+// One constant is added for the RFC 9711 value v0.2.2 lacked:
+const DebugDisabledFullyAndPermanently DebugStatus = 4
 
 // TypedBytes is a [content-format, bstr] pair used by manifests
 // and measurements. CoAP content-format numbers are integers;
@@ -232,64 +232,92 @@ type TypedBytes struct {
 	Value         []byte
 }
 
-// Submod is one entry of the submods claim (RFC 9711 §4.2.18).
-// Exactly one of Claims, Token, or Detached is set.
+// Submod keeps its v0.2.2 fields (Token, Claims) and gains two.
+// Exactly one is set.
 type Submod struct {
-	Claims   *Claims          // inline Claims-Set
-	Token    []byte           // nested CBOR token (COSE-protected EAT), raw bytes
-	JSON     []byte           // nested JSON token (opaque; not decoded here)
-	Detached *DetachedDigest  // [hash-alg, digest]
+	Token    []byte          // nested CBOR token (COSE-protected EAT), raw bytes — unchanged
+	Claims   *Claims         // inline Claims-Set — unchanged
+	JSON     []byte          // new: nested JSON token (opaque; not decoded here)
+	Detached *DetachedDigest // new: [hash-alg, digest]
 }
 
 type DetachedDigest struct {
 	Alg    cose.Algorithm // hash alg (RFC 9054 identifiers)
 	Digest []byte
 }
+
+// Validate checks the RFC 9711 value constraints DecodeClaims does not
+// enforce (it keeps v0.2.2 acceptance): nonce length 8..64, UEID type
+// byte and length, dbgstat 0..4, eat_profile form.
+func (c *Claims) Validate() error
 ```
 
 #### Unknown claims
 
 Any claim this package doesn't model stays in the embedded
-`cwt.ClaimsSet.Private`, as `map[cwt.ClaimKey]corecbor.Value` per
-proposal 031. That covers PSA claims when `eat/psa` isn't used,
+`cwt.ClaimsSet`: in `PrivateClaims` (`map[cwt.ClaimKey]corecbor.Value`)
+and, for hashable keys, in the deprecated `Private` map, per proposal
+031. v0.2.2 dropped both (`eat/claims.go:89-199`), contradicting the
+embedded type's contract. That covers PSA claims when `eat/psa` isn't used,
 `cmw` (299), and vendor claims. Encode writes them back out.
 `DecodeClaims` → `Encode` is byte-identical for a deterministic input,
 which `TestRoundTrip_Unknown` checks.
 
-#### Appraiser (fail closed)
+#### Appraiser
 
 ```go
+// Appraiser keeps every v0.2.2 field and its zero-value behavior. New
+// fields are appended; their zero values change nothing.
 type Appraiser struct {
-	// Freshness
-	RequireNonce []byte // constant-time compare; MUST be 8..64 bytes
-	NonceVerifier func(nonces [][]byte) error
+	RequireNonce         []byte // unchanged semantics; compare is now constant-time
+	RequireSecurityLevel SecurityLevel // Deprecated: not an RFC 9711 claim (see Behavior)
+	RequireSecureBoot    bool
+	RequireDebugDisabled bool   // unchanged: rejects only DebugEnabled
+	RequireProfile       string
+	SWComponentPolicy    func([]SWComponent) error
+	CWTValidator         *cwt.Validator // unchanged: nil skips CWT validation
+	Custom               []func(*Claims) error
+	SubmodPolicy         func(name string, claims *Claims) error
+	SubmodVerifier       *cose.Verifier
 
-	RequireOEMBoot       bool
-	MinDebugStatus       *DebugStatus // replaces RequireDebugDisabled; unknown values fail
-	RequireProfile       *Profile
-	CWTValidator         *cwt.Validator // nil: cwt.DefaultValidator() (proposal 031)
-
-	// Submodules. When the token contains a nested Token submodule
-	// and SubmodVerify is nil, Appraise returns ErrSubmodUnverified.
-	SubmodVerify   func(ctx context.Context, name string, token []byte) (*Claims, error)
-	SubmodDetached func(ctx context.Context, name string, d DetachedDigest) error
-	SubmodPolicy   func(name string, claims *Claims) error
-
+	// --- new in v0.30 ---
+	NonceVerifier     func(nonces [][]byte) error
+	MinDebugStatus    *DebugStatus // unknown values fail
+	RequireProfileOID []byte
+	ValidateValues    bool // run Claims.Validate (RFC 9711 value constraints)
+	SubmodVerify      func(ctx context.Context, name string, token []byte) (*Claims, error)
+	SubmodDetached    func(ctx context.Context, name string, d DetachedDigest) error
 	MeasurementPolicy func(ms []TypedBytes) error
-	Custom            []func(*Claims) error
 }
 
-func (a *Appraiser) Appraise(ctx context.Context, claims *Claims) error
+// NewAppraiser returns an Appraiser with current-standards defaults:
+// CWTValidator = cwt.NewValidator(), ValidateValues = true. It is the
+// recommended constructor; the zero value keeps v0.2.2 behavior.
+func NewAppraiser() *Appraiser
+
+// Appraise keeps its v0.2.2 signature.
+func (a *Appraiser) Appraise(claims *Claims) error
+
+// AppraiseContext is Appraise with a context for SubmodVerify /
+// SubmodDetached callbacks.
+func (a *Appraiser) AppraiseContext(ctx context.Context, claims *Claims) error
 ```
 
-Changes from today:
+Changes from v0.2.2:
 
-- A nested `Token` submodule without `SubmodVerify` → `ErrSubmodUnverified`.
-- Submodules are visited in sorted name order.
-- `SecurityLevel` is removed and `RequireSecurityLevel` is deleted.
-  Callers who need lifecycle policy use `eat/psa`.
+- **Fail-closed submodules (Safety defect).** A nested `Token`
+  submodule with `SubmodPolicy` set but neither `SubmodVerifier` nor
+  `SubmodVerify` returns `ErrSubmodUnverified`. v0.2.2 decoded it
+  without verifying and handed it to the policy as trusted
+  (`eat/appraiser.go:85-91`).
+- Submodules are visited in sorted name order (v0.2.2 used map order,
+  so the first reported error varied).
 - The nonce compare uses `crypto/subtle.ConstantTimeCompare`. The nonce
   isn't secret, but this costs nothing and removes a review question.
+- `RequireSecurityLevel` keeps its v0.2.2 rule. Under RFC 9711
+  numbering no claim populates `SecurityLevel`, so a non-zero
+  `RequireSecurityLevel` fails closed (`ErrSecurityLevel`) unless
+  `WithLegacyDraftClaimKeys()` is used to decode.
 
 #### `eat/psa` subpackage (RFC 9783)
 
@@ -305,16 +333,14 @@ const (
 	ClaimVerificationServiceIndic int64 = 2400
 )
 
-// SoftwareComponent is the RFC 9783 psa-software-components entry
-// (the struct currently misfiled as eat.SWComponent).
-type SoftwareComponent struct {
-	MeasurementType  string // 1
-	MeasurementValue []byte // 2
-	Version          string // 4
-	SignerID         []byte // 5
-	MeasurementDesc  string // 6
-}
+// SoftwareComponent is the RFC 9783 psa-software-components entry.
+// eat.SWComponent (v0.2.2) keeps its name and fields; this is a type
+// alias so both names refer to one type.
+type SoftwareComponent = eat.SWComponent
 
+// SoftwareComponents is the same data as eat.Claims.SWComponents
+// (both map to claim 2399); psa exposes it under the RFC 9783 name.
+// FromEAT copies the slice; ToEAT writes it back.
 type Claims struct {
 	*eat.Claims
 	ClientID              int64
@@ -325,7 +351,7 @@ type Claims struct {
 	VerificationService   string
 }
 
-func FromEAT(c *eat.Claims) (*Claims, error) // lifts PSA claims out of Private
+func FromEAT(c *eat.Claims) (*Claims, error) // lifts PSA claims out of PrivateClaims
 ```
 
 `psa` lives inside the `eat` module (no new `go.mod`).
@@ -358,9 +384,11 @@ yet.
 
 ### Behavior / migration
 
-This is a **wire-incompatible change**. Tokens produced before it
-encode uptime at 266, software components at 267 and submods at 268.
-After it, those keys mean submods, bootcount and bootseed.
+Claim *numbering* changes; the Go API does not. The package documents
+RFC 9711 (`eat/doc.go:4`), so the draft-era keys are a contract defect
+and are fixed in place. Tokens produced by v0.2.2 encode uptime at 266,
+software components at 267 and submods at 268; after this change those
+keys mean submods, bootcount and bootseed.
 
 - The default decoder reads only RFC 9711 numbering. A token from the
   old encoder is not a valid RFC 9711 token.
@@ -371,11 +399,19 @@ After it, those keys mean submods, bootcount and bootseed.
   submods). The two numberings are never mixed or guessed between, which
   avoids the key-confusion hazard. Encode output in that mode is
   byte-identical to v0.2.2 for claims v0.2 could represent.
+- `DecodeClaims` keeps v0.2.2's value acceptance (no nonce-length,
+  UEID or dbgstat-range checks). Those RFC 9711 constraints run through
+  the new `Claims.Validate()` and `NewAppraiser()`.
+- `Debug == DebugEnabled` is still omitted on encode, as in v0.2.2;
+  set `DbgStat` to encode an explicit 0.
 
 ```go
 // Option configures EAT encoding, decoding, signing and verification.
 type Option func(*config)
 
+// Each gains an appended ...Option. With no options the only change
+// from v0.2.2 is the contract-defect fix to RFC 9711 claim numbering
+// (and preservation of cnf/private claims).
 func DecodeClaims(data []byte, opts ...Option) (*Claims, error)
 func (c *Claims) Encode(opts ...Option) ([]byte, error)
 func Sign(claims *Claims, signer *cose.Signer, opts ...Option) ([]byte, error)
@@ -390,26 +426,18 @@ func Verify(data []byte, verifier *cose.Verifier, opts ...Option) (*Claims, erro
 // earlier than v0.32.0.
 func WithLegacyDraftClaimKeys() Option
 
-// WithLegacyValueChecks skips the RFC 9711 value constraints v0.2 did
-// not enforce: nonce length 8..64, UEID type byte and length, dbgstat
-// range, and eat_profile form.
-//
-// Deprecated: accepts non-conformant tokens; removed no earlier than v0.32.0.
-func WithLegacyValueChecks() Option
-
-// CompatV02 bundles WithLegacyDraftClaimKeys. It does not include
-// WithLegacyValueChecks, which weakens freshness checks (see the
-// bundling rule in proposal 027).
+// CompatV02 bundles WithLegacyDraftClaimKeys.
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
 func CompatV02() Option
 ```
-- The changelog and `eat/doc.go` state the break. Old test vectors
-  under `eat/` are regenerated for the default path. The v0.2.2 outputs
-  are kept as `testdata/legacy-v0.2.2/` fixtures for the legacy
+- The changelog and `eat/doc.go` state the numbering fix. Old test
+  vectors under `eat/` are regenerated for the default path. The v0.2.2
+  outputs are kept as `testdata/legacy-v0.2.2/` fixtures for the legacy
   selector.
-- Callers that used `SWComponents` move to `psa.Claims.SoftwareComponents`.
-  Callers that used `SecurityLevel` must choose a profile-specific claim.
+- `SWComponents` keeps working; it now maps to RFC 9783 claim 2399, and
+  `psa.Claims` exposes the same data. `SecurityLevel` is deprecated:
+  RFC 9711 has no such claim.
 
 ### Failure modes
 
@@ -423,19 +451,31 @@ Every wrap uses `%w`.
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
+No exported identifier is removed, renamed or retyped: every v0.2.2
+field of `Claims`, `Submod`, `SWComponent` and `Appraiser` keeps its
+name and type, `DebugStatus` stays `int64`, and `Appraise(claims)` keeps
+its signature. The `eat` package documents RFC 9711 (`eat/doc.go:4`), so
+the wire numbering is a Contract defect fixed in place.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| Claim keys renumbered to RFC 9711 / IANA (261, 266–268 and the new claims) | Conformance | RFC 9711 | `func WithLegacyDraftClaimKeys() Option` — Deprecated; explicit, all-or-nothing |
-| Software components moved to `eat/psa` under 2399 (RFC 9783) | Conformance | 2399 via `eat/psa` | covered by `WithLegacyDraftClaimKeys()` (reads/writes 267 in the PSA shape) |
-| `SecurityLevel` / `RequireSecurityLevel` removed | Conformance (claim dropped from RFC 9711) | removed | legacy mode decodes 261 into `Private` as `cwt.ClaimKey{Int: 261}`; no typed field |
-| Nonce 8–64 bytes, UEID type/length, `dbgstat` 0–4, `eat_profile` URI-or-OID | Conformance (RFC 9711 §4.1, §4.2.1, §4.2.9, §4.3.2) | enforced | `func WithLegacyValueChecks() Option` — Deprecated. Not bundled |
-| `dbgstat` 0 ("enabled") encoded explicitly instead of omitted | Defect (indistinguishable from absent) | encoded | legacy mode keeps v0.2 omission for byte-identical output |
-| Nested submodule tokens fail closed without `SubmodVerify` | Defect (fail-open) | `ErrSubmodUnverified` | none — defect. A caller can pass a `SubmodVerify` that decodes without verifying, which makes the choice explicit |
-| Unknown, `cnf` and private claims preserved | Defect (data loss) | preserved | none — defect |
-| Detached EAT bundle (tag 602), RFC 9782 media types, measured component (RFC 10013) | Additive | n/a | n/a |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| Claim keys renumbered to RFC 9711 / IANA (Uptime 266→261, Submods 268→266) | Contract defect | `eat/doc.go:4` ("Entity Attestation Tokens (EAT) as defined in RFC 9711"); RFC 9711 §10.2 | same fields, RFC keys | `func WithLegacyDraftClaimKeys() Option` — Deprecated; explicit, all-or-nothing |
+| `SWComponents` encoded at RFC 9783 claim 2399 (was 267) | Contract defect | the map shape is RFC 9783's psa-software-components; 267 is bootcount in RFC 9711 | same field, key 2399 | covered by `WithLegacyDraftClaimKeys()` |
+| `SecurityLevel` / `RequireSecurityLevel` | Superseded contract (claim dropped from RFC 9711) | — | kept, deprecated; populated only under legacy numbering; non-zero `RequireSecurityLevel` fails closed otherwise | none |
+| cnf, private and unknown claims preserved | Contract defect | embedded `cwt.ClaimsSet` (`eat/claims.go:73`) carries them; v0.2.2 dropped them | preserved | none |
+| Nested submodule tokens fail closed without a verifier | Safety defect (fail-open) | — | `ErrSubmodUnverified` | none. A caller may pass a `SubmodVerify` that decodes without verifying, which makes the choice explicit |
+| RFC 9711 value constraints (nonce 8–64, UEID, dbgstat 0–4, profile form) | Additive (opt-in) | — | `DecodeClaims` acceptance unchanged | `Claims.Validate()`, `Appraiser.ValidateValues`, `NewAppraiser()` |
+| `dbgstat` 0 encoded explicitly | Additive | — | `Debug == 0` still omitted | `DbgStat` field |
+| Standards-default appraisal (CWT validation, value checks) | Superseded contract | — | zero-value `Appraiser` unchanged (nil `CWTValidator` skips validation) | `NewAppraiser()` (recommended) |
+| New claims (257, 259, 260, 264, 267–275), `ProfileOID`, `Submod.JSON`/`Detached`, `DebugDisabledFullyAndPermanently`, detached bundle (602), RFC 9782 media types, `eat/psa` | Additive | — | n/a | n/a |
 
 Bundle: `eat.CompatV02() Option` = `WithLegacyDraftClaimKeys()`.
+
+**Appended `...Option` parameters (apidiff-visible, migration-guide
+entries):** `DecodeClaims(data, opts ...Option)`,
+`(*Claims).Encode(opts ...Option)`, `Sign(claims, signer, opts ...Option)`,
+`Verify(data, verifier, opts ...Option)`. With no options each behaves
+as v0.2.2 except the contract-defect rows above.
 
 ---
 
@@ -450,9 +490,9 @@ Bundle: `eat.CompatV02() Option` = `WithLegacyDraftClaimKeys()`.
 | Nested-token submod with `SubmodVerify == nil` → `ErrSubmodUnverified` | `TestAppraise_SubmodFailClosed` | Yes |
 | Detached-digest submod `[alg, digest]` decodes; `SubmodDetached` invoked | `TestSubmod_Detached` | Yes |
 | Unknown int/text claims and `cnf` round-trip byte-identically | `TestRoundTrip_Unknown` | Yes |
-| `dbgstat` 0 encodes (not omitted); 4 accepted; 5 → `ErrUnknownDebugStatus` under `MinDebugStatus` | `TestDbgStat_*` | Yes |
-| Nonce of 7 or 65 bytes → `ErrInvalidNonce` | `TestNonce_Length` | Yes |
-| UEID type 0x04 or length 6 → `ErrInvalidUEID` | `TestUEID_Validate` | Yes |
+| `DbgStat` = 0 encodes (not omitted); `Debug` = 0 is still omitted as in v0.2.2; 4 accepted; 5 → `ErrUnknownDebugStatus` under `MinDebugStatus` | `TestDbgStat_*` | Yes |
+| Nonce of 7 or 65 bytes decodes (as v0.2.2) and `Claims.Validate()` returns `ErrInvalidNonce` | `TestNonce_Length` | Yes |
+| `UEID(...).Validate()` on type 0x04 or length 6 → `ErrInvalidUEID` | `TestUEID_Validate` | Yes |
 | `eat_profile` OID form (bstr) decodes | `TestProfile_OID` | Yes |
 | Pre-1970 `iat` round-trips (shared `cwt.NumericDate`) | `TestNumericDate_Pre1970` | Yes |
 | RFC 9783 PSA token example decodes via `psa.FromEAT` | `TestPSA_RFC9783Example` | Yes |
@@ -461,8 +501,10 @@ Bundle: `eat.CompatV02() Option` = `WithLegacyDraftClaimKeys()`.
 | RFC 9711, 9782, 9783 (and 10013 for Phase D) vendored with inventory rows | file review | Yes |
 | v0.2.2-issued tokens (uptime, sw-components, submods, `dbgstat` 0) decode to the same values under `WithLegacyDraftClaimKeys()` and fail or decode differently by default; `Encode` under the selector is byte-identical to v0.2.2 | `TestCompatDraftClaimKeys` vs `testdata/legacy-v0.2.2/` | Yes |
 | Under `WithLegacyDraftClaimKeys()`, an RFC 9711 token carrying `submods` at 266 is **not** read as submods (no mixing) | `TestCompatNoMixedNumbering` | Yes |
-| `WithLegacyValueChecks()` accepts a 4-byte nonce; default rejects | `TestCompatValueChecks` | Yes |
-| Legacy selectors and `CompatV02` carry `// Deprecated:` with removal floor v0.32.0; `CompatV02` excludes `WithLegacyValueChecks` | staticcheck SA1019 fixture + `TestCompatBundleContents` | Yes |
+| Zero-value `Appraiser{}` behaves as v0.2.2 (nil `CWTValidator` skips validation; no value checks); `NewAppraiser()` validates | `TestAppraiserZeroUnchanged`, `TestNewAppraiserDefaults` | Yes |
+| `WithLegacyDraftClaimKeys` and `CompatV02` carry `// Deprecated:` with removal floor v0.32.0; `SecurityLevel`, `RequireSecurityLevel` carry `// Deprecated:` | staticcheck SA1019 fixture | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 
 ---
 
@@ -496,7 +538,7 @@ Phase A is a security fix (the submodule fail-open) and an interop fix
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Existing stored tokens become undecodable | med | med | Pre-1.0; documented break; the old encoding was never interoperable |
+| Existing stored tokens no longer decode by default | med | med | `WithLegacyDraftClaimKeys()` / `CompatV02()`; the old encoding was never interoperable; migration guide entry |
 | RFC 9711 examples contain further unverified errata | med | low | Use RFC text, annotate deviations; errata list checked at implementation time |
 | PSA package drifts from Arm CCA profile | low | low | CCA is a separate I-D; `psa` covers RFC 9783 only |
 | Fail-closed submods breaks callers relying on unverified decode | med | low | Callers who truly want it pass a `SubmodVerify` that decodes without verifying, which makes the choice explicit |
@@ -547,7 +589,7 @@ isolation benefit.
 ### Watch items
 
 - RFC 9999 (CMW) registers CWT claim `cmw` (299). It is preserved
-  through `Private` until a CMW proposal is filed.
+  through `PrivateClaims` until a CMW proposal is filed.
 - `draft-ietf-rats-ear-06` (EAT Attestation Results): an EAR
   producer/consumer may want an `eat/ear` package later.
 - `draft-ietf-rats-eat-da`, `draft-reddy-rats-key-binding`,
@@ -571,3 +613,4 @@ isolation benefit.
 |---|---|---|
 | 2026-11-20 | Initial draft from 2026-11-20 codebase review + IANA registry check | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

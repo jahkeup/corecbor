@@ -84,17 +84,24 @@ func WithAllowedTags(ids ...uint64) DecoderOption
 
 // RejectUnknownTags rejects every tag not in the allowlist built by
 // WithAllowedTags. With no WithAllowedTags option, the allowlist is
-// TagsWellKnown. (Previously the allowlist was {55799} only.)
+// TagsModeled: the tags spec §4.3 says the library models. (v0.2.2
+// allowed only 55799, contradicting §4.3, which lists 0–3, 21–24, 32,
+// 35, 258 as modeled and only "other tags" as unknown.)
 func RejectUnknownTags() DecoderOption
 
-// TagsWellKnown is the default allowlist for RejectUnknownTags: the
-// RFC 8949 §3.4 tags plus the tags of the COSE/CWT/EAT family that
-// this module tree implements.
+// TagsModeled is the default allowlist for RejectUnknownTags: exactly
+// the tags in encoder-decoder-spec.md §4.3.
+var TagsModeled = []uint64{0, 1, 2, 3, 21, 22, 23, 24, 32, 35, 258, 55799}
+
+// TagsWellKnown is TagsModeled plus the tags of the COSE/CWT/EAT
+// family this module tree implements. It is never applied implicitly;
+// pass WithAllowedTags(TagsWellKnown...) to use it.
 var TagsWellKnown = []uint64{
 	0, 1, 2, 3, // RFC 8949 §3.4.1–3.4.3
 	21, 22, 23, // expected conversion
 	24,             // encoded CBOR
-	32,             // URI
+	32, 35,         // URI, regexp
+	258,            // set
 	16, 17, 18,     // COSE_Encrypt0, COSE_Mac0, COSE_Sign1 (RFC 9052)
 	96, 97, 98,     // COSE_Encrypt, COSE_Mac, COSE_Sign
 	61,             // CWT (RFC 8392)
@@ -111,7 +118,7 @@ want closed-world tag validation pass
 `StrictDecoder(RejectUnknownTags())` or `WithAllowedTags(...)`.
 
 `rfc8949.DecodeOpts` gains `AllowedTags map[uint64]struct{}`. A nil
-map with `RejectUnknownTags` means `TagsWellKnown`. Lookup is a
+map with `RejectUnknownTags` means `TagsModeled`. Lookup is a
 single map probe per tag, the same cost as today's `knownTags`.
 
 ### Structured errors
@@ -179,14 +186,26 @@ module's own proposal (027, 031, 032, 033), not here.
 - **`StrictDecoder` accepts tags.** This is a behavior change and the
   intended one.
 - **`RejectUnknownTags()` without `WithAllowedTags` widens** from
-  {55799} to `TagsWellKnown`. Callers who relied on the old near-total
+  {55799} to `TagsModeled` (spec §4.3), and no further. Callers who
+  want the COSE/CWT/EAT tags too pass `WithAllowedTags(TagsWellKnown...)`.
+  Callers who relied on the old near-total
   rejection pass `WithAllowedTags()` (empty, so only 55799 is
   allowed). `StrictDecoder(RejectUnknownTags(), WithAllowedTags())`
   reproduces the v0.2 `StrictDecoder` exactly (see Compatibility
   selection).
 - **Error type.** The dynamic type of decoder errors changes from
-  `*fmt.wrapError` to `*DecodeError`. Code using `errors.Is` is
-  unaffected.
+  `*fmt.wrapError` to `*DecodeError`. `Error()` text and every
+  `errors.Is` match are byte-identical to v0.2.2. Code using
+  `errors.Is` is unaffected; type assertions on the unexported
+  `*fmt.wrapError` were never part of the API.
+- **Reflection errors.** `*UnmarshalTypeError.Error()` returns the
+  exact v0.2.2 message text (`"cbor: cannot decode %s into Go type %s"`,
+  the overflow texts), and `errors.Is(err, ErrOverflow)` still matches.
+  The only addition is that type mismatches now also match
+  `ErrTypeMismatch`.
+- **`rfc8949.ErrTypeMismatch`** stays an exported var holding the same
+  error value (`var ErrTypeMismatch = cbor.ErrTypeMismatch`), so
+  `errors.Is` against either identifier matches.
 
 ### Failure modes
 
@@ -202,20 +221,23 @@ New concrete types: `*DecodeError` and `*UnmarshalTypeError`.
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
+No exported identifier changes signature. `rfc8949.ErrTypeMismatch`
+keeps its name and its value (it now aliases `cbor.ErrTypeMismatch`).
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| `StrictDecoder` stops rejecting every tag (matches spec §3.2) | Defect (vs §3.2) | accepts tags | `StrictDecoder(RejectUnknownTags(), WithAllowedTags())` reproduces v0.2 — composition of existing options, no new legacy API |
-| `RejectUnknownTags()` alone widens from {55799} to `TagsWellKnown` | Policy | `TagsWellKnown` | `WithAllowedTags()` (no IDs) restores {55799} |
-| `TagsWellKnown` contents track the IANA registry and the tags this module tree implements | Policy (current registry) | list above | `WithAllowedTags(ids...)` pins an explicit set |
-| Decoder errors become `*DecodeError` (same `Error()` text, same `errors.Is` sentinels) | Additive | n/a | n/a — callers using `errors.Is` are unaffected; type assertions on `*fmt.wrapError` were never supported |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| `StrictDecoder` and `rfc8949.StrictOpts()` stop applying `RejectUnknownTags` | Contract defect | spec §3.2 (`encoder-decoder-spec.md:221-224`: "`RejectUnknownTags()` is NOT in the strict preset") | accept tags | `StrictDecoder(RejectUnknownTags(), WithAllowedTags())` reproduces v0.2.2 by composition; no new legacy API |
+| `RejectUnknownTags()` alone accepts the spec §4.3 tags | Contract defect | spec §3.1 (`:183`, "unknown major-6 IDs") + §4.3 (`:315-332`, tags the library models; "Other tags … `RejectUnknownTags()` turns this into an error") | allowlist `TagsModeled` | `WithAllowedTags()` with no IDs restores {55799} |
+| `TagsModeled`, `TagsWellKnown`, `WithAllowedTags` | Additive | — | n/a | `WithAllowedTags(TagsWellKnown...)` opts into the COSE/CWT/EAT tags; never implicit |
+| Decoder errors are `*DecodeError` | Additive (new concrete type) | — | `Error()` text and `errors.Is` matches identical to v0.2.2 | n/a |
+| Reflection errors are `*UnmarshalTypeError`, also matching `ErrTypeMismatch` | Additive | — | `Error()` text identical; `ErrOverflow` matches as before | n/a |
+| Encoder unsupported-kind error wraps `ErrInvalidKind` | Additive | — | text identical | n/a |
 
-No new `Legacy…` option is needed: the existing options compose into
-the v0.2 behavior. The root decoder bundle `CompatV02Decoding()
-DecoderOption` (defined in 025) does **not** apply these, because "reject
-every tag" was only ever reachable through `StrictDecoder`; bundling it
-would make `NewDecoder(CompatV02Decoding())` stricter than v0.2's
-`NewDecoder()`.
+No `...Option` parameters are appended to existing functions. The root
+decoder bundle `CompatV02Decoding()` (025) does **not** include these:
+"reject every tag" was only reachable through `StrictDecoder`, and
+bundling it would make `NewDecoder(CompatV02Decoding())` stricter than
+v0.2's `NewDecoder()`.
 
 ---
 
@@ -234,6 +256,10 @@ would make `NewDecoder(CompatV02Decoding())` stricter than v0.2's
 | §3.2 code sample and `rfc8949.StrictOpts` agree | `TestStrictOptsMatchesSpec` (asserts `RejectUnknownTags == false`) | Yes |
 | `StrictDecoder(RejectUnknownTags(), WithAllowedTags())` rejects `c1 01` and `d2 80` exactly as v0.2.2 `StrictDecoder()` does | `TestCompatV02StrictTags` against `testdata/legacy-v0.2.2/` | Yes |
 | `RejectUnknownTags()` + `WithAllowedTags()` allows only 55799 (default and selected behavior both tested) | `TestCompatRejectUnknownTagsEmptyAllowlist` | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
+| `NewDecoder(RejectUnknownTags())` accepts exactly the §4.3 tags and rejects tag 18 | `TestRejectUnknownTagsModeled` | Yes |
+| Every error-catalog and reflection error string is byte-identical to v0.2.2 | `error_catalog_test.go` golden strings | Yes |
 
 ---
 
@@ -276,7 +302,8 @@ that can decode COSE and CWT.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Callers relied on `StrictDecoder` rejecting all tags as a crude "no tags" guard | low | med | Release note; `WithAllowedTags()` with no args restores it |
-| `TagsWellKnown` drifts from what modules implement | med | low | Exported var, documented. Modules pass their own sets anyway |
+| `TagsWellKnown` drifts from what modules implement | med | low | Exported var, documented, never applied implicitly. Modules pass their own sets anyway |
+| `TagsModeled` drifts from spec §4.3 | low | med | Test asserts it equals the §4.3 table; changing it requires a spec amendment |
 | Changing the error's dynamic type breaks `==` comparisons | low | low | `==` against sentinels already fails today because errors are wrapped |
 
 ---
@@ -300,7 +327,7 @@ that can decode COSE and CWT.
 
 ## Open questions
 
-1. Should `TagsWellKnown` include RFC 8943 (100, 1004), RFC 9581
+1. Should `TagsWellKnown` (not `TagsModeled`, which is pinned to §4.3) include RFC 8943 (100, 1004), RFC 9581
    (1001–1003), RFC 9164 (52, 54) and RFC 9562 (37)? 026 adds helpers
    for those tags. The proposal here is to add each one to
    `TagsWellKnown` in the same PR that adds its helper.
@@ -324,3 +351,4 @@ that can decode COSE and CWT.
 |---|---|---|
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

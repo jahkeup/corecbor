@@ -27,8 +27,12 @@ every verify, decrypt and unmarshal path **fail closed**:
 - bind the header `alg` to the key and to a caller allow-list;
 - process `crit`;
 - reject duplicate and cross-bucket labels;
-- bound decode work;
+- bound decode work (opt-in tighter limits through new `Unmarshal*With`);
 - never panic on untrusted input.
+
+No exported identifier changes signature; three functions gain an
+appended `...Option` parameter whose no-option behavior is unchanged
+apart from listed Safety defects.
 
 Acceptance: every finding below has a regression test, plus three new fuzz
 targets that run clean for 60s in CI.
@@ -39,9 +43,11 @@ whole-message raw-span API waits on 022. All items can ship
 independently, in the phase order below.
 
 Compatibility: fail-closed checks that RFC 9052 requires are
-Conformance changes under proposal 034. Each has a named, deprecated
-legacy selector, and none is included in any `CompatV02` bundle,
-because they weaken verification. See Compatibility selection.
+Contract defects under proposal 034 (the module documents RFC 9052).
+Each has a named, deprecated legacy selector, and none is included in
+any `CompatV02` bundle, because they weaken verification. Fail-open and
+resource-exhaustion paths are Safety defects with no selector beyond an
+explicit opt-out. See Compatibility selection.
 
 ---
 
@@ -230,10 +236,20 @@ var (
 // when non-nil and never re-encode.
 func (h *Headers) Raw() []byte
 
-// Set now validates the value. Accepted value types: int64, int, uint64,
-// Algorithm, string, []byte, bool, corecbor.Value. Labels: int64, int, string.
+// Set keeps its v0.2.2 signature (no result). It now encodes every
+// type SetChecked accepts, so Set(1, AlgES256) stores alg -7 instead of
+// null. A value it still can't encode is recorded, and the next
+// Marshal* of a message carrying these headers returns
+// ErrUnsupportedHeader instead of silently emitting null.
 // Set invalidates Raw().
-func (h *Headers) Set(label, value any) error
+//
+// Deprecated: use SetChecked, which reports the error at the call site.
+func (h *Headers) Set(label, value any)
+
+// SetChecked validates and sets a header parameter. Accepted value
+// types: int64, int, uint64, Algorithm, string, []byte, bool,
+// corecbor.Value. Labels: int64, int, string. It invalidates Raw().
+func (h *Headers) SetChecked(label, value any) error
 
 // ---- verification policy (shared by Sign1, Sign, Mac0, Mac, Encrypt0, Encrypt)
 
@@ -246,11 +262,21 @@ func WithAllowedAlgorithms(algs ...Algorithm) VerifierOption
 // label in crit → ErrCriticalHeader.
 func WithKnownCriticalHeaders(labels ...any) VerifierOption
 
-// WithDecodeLimits bounds Unmarshal* work. Default: 1 MiB budget, depth 16.
+// DecodeLimits bounds Unmarshal*With work. The zero value applies the
+// same limits as the existing Unmarshal* functions (the core decoder
+// defaults), so DecodeLimits{} changes nothing.
 type DecodeLimits struct {
-	MemoryBudget int
-	MaxDepth     int
+	MemoryBudget int // 0 → core default (none)
+	MaxDepth     int // 0 → core default (256)
+	// Deprecated: duplicate labels violate RFC 9052 §3; removed no
+	// earlier than v0.32.0.
+	AllowDuplicateLabels bool
 }
+
+// RecommendedDecodeLimits is the recommended bound for untrusted
+// input: 1 MiB budget, depth 16.
+var RecommendedDecodeLimits = DecodeLimits{MemoryBudget: 1 << 20, MaxDepth: 16}
+
 func UnmarshalSign1With(data []byte, lim DecodeLimits) (*Sign1, error) // + siblings
 
 // VerifyDetached is the explicit detached-payload entry point; Verify on a
@@ -267,10 +293,17 @@ const (
 )
 
 // VerifyMulti returns ErrVerification when the policy is not satisfied.
-// The []int result lists verified signature indices.
+// The []int result lists verified signature indices. With no policy
+// argument it applies RequireAny, which is v0.2.2's acceptance rule
+// except that zero verified signatures is now an error (Safety defect:
+// v0.2.2 returned ([], nil)).
 func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]int, error)
 
-// VerifyMACMulti / DecryptMulti gain options (external AAD, allowed algs).
+// VerifyMACMulti / DecryptMulti gain options (external AAD, allowed
+// algs). With no options they behave as v0.2.2 (nil external AAD, any
+// algorithm the package implements) except that VerifyMACMulti no
+// longer accepts the 64-bit truncated HMAC 256/64 unless listed via
+// WithMACAlgorithms (Safety defect: attacker-selected tag truncation).
 func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...MACOption) error
 func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts ...EncryptOption) ([]byte, error)
 func WithMACAlgorithms(algs ...Algorithm) MACOption
@@ -285,9 +318,8 @@ type PBES2Key struct {
 }
 ```
 
-`Headers.Set` changes its signature to return an `error`. The module is
-pre-1.0 (`cose/go.mod` pins `corecbor v0.0.0`), so the break is acceptable.
-It is listed in the migration notes.
+`Headers.Set` keeps its v0.2.2 signature, per proposal 034. The checked
+variant is the new `SetChecked`; `Set` is deprecated in its favor.
 
 ### Behavior
 
@@ -307,8 +339,8 @@ It is listed in the migration notes.
    only. It returns `ErrAlgorithmMismatch` when `alg` is absent, appears in
    the unprotected bucket, is not in the allow-list, or is incompatible
    with the key (curve, kty, hash). `VerifyMACMulti` and `DecryptMulti`
-   require an explicit allow-list when the key carries no `alg`. Their
-   default excludes `HMAC 256/64` unless it is listed.
+   accept, with no options, every algorithm they accepted in v0.2.2
+   except `HMAC 256/64`, which must be listed explicitly.
 3. **`crit`.**
    - The `crit` header must be in the protected bucket.
    - Its value must be a non-empty array of labels.
@@ -317,6 +349,9 @@ It is listed in the migration notes.
      labels this package interprets plus those registered through
      `WithKnownCriticalHeaders`.
 4. **Duplicates.** `Unmarshal*` decodes with `RejectDuplicateMapKeys()`.
+   Apart from that, the existing `Unmarshal*` functions keep the v0.2.2
+   resource limits; the tighter `RecommendedDecodeLimits` apply only
+   through `Unmarshal*With`.
    After both buckets are decoded, any label present in both is rejected
    with `ErrDuplicateLabel`.
 5. **Label typing.** Labels other than int or tstr cause `ErrMalformed`
@@ -329,10 +364,12 @@ It is listed in the migration notes.
    - `hashData` returns an error instead of panicking.
 7. **Nil guards.** Every `KeyDeriver` checks its required fields and
    returns `ErrInvalidKey`.
-8. **HMAC key length.** HMAC keys must be at least as long as the hash
-   output (RFC 9053 §3.1 recommends key length equal to the hash size).
-   `ComputeMAC0`, `VerifyMAC0`, `ComputeMACMulti` and the unwrap path
-   enforce this, and an empty key always fails.
+8. **HMAC key length.** An empty key always fails (Safety defect: a MAC
+   under an empty key authenticates nothing). Beyond that, existing
+   calls accept the key lengths v0.2.2 accepted: RFC 9053 §3.1 says the
+   key SHOULD (not MUST) match the hash size. The new
+   `WithStrictMACKeyLength() MACOption` enforces key ≥ hash output size
+   and is the recommended path.
 9. **Error chains.** All `fmt.Errorf("%w: %v", …)` become
    `fmt.Errorf("%w: %w", ErrMalformed, err)`, so both sentinels stay
    visible to `errors.Is`.
@@ -360,30 +397,36 @@ cases:
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
 
 **Bundling rule for `cose`.** Legacy selectors that weaken verification
-(alg binding, `crit`, duplicate labels, short HMAC keys) are never
-included in a `CompatV02` bundle. A caller must name each one, so the
-weakening is visible at the call site and in code review. `cose`'s
-bundles carry only interoperability selectors for code points and
-emission (029).
+(alg binding, `crit`, duplicate labels) are never included in a
+`CompatV02` bundle. A caller must name each one, so the weakening is
+visible at the call site and in code review. `cose`'s bundles carry only
+interoperability selectors for code points and emission (029).
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| H1 verify/decrypt over the received protected bytes | Defect | raw bytes | none — defect |
-| H2 header `alg` must be protected and match key + allow-list | Conformance (RFC 9052 §3.1, RFC 9053) | enforced | `func WithLegacyAlgorithmFromKey() VerifierOption` — Deprecated; v0.2 behavior (alg taken from the key, header ignored). Not bundled |
-| H3 `crit` processed | Conformance (RFC 9052 §3.1 MUST) | enforced | `func WithLegacyIgnoreCritical() VerifierOption` — Deprecated. Not bundled |
-| H4 duplicate labels within and across buckets rejected | Conformance (RFC 9052 §3) | rejected | `DecodeLimits.AllowDuplicateLabels bool` — field marked `// Deprecated:`. Not bundled |
-| H5 bstr/array/map labels → `ErrMalformed` | Defect (panic) | error | none — defect |
-| H6 `VerifyMulti` fails closed | Defect (fail-open) | `ErrVerification` | none — defect. `RequireAny` reproduces v0.2's "one is enough" semantics for non-empty results |
-| H7 external AAD on multi-recipient paths | Additive | n/a | n/a |
-| H8 PBES2 `MaxCount` default 1,000,000 | Policy | bounded | `PBES2Key{MaxCount: -1}` disables the bound (documented as unsafe for untrusted input) |
-| H9 `Headers.Set` rejects unencodable values | Defect (silent `null`) | error | none — defect (API signature change, listed in migration guide) |
-| H10 concurrency contract | Defect | safe after construction | none — defect |
-| H11 nil payload means detached → `ErrMissingPayload` | Defect (ambiguity) | error | none — defect. The decoder must keep `h''` as a non-nil empty slice so empty-payload messages still verify (`TestVerifyEmptyPayload`) |
-| `Unmarshal*` default limits (1 MiB budget, depth 16) | Policy | bounded | `UnmarshalSign1With(data, cose.UnlimitedDecode)` where `var UnlimitedDecode = DecodeLimits{MemoryBudget: -1, MaxDepth: -1}` |
-| HMAC 256/64 excluded unless listed; HMAC key ≥ hash length | Policy / Conformance (RFC 9053 §3.1) | enforced | `WithMACAlgorithms(AlgHMAC256_64)` opts in to the truncated tag; `func WithLegacyShortHMACKeys() MACOption` — Deprecated. Not bundled. Empty keys always fail (defect) |
-| H13 error chains keep both sentinels | Additive | n/a | n/a |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| H1 verify/decrypt over the received protected bytes | Contract defect | RFC 9052 §4.4 / §5.3 / §6.3 (ToBeSigned/AAD use the protected bstr as transmitted) | raw bytes | none |
+| H2 header `alg` must be protected and match key + allow-list | Contract defect | RFC 9052 §3.1 (`alg` "MUST be authenticated where the ability to change the algorithm identifier would provide an attack vector") and §4.4 | enforced | `func WithLegacyAlgorithmFromKey() VerifierOption` — Deprecated; v0.2 behavior. Not bundled |
+| H3 `crit` processed | Contract defect | RFC 9052 §3.1 (`crit` MUST be understood) | enforced | `func WithLegacyIgnoreCritical() VerifierOption` — Deprecated. Not bundled |
+| H4 duplicate labels within and across buckets rejected | Contract defect | RFC 9052 §3 (labels MUST NOT repeat across buckets); RFC 8949 §5.6 | rejected | `DecodeLimits{AllowDuplicateLabels: true}` via `Unmarshal*With` — field Deprecated. Not bundled |
+| H5 bstr/array/map labels → `ErrMalformed` | Safety defect (panic) | — | error | none |
+| H6 `VerifyMulti` with zero verified signatures → `ErrVerification` | Safety defect (fail-open authentication) | — | `([], ErrVerification)` instead of `([], nil)`; non-empty results unchanged | none |
+| H7 external AAD and algorithm options on `VerifyMACMulti`/`DecryptMulti` | Additive (appended `...Option`) | — | no-option calls behave as v0.2.2 except the HMAC 256/64 row below | `WithMACExternalAAD`, `WithEncryptExternalAAD`, `WithMACAlgorithms`, `WithEncryptAlgorithms` |
+| `VerifyMACMulti` rejects header-selected HMAC 256/64 unless listed | Safety defect (attacker-selected truncation) | — | rejected by default | `WithMACAlgorithms(AlgHMAC256_64)` |
+| H8 PBES2 iteration count bounded (`MaxCount` zero → 1,000,000) | Safety defect (attacker-controlled unbounded work) | — | bounded; counts ≤ 1,000,000 unchanged | `PBES2Key{MaxCount: -1}` disables the bound (documented unsafe for untrusted input) |
+| H9 `Headers.Set` stores `Algorithm`, `int`, etc. correctly; unencodable values surface as `ErrUnsupportedHeader` at `Marshal*` | Contract defect | `cose/headers.go:34` ("Set sets a header parameter"; v0.2.2 wrote `null`) | signature unchanged; `Set` deprecated | `SetChecked(label, value any) error` (new, recommended) |
+| H10 concurrency contract | Safety defect (race) | — | safe after construction | none |
+| H11 nil payload means detached → `ErrMissingPayload` | Contract defect | RFC 9052 §2 (`nil` payload = detached content, supplied separately) | error; decoder keeps `h''` as a non-nil empty slice so empty-payload messages still verify (`TestVerifyEmptyPayload`) | `VerifyDetached(msg, payload)` (new) |
+| `Unmarshal*With` + `RecommendedDecodeLimits` | Additive | — | existing `Unmarshal*` keep v0.2.2 limits | n/a |
+| HMAC empty key rejected | Safety defect | — | error | none |
+| HMAC key ≥ hash length | Additive (opt-in) | — (RFC 9053 §3.1 is a SHOULD) | v0.2.2 lengths accepted | `WithStrictMACKeyLength() MACOption` (recommended) |
+| H13 error chains keep both sentinels | Additive | — | `Error()` text unchanged where it was a single `%w` | n/a |
 
 `cose.CompatV02*` bundles: nothing from 027 (see the bundling rule).
+
+**Appended `...Option` parameters (apidiff-visible, migration-guide
+entries):** `VerifyMulti(msg, verifiers, policy ...VerifyPolicy)`,
+`VerifyMACMulti(msg, recipient, idx, opts ...MACOption)`,
+`DecryptMulti(msg, recipient, idx, opts ...EncryptOption)`.
 
 ---
 
@@ -401,7 +444,7 @@ emission (029).
 | `VerifyMulti` with no matching verifier → `ErrVerification` | `TestVerifyMultiFailClosed` | Yes |
 | External AAD round-trips through `ComputeMACMulti`/`VerifyMACMulti` and `EncryptMulti`/`DecryptMulti` | `TestMultiExternalAAD` | Yes |
 | PBES2 header count > `MaxCount`, 0, or negative → `ErrDecryption` without running PBKDF2 | `TestPBES2CountBound` (bench asserts <1ms) | Yes |
-| `Headers.Set(1, AlgES256)` encodes `a10126`; unsupported type → `ErrUnsupportedHeader` | `TestHeadersSetTypes` | Yes |
+| `Headers.Set(1, AlgES256)` encodes `a10126`; `SetChecked` with an unsupported type → `ErrUnsupportedHeader`; `Set` with one makes the next `Marshal*` fail with `ErrUnsupportedHeader` | `TestHeadersSetTypes`, `TestHeadersSetDeferredError` | Yes |
 | Oversize R/S DER from a mock `crypto.Signer` → `ErrInvalidKey`, no panic | `TestDERToRawOversize` | Yes |
 | `Verify` on detached message without payload → `ErrMissingPayload` | `TestVerifyDetachedMissing` | Yes |
 | `errors.Is(err, corecbor.ErrTruncated)` holds through `UnmarshalSign1` | `TestUnmarshalErrorChain` | Yes |
@@ -411,6 +454,9 @@ emission (029).
 | Each legacy selector above reproduces v0.2.2 acceptance on its fixture (message with unprotected alg, unknown `crit` label, duplicate label, 16-byte HMAC-256 key) and the default rejects it | `TestCompatLegacyVerify*` vs `testdata/legacy-v0.2.2/` | Yes |
 | Legacy selectors and `DecodeLimits.AllowDuplicateLabels` carry `// Deprecated:` with removal floor v0.32.0; none appears in any `CompatV02*` bundle | staticcheck SA1019 fixture + `TestCompatBundlesExcludeWeakening` | Yes |
 | A message with payload `h''` (empty, not detached) verifies | `TestVerifyEmptyPayload` | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
+| `UnmarshalSign1` accepts every v0.2.2 golden message (no new size/depth limits); `UnmarshalSign1With(data, RecommendedDecodeLimits)` rejects a 2 MiB message | `TestUnmarshalLimitsUnchanged`, `TestUnmarshalRecommendedLimits` | Yes |
 
 ---
 
@@ -455,7 +501,7 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Strict `alg` binding rejects messages from lax producers that omit protected `alg` | med | med | `WithAllowedAlgorithms` plus a documented `WithLegacyAlgFromKey()` escape hatch, off by default |
-| `Headers.Set` signature change breaks callers | high | low | pre-1.0; mechanical fix; noted in migration doc |
+| Callers keep using deprecated `Set` and learn about bad values late | med | low | `Marshal*` fails loudly with `ErrUnsupportedHeader`; staticcheck SA1019 points to `SetChecked` |
 | Duplicate rejection breaks a known producer | low | low | no known producer emits duplicate COSE labels; RFC 9052 §3 forbids them |
 | HMAC key-length minimum rejects existing short test keys | med | low | update tests; error names the minimum |
 
@@ -503,3 +549,4 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 |---|---|---|
 | 2026-11-20 | Initial draft from code review and probe findings | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

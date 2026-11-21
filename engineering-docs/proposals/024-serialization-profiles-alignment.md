@@ -136,8 +136,19 @@ The draft explicitly exempts tags 2/3 from its new rule against tags
 affecting other types (it updates RFC 8949 §7). Rewriting a
 caller-supplied tag 2/3 into an integer is therefore a semantics-
 preserving normalization, not "tag wrapping the user did not request"
-(§2.3). `BigIntTo` reduces in every mode, and in Permissive mode it
-returns `Uint`/`NegInt` when the value fits.
+(§2.3). The normalization happens in the *encoder*, at encode time, in
+the three deterministic modes only. `cbor.BigIntTo` keeps its v0.2.2
+semantics (it always returns `Tag(2|3, Bytes)`, so
+`AsBigInt(BigIntTo(n))` keeps working), and Permissive mode keeps
+emitting tag 2/3 as supplied. A new helper gives callers the preferred
+form as a `Value`:
+
+```go
+// BigIntToPreferred returns the RFC 8949 §3.4.3 preferred
+// representation of n: Uint or NegInt when n fits in 64 bits,
+// otherwise Tag(2|3, Bytes) with no leading zeros.
+func BigIntToPreferred(n *big.Int) Value
+```
 
 ### Checking decoder options
 
@@ -180,11 +191,12 @@ Where the existing per-knob sentinel applies, the error wraps both
 (`fmt.Errorf("%w: %w", ErrNotPreferred, ErrNonShortest)`), so
 `errors.Is(err, ErrNonShortest)` keeps working.
 
-`StrictDecoder` does **not** add `RequireDeterministic()`. Deployed
-COSE/CWT encoders commonly emit unsorted maps, and proposal 034's first
-precedence rule (interoperate with what's deployed) decides it. A new
+`StrictDecoder` does **not** add `RequireDeterministic()`. Its
+documented contract (spec §3.2) is a fixed list of knobs, and 034 keeps
+existing identifiers' semantics; deployed COSE/CWT encoders also emit
+unsorted maps that `StrictDecoder` callers accept today. A new
 `DeterministicDecoder(opts...)` preset (= `StrictDecoder` +
-`RequireDeterministic()`) is provided instead.
+`RequireDeterministic()`) is the standards-current identifier instead.
 
 ### Erratum 8589: NaN key equality
 
@@ -217,14 +229,19 @@ floats by canonical bit pattern:
 - **CTAP2 NaN output changes.** CTAP2 forbids NaN in practice, so the
   impact is nil.
 - **Bignum output changes in deterministic modes.** Values built with
-  `BigIntTo(small)` now encode as plain integers. Byte-level golden
+  `BigIntTo(small)` now encode as plain integers in the three
+  deterministic modes (the `Value` itself is unchanged; Permissive
+  output is unchanged). Byte-level golden
   files that contain small bignums will change. That fixes a §2.1
   violation (RFC 8949 §3.4.3 + §4.2.1). `WithLegacyBignumPassthrough()`
   restores v0.2 output.
 - **Reflection round-trip.** Because small bignums now arrive as
   `Uint`/`NegInt`, `Unmarshal` into `big.Int`/`*big.Int` must accept
-  major types 0/1 as well as tags 2/3 (RFC 8949 §3.4.3 decoders MUST
-  handle both forms). `decodeBigInt`/`decodeBigIntPtr` (`reflect_decode.go:350-372`) and the tag-only check in `valueToGo` change accordingly.
+  major types 0/1 as well as tags 2/3, so that proposal 008's
+  `Marshal`→`Unmarshal` round-trip for `big.Int` keeps holding. This
+  only turns inputs that v0.2.2 rejected into successes. `cbor.AsBigInt`
+  keeps its v0.2.2 semantics (tag 2/3 only); `cbor.AsBigIntAny(v Value)
+  (*big.Int, error)` is added for callers who want either form. `decodeBigInt`/`decodeBigIntPtr` (`reflect_decode.go:350-372`) and the tag-only check in `valueToGo` change accordingly.
 - **New modes and options are additive.**
 
 ### Failure modes
@@ -237,28 +254,32 @@ floats by canonical bit pattern:
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
-Defaults follow RFC 8949 and its verified errata. Draft-13 behavior is
-opt-in only, documented `Experimental:` with the draft name and
-revision.
+No exported identifier changes signature; `Mode` gains one constant at
+the end of the enum, so existing values are unchanged. `BigIntTo`,
+`AsBigInt` and `StrictDecoder` keep their v0.2.2 semantics. Draft-13
+behavior is opt-in only, documented `Experimental:` with the draft name
+and revision.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| CTAP2 NaN normalized to `fb7ff8000000000000` | Defect (§2.2) | normalized | none — defect |
-| Bignum leading zeros stripped in deterministic modes (RFC 8949 §3.4.3, §4.2.1) | Conformance | stripped | `func WithLegacyBignumPassthrough() Option` — Deprecated; emits tag 2/3 contents as supplied |
-| Bignums that fit major 0/1 encoded as integers in deterministic modes; `BigIntTo` reduces | Conformance | reduced | same `WithLegacyBignumPassthrough()` (encoder). `BigIntTo` has no options; v0.2 behavior is `cbor.MakeTag(2, cbor.Bytes(n.Bytes()))` and the migration guide says so |
-| Duplicate-key equality: NaN sign bit (erratum 8589), ±0 equal, cross-width float equality | Conformance | erratum rules | `func WithLegacyFloatKeyEquality() DecoderOption` — Deprecated; v0.2 `Kind`-and-`==` comparison |
-| `RequireDeterministic()`, `DeterministicDecoder()` | Additive (RFC 8949 §4.2.1) | off | n/a — opt-in |
-| `ModePreferredPlus` | Draft (draft-13 §4) | off | the mode itself is the opt-in; `Experimental:` doc |
-| `RequirePreferredPlus()` (NaN-only-`f97e00` check, Appendix G) | Draft (draft-13) | off | the option itself is the opt-in; `Experimental:` doc |
-| `StrictDecoder` contents | unchanged | no `RequireDeterministic` | n/a |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| CTAP2 NaN normalized to `fb7ff8000000000000` | Contract defect | spec §2.2 NaN bullet; `doc.go:16-17` (CTAP2 canonical) | normalized | none (034: v0.2 output violated its mode) |
+| Bignum leading zeros stripped by the encoder in deterministic modes | Contract defect | `doc.go:12-15` (modes claim RFC 8949 §4.2.1, which requires preferred serialization, §4.1/§3.4.3) | stripped | `func WithLegacyBignumPassthrough() Option` — Deprecated; emits tag 2/3 contents as supplied |
+| Bignums that fit major 0/1 encoded as integers in deterministic modes | Contract defect | same, RFC 8949 §3.4.3 ("preferred serialization … never makes use of bignums that also can be expressed as basic integers") | reduced at encode time; `BigIntTo` unchanged | same `WithLegacyBignumPassthrough()` |
+| Duplicate-key equality: NaN sign bit, ±0 equal, cross-width float equality | Contract defect | RFC 8949 §5.6.1 + verified erratum 8589; `RejectDuplicateMapKeys` documents RFC 8949 §5.6 (spec `:182`) | erratum rules | `func WithLegacyFloatKeyEquality() DecoderOption` — Deprecated; v0.2 `Kind`-and-`==` comparison |
+| `Unmarshal` into `big.Int` accepts major 0/1 | Additive (input v0.2.2 rejected now succeeds) | proposal 008 round-trip | tag 2/3 decode unchanged | n/a |
+| `BigIntToPreferred`, `AsBigIntAny` | Additive | — | `BigIntTo`/`AsBigInt` unchanged | n/a |
+| `RequireDeterministic()`, `DeterministicDecoder()` | Additive (RFC 8949 §4.2.1) | — | `StrictDecoder` unchanged | n/a — opt-in, recommended for AAD inputs |
+| `ModePreferredPlus` | Draft (draft-13 §4) | — | n/a | the mode itself is the opt-in; `Experimental:` doc |
+| `RequirePreferredPlus()` (NaN-only-`f97e00` check, Appendix G) | Draft (draft-13) | — | n/a | the option itself is the opt-in; `Experimental:` doc |
 
-Root bundles: `CompatV02() Option` includes `WithLegacyBignumPassthrough()`;
+No `...Option` parameters are appended to existing functions. Root
+bundles: `CompatV02() Option` includes `WithLegacyBignumPassthrough()`;
 `CompatV02Decoding() DecoderOption` includes `WithLegacyFloatKeyEquality()`.
 
-When draft-ietf-cbor-serialization publishes: re-run 034's precedence.
-If the RFC matches what's deployed, `ModePreferredPlus` and
-`RequirePreferredPlus` drop the `Experimental:` marker (renamed if the
-RFC renames them). That is a separate proposal.
+When draft-ietf-cbor-serialization publishes, the RFC behavior arrives
+under new non-draft identifiers (or the draft identifiers lose their
+`Experimental:` marker if the RFC matches draft-13 exactly), per 034's
+lifecycle. That is a separate proposal.
 
 ---
 
@@ -282,6 +303,10 @@ RFC renames them). That is a separate proposal.
 | `Unmarshal(01, &big.Int)` and `Unmarshal(c2 41 01, &big.Int)` both yield 1 | `TestUnmarshalBigIntFromInt` | Yes |
 | Legacy selectors carry `// Deprecated:` with removal floor v0.32.0; `ModePreferredPlus` and `RequirePreferredPlus` carry `Experimental:` naming draft-ietf-cbor-serialization-13 | doc review + staticcheck SA1019 fixture | Yes |
 | `StrictDecoder()` accepts the unsorted map `a2 6162 01 6161 02`; `DeterministicDecoder()` rejects it | `TestStrictVsDeterministicPreset` | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
+| `AsBigInt(BigIntTo(n))` round-trips for every n, and `BigIntTo(big.NewInt(5))` still returns a tag-2 `Value` | `TestBigIntToUnchanged` | Yes |
+| Permissive-mode output for tag 2/3 Values is byte-identical to v0.2.2 | golden test | Yes |
 
 ---
 
@@ -289,7 +314,7 @@ RFC renames them). That is a separate proposal.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Correct under RFC 8949 alone: CTAP2 NaN (§2.2), erratum 8589 key equality, bignum reduction in `BigIntTo`, §2.1 table fix | Pending | First three rows + erratum row pass |
+| 1 | Correct under RFC 8949 alone: CTAP2 NaN (§2.2), erratum 8589 key equality, encode-time bignum strip/reduction in deterministic modes (`BigIntTo` unchanged), §2.1 table fix | Pending | First three rows + erratum row pass |
 | 2 | `RequirePreferredPlus` / `RequireDeterministic` + sentinels | Pending | Checking-decoder rows pass |
 | 3 | Encoder-side bignum normalization (RFC 8949 §3.4.3) + `WithLegacyBignumPassthrough` | Pending | Bignum rows pass |
 | 4 | Draft class (034): `ModePreferredPlus`, `RequirePreferredPlus` documented Experimental; draft vectors | Pending | Draft rows pass; **renamed/finalized when the RFC publishes, per 034 lifecycle** |
@@ -348,10 +373,10 @@ RFC renames them). That is a separate proposal.
 ## Open questions
 
 1. ~~Should `StrictDecoder` include `RequireDeterministic`?~~
-   Resolved by proposal 034: no; `DeterministicDecoder` preset instead.
-2. Should `RejectNonShortest` also cover float width? Today it covers
-   only arguments; float width moves under `RequirePreferredPlus`.
-   Folding it into `RejectNonShortest` changes existing behavior.
+   Resolved by proposal 034: no (existing semantics kept); `DeterministicDecoder` preset instead.
+2. ~~Should `RejectNonShortest` also cover float width?~~ Resolved by
+   034 (existing identifiers keep their semantics): no. Float width is
+   checked by `RequireDeterministic` and `RequirePreferredPlus` only.
 3. When CTAP2 forces float64, should NaN be `fb7ff8000000000000`
    (float64 quiet NaN) or should NaN be rejected outright? CTAP2 §6
    doesn't address NaN.
@@ -376,3 +401,4 @@ RFC renames them). That is a separate proposal.
 |---|---|---|
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review + IETF upstream check | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

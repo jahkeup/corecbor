@@ -199,8 +199,17 @@ wrap `ErrMalformedTag`, which is an additive change for `errors.Is` callers.
    Commit the diff with the IANA `updated` date in the message.
 2. Make the generator skip `Unassigned` and range rows deterministically
    (today they produce constants such as tag 12 "Unassigned").
-3. Document in `registry/doc.go` that generated identifiers are
-   **not** API-stable. Stable names live in `cbor/tags.go` (Phase A/B).
+3. **Generated identifiers are API and never change.** Every constant
+   present in v0.2.2 `registry/tags_gen.go` keeps its name and value.
+   The generator reads a checked-in `registry/names_frozen.txt` (seeded
+   from v0.2.2) and always emits those names first. A newly registered
+   tag gets a new name, which is then appended to the frozen list. If
+   IANA rewrites a tag's description so the derived name would differ,
+   the frozen name stays and the new name is **not** added (one name
+   per tag). If IANA withdraws a tag, its constant stays with
+   `// Deprecated: no longer in the IANA registry (YYYY-MM-DD)`.
+   Hand-picked short names for common tags still live in `cbor/tags.go`
+   (Phase A/B) for readability, not for stability.
 4. Add a `make registry-check` target that fetches and diffs without
    writing. It is advisory only: CI never makes a network fetch a gate.
 5. Add an `Allowed` set builder for 023's tag allow-list:
@@ -231,17 +240,20 @@ the RFC 8949 §8 / Appendix G notation. Candidate changes for
 This phase stays out of scope until the draft is published as an RFC,
 per `rfcs/README.md` ("Do not vendor I-Ds") and proposal 034 (no draft
 defaults). On publication, vendor the RFC and file the change as an
-amendment to proposal 009. If the new notation becomes the default
-output, a `DiagRFC8949() DiagnosticOption` selector keeps the RFC 8949
-§8 / Appendix G spelling for callers whose tooling parses it.
+amendment to proposal 009. Per 034, `Diagnostic()` and
+`DiagnosticValue()` keep their RFC 8949 §8 / Appendix G output as their
+default (existing identifiers keep their semantics); the new notation
+arrives as an opt-in `DiagCDN() DiagnosticOption`, recommended in godoc.
 
 ### Behavior
 
 Phases A–C are additive. Existing `TagEncodedCBOR` / `AsNestedCBOR` are
 kept. `AsNestedCBOR` gains a doc note pointing to `DecodeEncodedCBOR`.
-The registry refresh may *rename* generated constants. That is
-acceptable only because Phase C step 3 declares them unstable. The
-in-repo users of generated names must be migrated in the same PR.
+The registry refresh adds generated constants and updates the data
+returned by `LookupTag`, `IsRegistered` and `AllTags`. Those functions
+document that they reflect the IANA registry, so new rows are their
+contract, not a semantic change. No existing generated constant is
+renamed, removed or revalued (Phase C step 3).
 
 ### Failure modes
 
@@ -257,17 +269,20 @@ in-repo users of generated names must be migrated in the same PR.
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
-This proposal adds helpers and data; no existing encode or decode
+This proposal adds helpers, constants and data; no existing identifier
+changes signature or semantics, and no existing encode/decode/diagnostic
 output changes.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| New tag helpers (UUID, dates, extended time, IP, OID, tag 24) and stable constants | Additive | n/a | n/a |
-| Existing tag helpers' errors wrap `ErrMalformedTag` (same text) | Additive | n/a | n/a |
-| `registry.json` / `tags_gen.go` track the current IANA registry; generated identifiers may be renamed | Policy (current registry) | regenerated | none — generated names are declared unstable (Phase C step 3); stable names live in `cbor/tags.go` |
-| Phase E diagnostic notation (draft-ietf-cbor-edn-literals) | Draft | not implemented | gated on RFC publication; then `DiagRFC8949() DiagnosticOption` if the default output changes |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| New tag helpers (UUID, dates, extended time, IP, OID, tag 24) and short constants in `cbor/tags.go` | Additive | — | unchanged | n/a |
+| Existing tag helpers' errors also wrap `ErrMalformedTag` | Additive | — | `Error()` text identical; existing `errors.Is` matches unchanged | n/a |
+| `registry.json` / `tags_gen.go` regenerated from the current IANA registry | Contract (data refresh) | `registry/doc.go` (package reflects the IANA CBOR tag registry) | every v0.2.2 constant keeps name and value; `LookupTag`/`IsRegistered`/`AllTags` return the refreshed rows | none |
+| `registry.TagSet`, `CoreTags`, `COSETags` | Additive | — | n/a | n/a |
+| Phase E Concise Diagnostic Notation (draft-ietf-cbor-edn-literals) | Draft → Additive on publication | — | `Diagnostic`/`DiagnosticValue` default output unchanged | `DiagCDN() DiagnosticOption`, opt-in, only after RFC publication |
 
-`CompatV02()` / `CompatV02Decoding()` bundle nothing from 026.
+`CompatV02()` / `CompatV02Decoding()` bundle nothing from 026. No
+`...Option` parameters are appended to existing functions.
 
 ---
 
@@ -287,6 +302,10 @@ output changes.
 | §4.3 table gains rows for each new tag | spec diff | Yes |
 | No `AsX` helper panics on any input | `FuzzTagHelpersNeverPanic` | Yes |
 | No Phase A–C change alters bytes produced or accepted by v0.2.2 for the legacy fixture set | `TestCompatV02MarshalGolden` (025) passes unchanged after 026 lands | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
+| Every constant in v0.2.2 `registry/tags_gen.go` exists after regeneration with the same name and value | `TestRegistryNamesFrozen` against `registry/names_frozen.txt` | Yes |
+| `Diagnostic()` output for the diagnostic test corpus is byte-identical to v0.2.2 | `diagnostic_test.go` golden | Yes |
 
 ---
 
@@ -325,7 +344,7 @@ must not regress (`make bench` against `bench-020-baseline.txt`).
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Registry refresh renames generated constants that downstream code uses | med | med | Declare them unstable (Phase C.3); provide stable names in `cbor` |
+| IANA description edits push the generator toward new names | med | low | Frozen-name list (Phase C.3); test asserts every v0.2.2 constant still exists with the same value |
 | RFC 9581 key space is large; partial modelling loses data | med | med | Preserve unknown keys in `Extra`; reject only fraction forms we can't represent |
 | `DateTo` location semantics surprise callers (UTC vs local civil date) | med | low | Document: civil date in `t.Location()`; tests for both |
 | Adding `ErrMalformedTag` wrapping to existing helpers changes error strings | low | low | Strings aren't API; `errors.Is` behavior only gains a match |
@@ -336,8 +355,9 @@ must not regress (`make bench` against `bench-020-baseline.txt`).
 ## Alternatives considered
 
 - **Use the generated registry constants as the public API.** That is
-  zero-effort, but the names are unstable and unreadable (see Motivation).
-  Rejected.
+  zero-effort, but derived names are long and hard to read (see
+  Motivation). Rejected as the *only* API; the generated constants stay
+  supported and frozen, and `cbor/tags.go` adds readable names.
 - **A separate `tags` sub-package** for helpers. It would keep `cbor`
   smaller, but splits the `AsTime`/`AsBigInt` family across two
   packages. Rejected for consistency. Revisit if `cbor` grows beyond
@@ -381,3 +401,4 @@ must not regress (`make bench` against `bench-020-baseline.txt`).
 |---|---|---|
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

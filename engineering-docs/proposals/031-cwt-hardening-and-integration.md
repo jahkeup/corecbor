@@ -29,15 +29,18 @@ The `cwt` module decodes and verifies tokens, but it has four problems:
 
 This proposal does four things:
 
-1. Make claims decoding total: typed claim keys, no panics, duplicate
-   keys rejected, memory budget on.
-2. Make validation fail closed by default.
-3. Add one `Verify` entry point that combines verification and
+1. Make claims decoding total: typed claim keys (beside the existing
+   `Private` map), no panics, duplicate keys rejected, memory budget on.
+2. Add `cwt.NewValidator()`, which fails closed with current-standards
+   defaults. The zero-value `Validator` keeps its v0.2.2 behavior, per
+   proposal 034 (existing identifiers keep their semantics).
+3. Add one new `VerifyToken` entry point that combines verification and
    validation and resolves the key through a context-aware resolver.
+   The existing `Verify` keeps its signature-only meaning.
 4. Add the missing standard claims and envelope handling.
 
 Acceptance: `FuzzDecodeClaimsSet` runs 60 s with no panics. A
-zero-configuration `cwt.Verify` rejects expired, not-yet-valid and
+zero-configuration `cwt.VerifyToken` rejects expired, not-yet-valid and
 `exp`-less tokens. Tag-61, untagged and RFC 9597 header-carried claims
 round-trip. Every error satisfies `errors.Is` against both the `cwt`
 sentinel and the underlying `corecbor` / `cose` sentinel.
@@ -94,6 +97,7 @@ type ClaimKey struct {
 	Int    int64
 	Text   string
 	IsText bool
+	Raw    string // encoded key for non-int/text labels (malformed per RFC 8392 §4, kept for diagnostics)
 }
 
 func IntKey(n int64) ClaimKey
@@ -116,33 +120,50 @@ const (
 	ClaimExi        int64 = 40  // RFC 9200
 )
 
+// Existing fields keep their names, types and v0.2.2 meaning
+// (proposal 034). New fields are appended; their zero values change
+// nothing.
 type ClaimsSet struct {
 	Issuer       string
 	Subject      string
-	Audience     Audience // was string
+	Audience     string // unchanged: the single-string form
 	Expiration   time.Time
 	NotBefore    time.Time
 	IssuedAt     time.Time
 	CWTID        []byte
 	Confirmation *Confirmation
-	Scope        *Scope  // nil when absent
-	ACEProfile   *int64  // nil when absent
-	CNonce       []byte
-	Exi          *uint64 // seconds; nil when absent
 
-	// Private holds every claim this package does not model, keyed
-	// by label, with the decoded value. Values alias the decoder's
-	// output; use corecbor.Value.Clone to retain them past the decode
-	// buffer when ZeroCopy is in use.
-	Private map[ClaimKey]corecbor.Value
+	// Private is the v0.2.2 catch-all, unchanged in type. Decode no
+	// longer panics: claims whose key is not hashable as a Go map key
+	// (bstr, array, map) are omitted here and appear only in
+	// PrivateClaims.
+	//
+	// Deprecated: use PrivateClaims.
+	Private map[any]any
+
+	// --- new in v0.30 ---
+
+	// Audiences is the "aud" claim in either form (RFC 9200 §5.10.1:
+	// a StringOrURI or an array of them). For a single-string aud,
+	// Audience == Audiences[0]. Encoding uses Audiences when it has
+	// more than one element, and otherwise Audience.
+	Audiences []string
+
+	Scope      *Scope  // RFC 9200 claim 9; nil when absent
+	ACEProfile *int64  // claim 38; nil when absent
+	CNonce     []byte  // claim 39
+	Exi        *uint64 // claim 40, seconds; nil when absent
+
+	// PrivateClaims holds every claim this package does not model,
+	// keyed by label, with the decoded value. Values alias the
+	// decoder's output; use corecbor.Value.Clone to retain them past
+	// the decode buffer when ZeroCopy is in use.
+	PrivateClaims map[ClaimKey]corecbor.Value
 }
 
-// Audience is the "aud" claim: a single StringOrURI or an array of
-// them (RFC 9200 §5.10.1). Encodes as a text string when it has one
-// element.
-type Audience []string
-
-func (a Audience) Contains(s string) bool
+// ContainsAudience reports whether s is the aud claim or one of its
+// elements.
+func (c *ClaimsSet) ContainsAudience(s string) bool
 
 // Scope is the ACE "scope" claim: text (space-separated) or bytes
 // (RFC 9200 §5.8.1).
@@ -153,15 +174,26 @@ type Scope struct {
 }
 ```
 
-`Private` changes from `map[any]any` to `map[ClaimKey]corecbor.Value`.
-This breaks the API, which is acceptable for a pre-1.0 sibling module,
-and it fixes defects 1, 2 and 15 together:
+`Private` keeps its v0.2.2 type, per proposal 034; the correctly typed
+`PrivateClaims` is added beside it and `Private` is deprecated. This
+fixes defects 1, 2 and 15 without breaking the API:
 
-- Decode rejects keys that are neither int nor text, returning
-  `ErrMalformedClaims` wrapped in a `*ClaimError`.
-- Integer keys outside the int64 range are rejected.
-- Encode rejects any `Private` key that collides with a registered
-  claim this package models.
+- Decode never panics. Keys that are neither int nor text go only into
+  `PrivateClaims` (which can hold them via `ClaimKey`'s text/int form
+  plus a new `ClaimKey.Raw []byte` for other key types), not `Private`.
+- Integer keys outside the int64 range no longer wrap onto registered
+  keys: −(2^64−1) is a private claim, not `iss`.
+- Encode rejects a `Private` or `PrivateClaims` key that collides with
+  a registered claim this package models (v0.2.2 emitted a map with
+  duplicate keys).
+- Claims 9, 38, 39 and 40, which v0.2.2 put in `Private`, now populate
+  the typed fields **and** stay in `Private` (so v0.2.2 readers of
+  `Private[int64(9)]` see no change). They do not appear in
+  `PrivateClaims`. On encode, a typed field and a `Private` entry for
+  the same key must agree, or `Encode` returns `ErrMalformedClaims`.
+- If both `Private` and `PrivateClaims` are set, `PrivateClaims` wins
+  for keys present in both only when the values are equal; otherwise
+  `Encode` returns `ErrMalformedClaims`.
 
 #### Numeric dates
 
@@ -183,29 +215,31 @@ float support, and its encoder has the pre-1970 wraparound
 #### Validation
 
 ```go
+// Validator keeps its v0.2.2 fields and zero-value behavior: exp and
+// iat checks are opt-in, exactly as before. New fields are appended;
+// their zero values change nothing.
 type Validator struct {
-	Issuers   []string      // when non-empty, iss MUST be one of these
-	Audience  string        // when set, aud MUST contain it
-	Leeway    time.Duration // MUST be >= 0
-	MaxAge    time.Duration // when > 0, iat MUST be within MaxAge of now
-	Now       func() time.Time
+	Audience            string        // unchanged; now also matches an element of Audiences
+	Leeway              time.Duration // unchanged
+	Now                 func() time.Time
+	RequireExpiration   bool // unchanged
+	RequireConfirmation bool // unchanged
 
-	// AllowMissingExpiration disables the default exp requirement.
-	// Policy-class selector (proposal 034): restores the v0.2 default.
-	AllowMissingExpiration bool
-	// AllowFutureIssuedAt disables the iat-in-the-future check.
-	// Policy-class selector (proposal 034): restores the v0.2 default.
-	AllowFutureIssuedAt bool
-	RequireConfirmation bool
-	RequireIssuedAt     bool
+	// --- new in v0.30 ---
+	Issuers              []string      // when non-empty, iss MUST be one of these
+	MaxAge               time.Duration // when > 0, iat MUST be within MaxAge of now
+	RequireIssuedAt      bool
+	RejectFutureIssuedAt bool // iat after now+Leeway → ErrIssuedInFuture
 }
 
-// DefaultValidator returns a Validator that requires exp, uses a
-// 60 s leeway, and rejects iat more than Leeway in the future.
-func DefaultValidator() *Validator
+// NewValidator returns a Validator with current-standards defaults:
+// RequireExpiration, RejectFutureIssuedAt, and a 60 s Leeway. It is the
+// recommended way to build a Validator; the zero value keeps v0.2.2
+// behavior.
+func NewValidator() *Validator
 
-// Validate checks claims against v. A nil v behaves like
-// DefaultValidator().
+// Validate checks claims against v. Calling it on a nil *Validator
+// returns ErrInvalidValidator (v0.2.2 panicked).
 func (v *Validator) Validate(claims *ClaimsSet) error
 ```
 
@@ -213,15 +247,15 @@ Semantics:
 
 | Check | Rule |
 |---|---|
-| `exp` | Reject when `!now.Before(exp.Add(leeway))` ("on or after", RFC 8392 §3.1.4). |
-| `nbf` | Reject when `now.Before(nbf.Add(-leeway))`. |
-| `iat` | Reject when it is after `now + leeway`. With `MaxAge > 0`, also reject when it is before `now - MaxAge - leeway`. |
-| Leeway | A negative leeway returns `ErrInvalidValidator`. |
+| `exp` | Reject when `!now.Before(exp.Add(leeway))` ("on or after", RFC 8392 §3.1.4 → RFC 7519 §4.1.4). Applies to every `Validator`; v0.2.2 accepted `now == exp`. |
+| `nbf` | Reject when `now.Before(nbf.Add(-leeway))` (unchanged). |
+| `iat` | With `RejectFutureIssuedAt`, reject when after `now + leeway`. With `MaxAge > 0`, also reject when before `now - MaxAge - leeway`. |
+| `aud` | When `Audience` is set, it must equal `claims.Audience` or appear in `claims.Audiences`. For single-string tokens this is the v0.2.2 rule. |
+| Leeway | Unchanged: any value, as in v0.2.2. `NewValidator` sets 60 s. |
 
-**Migration:** `RequireExpiration bool` is replaced by
-`AllowMissingExpiration bool`, which inverts the default. The proposal
-accepts this break, and the changelog must call it out. The zero
-`Validator{}` now requires `exp`.
+**Migration:** none required. `Validator{}` behaves as in v0.2.2 apart
+from the `exp` boundary fix. Callers adopt the standards defaults with
+`cwt.NewValidator()`.
 
 #### Verify entry point
 
@@ -240,7 +274,7 @@ type KeyResolverFunc func(ctx context.Context, h *cose.Headers, alg cose.Algorit
 
 type VerifyOptions struct {
 	Keys      KeyResolver
-	Validator *Validator // nil: DefaultValidator()
+	Validator *Validator // nil: NewValidator()
 
 	// RequireTag requires the outer CWT tag 61 (RFC 8392 §6).
 	RequireTag bool
@@ -256,16 +290,24 @@ type Token struct {
 	Tagged      bool // outer tag 61 was present
 }
 
-// Verify parses data (optionally tag-61 wrapped, COSE_Sign1 tagged
-// or untagged), resolves the key, verifies the signature, checks
-// typ/cty when present, decodes the claims strictly and validates
-// them. It is the recommended entry point.
-func Verify(ctx context.Context, data []byte, opts VerifyOptions) (*Token, error)
+// VerifyToken parses data (optionally tag-61 wrapped, COSE_Sign1
+// tagged or untagged), resolves the key, verifies the signature,
+// checks typ/cty when present, decodes the claims strictly and
+// validates them. It is the recommended entry point.
+func VerifyToken(ctx context.Context, data []byte, opts VerifyOptions) (*Token, error)
+
+// VerifyMACToken and OpenToken are the COSE_Mac0 and COSE_Encrypt0
+// counterparts, with the same options plus the MAC / content key.
+func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions) (*Token, error)
+func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions) (*Token, error)
 ```
 
-The existing `Verify(data, verifier)` is renamed to `VerifySignature`
-and documented as "signature only; caller MUST validate". MAC
-(`VerifyMAC`) and Encrypt0 (`Decrypt`) get the same treatment.
+The existing `Verify(data, verifier)`, `VerifyMAC` and `Decrypt` keep
+their names, signatures and v0.2.2 meaning (signature/MAC/decryption
+only, no time validation), per proposal 034. Their godoc gains
+"does not validate claims; use VerifyToken or call Validator.Validate".
+They pick up only the contract-defect fixes listed under Compatibility
+selection (tag 61 accepted, no panics, duplicate claims rejected).
 
 #### Envelope and headers
 
@@ -301,21 +343,31 @@ func SetClaimsHeader(h *cose.Headers, c *ClaimsSet) error
 MUST say that UCCS is unprotected and relies on a secure channel (RFC
 9781 §3).
 
-**Encrypt0:** `Encrypt` generates a random IV and writes it to the
-unprotected IV header (label 5). `Decrypt` reads it from there, so the
-nonce parameters are removed. This depends on proposal 029 for the COSE
-side. Tokens encrypted by v0.2 carry no IV header; they stay readable
-through `DecryptWithNonce(data []byte, key []byte, nonce []byte)
-(*ClaimsSet, error)`, which is `// Deprecated:` (removal floor
-v0.32.0).
+**Encrypt0:** the existing `Encrypt(claims, key, nonce, alg)` and
+`Decrypt(data, key, nonce, alg)` keep their signatures and v0.2.2
+behavior (caller-supplied nonce, no IV header) and are deprecated. New
+`Seal(claims *ClaimsSet, key []byte, alg cose.Algorithm, opts
+...cose.EncryptOption) ([]byte, error)` generates a random IV and writes
+it to the unprotected IV header (label 5), via 029's `Encrypt0Seal`;
+`OpenToken` reads it from there.
 
 #### Confirmation (RFC 8747)
 
 ```go
 type Confirmation struct {
-	Key       *cose.Key        // 1: COSE_Key (EC2, OKP, Symmetric)
-	Encrypted *EncryptedKey    // 2: COSE_Encrypt0 or COSE_Encrypt (was []byte)
-	KeyID     []byte           // 3: kid
+	Key       *cose.Key // 1: COSE_Key (EC2, OKP, Symmetric) — unchanged
+	KeyID     []byte    // 3: kid — unchanged
+	// Encrypted keeps its v0.2.2 type. On decode it holds the encoded
+	// bytes of member 2 (the bstr v0.2.2 emitted, or the encoded
+	// COSE_Encrypt0/COSE_Encrypt array RFC 8747 §3.3 specifies). On
+	// encode it is emitted as a bstr, as in v0.2.2.
+	//
+	// Deprecated: use EncryptedKey, which encodes per RFC 8747 §3.3.
+	Encrypted []byte
+
+	// EncryptedKey is member 2 as RFC 8747 §3.3 defines it. New in v0.30;
+	// takes precedence over Encrypted on encode.
+	EncryptedKey *EncryptedKey
 }
 
 type EncryptedKey struct {
@@ -331,17 +383,17 @@ Decode rules:
 
 - Exactly one confirmation method must be present. More than one
   returns `ErrMalformedClaims`, because RFC 8747 §3.1 defines a single
-  method per `cnf`.
-- An unknown member is an error unless `DecodeOptions.AllowUnknownCnf`
-  is set.
+  method per `cnf` (v0.2.2 silently kept all of them).
+- Unknown members are ignored, as in v0.2.2. `DecodeOptions.RejectUnknownCnf`
+  opts into rejecting them.
 
 ```go
-// DecodeOptions adjusts claims decoding. The zero value is the v0.30
-// default.
+// DecodeOptions adjusts claims decoding. The zero value is exactly
+// DecodeClaimsSet's behavior.
 type DecodeOptions struct {
-	// AllowUnknownCnf accepts cnf members other than 1, 2 and 3
-	// (ignored), as v0.2 did. Policy-class selector.
-	AllowUnknownCnf bool
+	// RejectUnknownCnf rejects cnf members other than 1, 2 and 3.
+	// Opt-in; DecodeClaimsSet ignores them, as in v0.2.2.
+	RejectUnknownCnf bool
 
 	// AllowDuplicateClaims restores v0.2's last-one-wins handling of
 	// duplicate claim keys.
@@ -355,24 +407,29 @@ func DecodeClaimsSetWith(data []byte, opts DecodeOptions) (*ClaimsSet, error)
 ```
 
 `VerifyOptions` gains a `Decode DecodeOptions` field.
-- OKP keys MUST carry `crv`. Ed25519 and X25519 are distinguished
-  instead of assumed.
-- EC2 coordinates must be exactly the curve size.
+- OKP keys MUST carry `crv` (RFC 9053 §7.2). Ed25519 and X25519 are
+  distinguished instead of assumed (v0.2.2 read an X25519 key as an
+  Ed25519 key).
+- EC2 coordinates follow 028: oversize rejected, short left-padded as
+  in v0.2.2.
 - Key decoding moves to `cose.ParseKey` (proposal 028). The private
   `unmarshalCOSEKey` / `coseKeyFromMaps` duplicates in `cwt/claims.go`
   and `edhoc/credential.go` are removed.
 
 ### Behavior
 
-| Before | After |
+| Before (v0.2.2) | After (v0.30) |
 |---|---|
-| `DecodeClaimsSet` panics on a bstr / array / map claim key | Returns `*ClaimError{Key, Err: ErrMalformedClaims}` |
-| Duplicate claim → last wins | Rejected (`corecbor.ErrDuplicateMapKey` wrapped) |
-| `cwt.Verify(data, v)` → no time checks | `cwt.Verify(ctx, data, opts)` validates by default; the old function is renamed `VerifySignature` |
-| `Validator{}` accepts no-`exp` tokens | Rejects; opt out via `AllowMissingExpiration` |
+| `DecodeClaimsSet` panics on a bstr / array / map claim key | No panic; the claim lands in `PrivateClaims` only |
+| −(2^64−1) claim key decodes as `iss` | Decodes as a private claim |
+| Duplicate claim → last wins | Rejected (`corecbor.ErrDuplicateMapKey` wrapped); `DecodeOptions.AllowDuplicateClaims` restores v0.2.2 |
+| `cwt.Verify(data, v)` → no time checks | Unchanged. `cwt.VerifyToken(ctx, data, opts)` is the new validating entry point |
+| `Validator{}` accepts no-`exp` tokens | Unchanged. `cwt.NewValidator()` requires `exp` |
 | `now == exp` accepted | Rejected |
-| `61(18([...]))` rejected | Accepted |
-| `aud: ["a","b"]` rejected | Accepted; `Audience.Contains` |
+| `nil.Validate(c)` panics | `ErrInvalidValidator` |
+| `61(18([...]))` rejected | Accepted (by `Verify` and `VerifyToken`) |
+| `aud: ["a","b"]` rejected | Accepted; `Audiences`, `ContainsAudience` |
+| Multiple `cnf` methods kept | Rejected |
 
 ### Failure modes
 
@@ -400,32 +457,38 @@ so both errors stay in the chain (Go ≥ 1.20 multi-`%w`).
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
-Defaults follow RFC 8392 / 8747 / 9200 and fail closed.
+No exported identifier is removed, renamed or retyped: `ClaimsSet`,
+`Confirmation` and `Validator` keep every v0.2.2 field with its type,
+and `Sign`, `Verify`, `Encrypt`, `Decrypt`, `MAC`, `VerifyMAC`,
+`DecodeClaimsSet` keep their signatures and meaning. The standards-
+current behavior arrives in new identifiers (`NewValidator`,
+`VerifyToken`, `VerifyMACToken`, `OpenToken`, `Seal`, `Audiences`,
+`PrivateClaims`, `EncryptedKey`).
 
-`AllowMissingExpiration()` in 034's decision table is the
-`Validator.AllowMissingExpiration` field here, because `cwt` configures
-validation with a struct, not functional options.
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| Non-scalar claim keys no longer panic | Safety defect | — | omitted from `Private`, present in `PrivateClaims` | none |
+| Out-of-range int keys alias registered claims; private/registered key collision on encode | Contract defect | RFC 8392 §4 (claim keys are int or text; registered keys mean the registered claim) | not aliased; collision → `ErrMalformedClaims` | none |
+| NumericDate range/NaN checks (`nbf` failed open) | Safety defect | — | out-of-range → error | none |
+| Nil `*Validator` | Safety defect (panic) | — | `ErrInvalidValidator` | none |
+| `exp` rejected "on or after" | Contract defect | RFC 8392 §3.1.4 → RFC 7519 §4.1.4 ("on or after") | `now == exp` rejected | none (`Leeway` covers clock tolerance) |
+| `exp` required, future `iat` rejected, issuer allow-list, max age | Superseded contract | — | zero-value `Validator` unchanged | `cwt.NewValidator()` (recommended); new fields `Issuers`, `MaxAge`, `RequireIssuedAt`, `RejectFutureIssuedAt` |
+| Verify + validate in one call; typ/cty checks | Additive (new identifier) | — | `Verify`/`VerifyMAC`/`Decrypt` unchanged (signature/MAC/decrypt only) | `VerifyToken`, `VerifyMACToken`, `OpenToken` |
+| Duplicate claim keys rejected | Contract defect | RFC 8392 §7.2 (validation fails on duplicate claims) | rejected | `DecodeClaimsSetWith(data, DecodeOptions{AllowDuplicateClaims: true})` — field Deprecated. Not bundled |
+| Multiple `cnf` methods rejected; OKP without `crv` rejected | Contract defect | RFC 8747 §3.1 (one method per cnf); RFC 9053 §7.2 (`crv` required for OKP) | rejected | none (ambiguous key binding) |
+| Unknown `cnf` members | unchanged | — | ignored, as v0.2.2 | `DecodeOptions.RejectUnknownCnf` (opt-in) |
+| Tag 61 accepted around COSE | Contract defect | RFC 8392 §6 (CWT tag 61 MAY wrap the COSE message) | accepted | none |
+| `aud` arrays | Additive (input v0.2.2 rejected) | — | `Audience` holds single-string aud as before | `Audiences`, `ContainsAudience` |
+| ACE claims 9/38/39/40 | Additive | — | still present in `Private` as in v0.2.2 | typed fields |
+| `cnf` member 2 per RFC 8747 §3.3 | Superseded contract | — | `Encrypted []byte` unchanged, deprecated | `EncryptedKey` |
+| Encrypted CWT IV in label 5 | Superseded contract | — | `Encrypt`/`Decrypt` unchanged (caller nonce), deprecated | `Seal` / `OpenToken` |
+| UCCS, RFC 9597 header bridge | Additive | — | n/a | `DecodeUCCS`, `ClaimsFromHeaders`, `SetClaimsHeader` |
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| Non-scalar claim keys → `*ClaimError`, no panic; key overflow aliasing; private/registered key collision | Defect | error | none — defect |
-| NumericDate range/NaN checks (`nbf` failed open) | Defect | error | none — defect |
-| Nil `*Validator` no longer panics; negative leeway → `ErrInvalidValidator` | Defect | fixed | none — defect |
-| `exp` rejected "on or after" (RFC 8392 §3.1.4) | Defect (off-by-one vs MUST) | `now == exp` rejected | none — `Leeway` covers clock tolerance |
-| `exp` required by default | Policy | required | `Validator.AllowMissingExpiration bool` |
-| `iat` in the future rejected by default | Policy | rejected | `Validator.AllowFutureIssuedAt bool` |
-| `cwt.Verify` validates by default; old signature-only function | Policy | validating `Verify(ctx, data, opts)` | `VerifySignature(data, verifier)` (the v0.2 `Verify`, renamed; not deprecated, documented "caller MUST validate") |
-| Duplicate claim keys rejected | Conformance (RFC 8392 §7.2) | rejected | `DecodeOptions.AllowDuplicateClaims` — Deprecated |
-| `cnf`: exactly one method; OKP requires `crv`; unknown members rejected | Conformance (RFC 8747 §3.1) / Policy (unknown members) | rejected | `DecodeOptions.AllowUnknownCnf` for unknown members; none for multiple methods or missing `crv` (ambiguous key binding) |
-| `typ` checked when present (RFC 9596) | Conformance | checked | none — v0.2 never emitted `typ`, so no v0.2 token is affected |
-| Tag 61, untagged COSE, `aud` arrays accepted; UCCS, RFC 9597 header bridge, ACE claims | Additive (widening) | accepted | n/a |
-| Encrypted CWT IV in label 5; `Decrypt` takes no nonce | Conformance (RFC 9052 §3.1, via 029) | IV in header | `DecryptWithNonce(...)` — Deprecated, reads v0.2 tokens |
-
-**No `cwt.CompatV02` bundle.** Every `cwt` selector except
-`DecryptWithNonce` relaxes token validation. Under 027's bundling rule,
-selectors that weaken verification must be named at the call site, so a
-bundle would be empty or unsafe. (Flagged for 034: its "each module
-exports CompatV02" note doesn't apply to `cwt`.)
+**No `cwt.CompatV02` bundle.** The only `Legacy`-style selector
+(`AllowDuplicateClaims`) weakens validation and must be named at the
+call site; everything else keeps v0.2.2 behavior in the existing
+identifiers. No `...Option` parameters are appended to existing
+functions.
 
 ---
 
@@ -434,27 +497,31 @@ exports CompatV02" note doesn't apply to `cwt`.)
 | Criterion | Test mechanism | Gating? |
 |---|---|---|
 | No panic on any input to `DecodeClaimsSet`, `Verify`, `ClaimsFromHeaders`, `DecodeUCCS` | `FuzzDecodeClaimsSet`, `FuzzVerify` 60 s | Yes |
-| bstr / array / map claim key → `*ClaimError` wrapping `ErrMalformedClaims` | `TestDecodeClaims_NonScalarKey` | Yes |
+| bstr / array / map claim key decodes without panic into `PrivateClaims` only (not `Private`) | `TestDecodeClaims_NonScalarKey` | Yes |
 | NegInt `-(2^64-1)` key does not alias `iss` | `TestDecodeClaims_KeyOverflow` | Yes |
 | uint `exp`/`nbf` > MaxInt64, NaN, ±Inf → error | `TestNumericDate_Range` | Yes |
 | Duplicate `exp` → error wrapping `corecbor.ErrDuplicateMapKey` | `TestDecodeClaims_DuplicateKey` | Yes |
-| `Validator{}` rejects missing `exp`; `nil` validator does not panic | `TestValidator_Defaults` | Yes |
+| `NewValidator()` rejects missing `exp`; `nil` validator returns `ErrInvalidValidator` | `TestValidator_Defaults` | Yes |
 | `now == exp` rejected; `now == exp - 1ns` accepted (leeway 0) | `TestValidator_ExpBoundary` | Yes |
-| Negative leeway → `ErrInvalidValidator` | `TestValidator_NegativeLeeway` | Yes |
-| `iat` > now+leeway → `ErrIssuedInFuture` | `TestValidator_FutureIat` | Yes |
-| `aud` text and array both decode; `Contains` matches | `TestAudience_StringOrArray` | Yes |
+| With `RejectFutureIssuedAt` (set by `NewValidator`), `iat` > now+leeway → `ErrIssuedInFuture` | `TestValidator_FutureIat` | Yes |
+| `aud` text and array both decode into `Audiences`; text also into `Audience`; `ContainsAudience` matches | `TestAudience_StringOrArray` | Yes |
 | RFC 8392 Appendix A.3 signed CWT verifies with tag 61 and without | `TestVerify_RFC8392_A3` (vector already used by `cwt_test.go`; add tagged form) | Yes |
-| `typ: "application/cwt"` accepted; other `typ` rejected | `TestVerify_TypHeader` | Yes |
+| `VerifyToken`: `typ: "application/cwt"` accepted, other `typ` rejected; `Verify` ignores `typ` as in v0.2.2 | `TestVerify_TypHeader` | Yes |
 | RFC 9597 label-15 claims round-trip through `SetClaimsHeader` / `ClaimsFromHeaders` | `TestClaimsHeader_RoundTrip` | Yes |
 | UCCS tag 601 decodes | `TestDecodeUCCS` | Yes |
 | `cnf` with two methods → error; OKP without `crv` → error; X25519 not read as Ed25519 | `TestCnf_*` | Yes |
 | `cnf` symmetric key (kty 4) round-trips | `TestCnf_Symmetric` | Yes |
 | `errors.Is(err, corecbor.ErrMemoryBudgetExceeded)` true through `DecodeClaimsSet` | `TestErrors_WrapChain` | Yes |
-| Encrypted CWT carries its IV in label 5; `Decrypt` needs no nonce argument | `TestEncrypt_IVHeader` | Yes |
+| `Seal` writes its IV in label 5 and `OpenToken` needs no nonce; `Encrypt`/`Decrypt` reproduce v0.2.2 bytes | `TestSeal_IVHeader`, `TestEncryptUnchanged` | Yes |
 | RFC 8392, 8747, 9200, 9596, 9597, 9781 vendored under `engineering-docs/rfcs/` with inventory rows | file review | Yes |
-| Each selector reproduces v0.2.2 acceptance on its fixture (no-`exp` token, future `iat`, duplicate `exp`, unknown `cnf` member, IV-less encrypted token) and the default rejects it | `TestCompat*` vs `testdata/legacy-v0.2.2/` | Yes |
-| `VerifySignature` behaves exactly like v0.2.2 `Verify` on the RFC 8392 A.3 vector | `TestCompatVerifySignature` | Yes |
-| `DecodeOptions.AllowDuplicateClaims` and `DecryptWithNonce` carry `// Deprecated:` with removal floor v0.32.0 | staticcheck SA1019 fixture | Yes |
+| `DecodeOptions{AllowDuplicateClaims: true}` reproduces v0.2.2 acceptance of a duplicate-`exp` token and the default rejects it | `TestCompatDuplicateClaims` vs `testdata/legacy-v0.2.2/` | Yes |
+| `Verify` behaves exactly like v0.2.2 on the RFC 8392 A.3 vector | `TestCompatVerify` | Yes |
+| `DecodeOptions.AllowDuplicateClaims` carries `// Deprecated:` with removal floor v0.32.0; `Private`, `Confirmation.Encrypted`, `Encrypt`, `Decrypt` carry `// Deprecated:` pointing to their replacements | staticcheck SA1019 fixture | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
+| `Validator{}` accepts a token without `exp` and with a future `iat` (v0.2.2); `NewValidator()` rejects both | `TestValidatorZeroUnchanged`, `TestNewValidatorDefaults` | Yes |
+| `cwt.Verify` returns claims for an expired token (signature-only, as v0.2.2); `VerifyToken` rejects it | `TestVerifyUnchanged`, `TestVerifyTokenValidates` | Yes |
+| Decoding claim 9 populates `Scope` and leaves `Private[int64(9)]` as in v0.2.2 | `TestACEClaimsPrivateCompat` | Yes |
 
 ---
 
@@ -462,7 +529,7 @@ exports CompatV02" note doesn't apply to `cwt`.)
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| A | Total decode: `ClaimKey`, `Private` redesign, key/date range checks, duplicate rejection, budget, `%w` chain, `ClaimError` | Pending | Fuzz + `TestDecodeClaims_*` pass |
+| A | Total decode: `ClaimKey`, `PrivateClaims` beside `Private`, key/date range checks, duplicate rejection, budget, `%w` chain, `ClaimError` | Pending | Fuzz + `TestDecodeClaims_*` pass |
 | B | Fail-closed `Validator` + new `Verify(ctx, …)` + `KeyResolver` | Pending | `TestValidator_*`, `TestVerify_*` pass |
 | C | Envelope: tag 61, `typ`/`cty`, nested CWT, UCCS, RFC 9597 header bridge | Pending | Envelope tests pass (requires 028 `Headers` accessors) |
 | D | ACE claims (`scope`, `ace_profile`, `cnonce`, `exi`) + `cnf` completion + Encrypt0 IV | Pending | `TestCnf_*`, `TestEncrypt_IVHeader` pass (requires 029) |
@@ -489,8 +556,8 @@ because it removes a crash on untrusted input.
 
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
-| Fail-closed defaults break existing callers that relied on `exp`-less tokens | med | med | `AllowMissingExpiration` opt-out; changelog entry; `eat` and `edhoc` updated in the same PR series |
-| `Private` type change breaks callers | med | low | Pre-1.0; `ClaimKey` helpers make migration mechanical |
+| Callers keep using the zero-value `Validator` / `Verify` and never get fail-closed checks | high | med | Godoc on both points to `NewValidator`/`VerifyToken`; in-tree consumers (`eat`, `edhoc`) switch in the same PR series |
+| `Private` and `PrivateClaims` drift apart on encode | med | low | Encode rejects conflicting values; `Private` deprecated |
 | Phase C/D blocked on COSE proposals 028/029 | med | low | Phases A/B are independent and carry the safety fixes |
 | Nested-CWT recursion DoS | low | med | `MaxNesting` default 1, hard cap 4 |
 
@@ -498,23 +565,24 @@ because it removes a crash on untrusted input.
 
 ## Alternatives considered
 
-**Keep `map[any]any` and skip unhashable keys.** Rejected. Silently
-dropping claims breaks round-trips, and the map still can't tell
-`int64(1)` apart from `int(1)`.
+**Retype `Private` to `map[ClaimKey]corecbor.Value`.** Cleaner, but it
+retypes an exported field. Rejected under proposal 034; `PrivateClaims`
+is added beside it instead.
 
-**Keep `Verify` signature-only and document "call Validate".** Rejected.
-That is the current state, and the in-tree consumer
-(`edhoc/credential.go:43`) already forgets to call `Validate`.
+**Make `Verify` validate by default (renaming the old one).** It would
+fix forgetful callers such as `edhoc/credential.go:43`, but changes the
+meaning of an existing identifier and renames another. Rejected under
+034; `VerifyToken` is the new, recommended entry point and in-tree
+callers move to it.
 
-**Model `aud` as `string` plus `ExtraAudiences []string`.** Rejected as
-clumsy. `Audience []string`, encoding as text when it has one element,
-is wire-compatible with RFC 8392.
+**Retype `aud` to `[]string`.** Wire-compatible, but retypes an exported
+field. Rejected under 034; `Audiences` is added beside `Audience`.
 
 ---
 
 ## Open questions
 
-- Should `DefaultValidator` leeway be 60 s or 0? ACE deployments
+- Should `NewValidator` leeway be 60 s or 0? ACE deployments
   usually configure leeway explicitly. 60 s matches common JWT
   libraries.
 - Should `VerifyOptions` carry a `crit` allow-list, or delegate fully
@@ -557,3 +625,4 @@ is wire-compatible with RFC 8392.
 |---|---|---|
 | 2026-11-20 | Initial draft from 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

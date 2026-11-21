@@ -5,13 +5,13 @@
 | Field | Value |
 |---|---|
 | **Number** | 025 |
-| **Tier** | 2 (Phase D is tier-1: amends 008 — see below) |
+| **Tier** | 2 |
 | **Status** | Draft |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 016 (struct Value), 008 (Marshal/Unmarshal), 021 (core codec safety fixes — embedded-struct index paths), 034 (compatibility policy) |
 | **Supersedes** | none |
-| **Spec sections touched** | §4.1 (Value accessors, additive); §8.2 (known caller use cases); Phase D only: the 008 field-naming rule |
+| **Spec sections touched** | §4.1 (Value accessors, additive); §8.2 (known caller use cases) |
 
 ---
 
@@ -27,12 +27,11 @@ debugging. Reflection-based users additionally lack array-shaped structs
 `BinaryUnmarshaler` symmetry, and `omitzero`.
 
 This proposal adds those helpers, and four reflection features,
-additively. One item, Phase D, changes the default struct-field key
-from `strings.ToLower(f.Name)` to the Go field name as-is, matching
-`encoding/json` and `fxamacker/cbor`. That changes `Marshal` output, so
-per proposal 034 (Policy class) it ships in v0.30 with the
-`WithLowercaseFieldNames()` selector restoring v0.2 output, and decode
-accepts both spellings.
+additively. Phase D adds an **opt-in** for keying untagged struct fields
+by the Go field name as-is (the `encoding/json` and `fxamacker/cbor`
+convention). The default stays `strings.ToLower(f.Name)`: no standard
+decides field-name casing, so per proposal 034 the existing behavior is
+kept and the alternative is opt-in.
 
 **Acceptance:** the `cose`, `cwt`, `eat`, and `edhoc` modules can delete
 their private label-lookup / integer-conversion helpers in favor of the
@@ -179,7 +178,15 @@ No exported symbol is removed. `cbor` remains import-free of `rfc8949`.
    check: `encoding.BinaryUnmarshaler` accepts `KindBytes`;
    `encoding.TextUnmarshaler` accepts `KindText`. Precedence mirrors
    encode (`reflect_encode.go:80-110`): Marshaler, then the special
-   types (`time.Time`, `big.Int`), then Binary, then Text.
+   types (`time.Time`, `big.Int`), then Binary, then Text. This restores
+   proposal 008's documented support (`008-reflective-marshal-unmarshal.md:315-316`:
+   "`TextMarshaler`/`TextUnmarshaler`: Yes, supported") and the
+   `Marshal`→`Unmarshal` round-trip for `BinaryMarshaler` types
+   (008:170). The only v0.2.2 behavior that changes is a `[]byte`- or
+   `string`-kinded type that also implements the Unmarshaler: v0.2
+   stored the raw bytes/text directly, v0.30 calls the method.
+   `WithLegacyNoTextBinaryUnmarshal() DecoderOption` (Deprecated)
+   restores v0.2.
 
 4. **Field metadata cache with index paths.** Replace `getStructFields`
    with a `sync.Map`-backed cache keyed by `reflect.Type`, storing
@@ -209,52 +216,55 @@ Replace private helpers in `cose`, `cwt`, `eat`, and `edhoc` with
 `Get`/`GetInt`/`Int64`/`Equal`. This is mechanical and gated on Phase A
 only. It is the acceptance check that the API is sufficient.
 
-### Phase D — Default field-name casing (contract-touching; amends 008)
+### Phase D — Opt-in Go field-name casing (additive)
 
-Changing the untagged default from lowercase to as-is changes the bytes
-`Marshal` emits for any struct without explicit tags. That alters a
-behavior proposal 008 defined, so Phase D is tier-1 work and this
-proposal records the amendment to 008. Under proposal 034 the default
-follows the deployed Go ecosystem (`encoding/json`, `fxamacker/cbor`:
-field name as-is) and v0.2 output stays selectable:
+The untagged default stays `strings.ToLower(f.Name)`, as proposal 008
+and v0.2.2 define it. No standard decides this, so per proposal 034
+(precedence step 3) existing behavior is kept and the ecosystem
+convention is an opt-in:
 
 ```go
-// WithLowercaseFieldNames restores the v0.2 default: untagged struct
-// fields are keyed by strings.ToLower(field name). Policy-class
-// selector (proposal 034); not deprecated.
-func WithLowercaseFieldNames() Option
+// WithGoFieldNames keys untagged struct fields by the Go field name
+// as-is ("UserID", not "userid"), matching encoding/json and
+// fxamacker/cbor. Without it, untagged fields use
+// strings.ToLower(field name), as in v0.2.
+func WithGoFieldNames() Option
 
-// CompatV02 applies every encoder-side selector needed to reproduce
-// v0.2.x Marshal/Encode output: WithLowercaseFieldNames (025) and
-// WithLegacyBignumPassthrough (024).
+// WithCaseInsensitiveFieldNames makes struct decoding match a map key
+// against untagged field names exactly first, then case-insensitively
+// (the encoding/json rule). Without it, only the exact key for the
+// encoder's default naming matches, as in v0.2.
+func WithCaseInsensitiveFieldNames() DecoderOption
+
+// CompatV02 applies every encoder-side Legacy selector needed to
+// reproduce v0.2.x Marshal/Encode output: WithLegacyBignumPassthrough
+// (024).
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
 func CompatV02() Option
 
-// CompatV02Decoding applies every decoder-side selector needed to
-// reproduce v0.2.x acceptance: WithLegacyFloatKeyEquality (024).
+// CompatV02Decoding applies every decoder-side Legacy selector needed
+// to reproduce v0.2.x acceptance: WithLegacyFloatKeyEquality (024) and
+// WithLegacyNoTextBinaryUnmarshal (this proposal).
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
 func CompatV02Decoding() DecoderOption
 ```
 
-1. Default untagged key is the Go field name as-is.
-2. Decode matches the exact key first, then falls back to a
-   case-insensitive match (the `encoding/json` rule), so v0.2-encoded
-   data decodes with no selector. When a map carries two keys that
-   differ only by case, the exact match wins; with
+1. Default untagged key is unchanged (lowercase).
+2. `WithGoFieldNames()` changes only encoders it is passed to. Callers
+   decoding such output pair it with `WithCaseInsensitiveFieldNames()`.
+3. When a map carries two keys that differ only by case,
+   `WithCaseInsensitiveFieldNames` prefers the exact match; with
    `DisallowUnknownFields` the other one is an error.
-3. The package-level `Marshal` follows the new default. v0.2 callers
-   use `corecbor.New(ModeCoreDeterministic, WithLowercaseFieldNames())`
-   or `CompatV02()`.
-4. Entry in `migration-v0.2-to-v0.30.md`.
+4. The package-level `Marshal`/`Unmarshal` are unchanged.
 
 ### Behavior
 
-Phases A–C are purely additive; no existing output changes. Phase D
-changes encode output for untagged struct fields (selector:
-`WithLowercaseFieldNames()`) and widens what `Unmarshal` accepts
-(case-insensitive fallback).
+Phases A, C and D are purely additive; no existing output or
+acceptance changes unless the caller passes a new option. Phase B
+item 3 (Text/Binary Unmarshaler symmetry) is a contract-defect fix; see
+Compatibility selection.
 
 ### Failure modes
 
@@ -271,18 +281,23 @@ changes encode output for untagged struct fields (selector:
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
+No exported identifier changes signature. `ErrOverflow` moves to
+`cbor` with the root keeping `var ErrOverflow = cbor.ErrOverflow` (same
+value, so `errors.Is` matches either). The package-level `Marshal`
+default (lowercase untagged keys) is unchanged.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| Untagged struct field key = Go field name as-is | Policy | as-is | `func WithLowercaseFieldNames() Option` |
-| Decode accepts case-insensitive field-name match | Additive (widening) | on | n/a |
-| `encoding.TextUnmarshaler`/`BinaryUnmarshaler` called on decode | Defect (asymmetry with encode, `reflect_encode.go:80-110`) | called | none — defect |
-| `Value` accessors, `toarray`, `DisallowUnknownFields`, `omitzero`, field cache | Additive | n/a | n/a |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| `encoding.TextUnmarshaler`/`BinaryUnmarshaler` called on decode | Contract defect | `008-reflective-marshal-unmarshal.md:315-316` (TextUnmarshaler "supported"); 008:170 + round-trip of `BinaryMarshaler` types | called; only `[]byte`/`string`-kinded implementers behave differently | `func WithLegacyNoTextBinaryUnmarshal() DecoderOption` — Deprecated, in `CompatV02Decoding()` |
+| Untagged struct field key = Go field name as-is | Additive (opt-in) | — (no standard; 034 step 3) | lowercase, unchanged | `func WithGoFieldNames() Option` (not deprecated) |
+| Case-insensitive field-name match on decode | Additive (opt-in) | — | exact match only, unchanged | `func WithCaseInsensitiveFieldNames() DecoderOption` |
+| `Value` accessors, `toarray`, `DisallowUnknownFields`, `omitzero`, field cache | Additive | — | unchanged | n/a |
 
-Root bundles defined here: `CompatV02() Option` = `WithLowercaseFieldNames()`
-+ `WithLegacyBignumPassthrough()` (024). `CompatV02Decoding() DecoderOption`
-= `WithLegacyFloatKeyEquality()` (024). 021–023 contribute nothing (see
-their sections).
+Root bundles defined here: `CompatV02() Option` = `WithLegacyBignumPassthrough()`
+(024). `CompatV02Decoding() DecoderOption` = `WithLegacyFloatKeyEquality()`
+(024) + `WithLegacyNoTextBinaryUnmarshal()`. 021–023 contribute nothing
+(see their sections). No `...Option` parameters are appended to
+existing functions.
 
 ---
 
@@ -301,10 +316,13 @@ their sections).
 | `netip.Addr` and a `TextMarshaler` type round-trip via `Marshal`/`Unmarshal` | unit test | Yes |
 | Struct metadata is computed once per type (no per-call `getStructFields`) | `BenchmarkMarshalStruct` allocs/op drops; race test with 8 goroutines | Yes |
 | `cose`, `cwt`, `eat`, `edhoc` compile with private lookup helpers removed | Phase C PR | Yes (Phase C) |
-| Default encodes `UserID` as `"UserID"`; `WithLowercaseFieldNames()` encodes `"userid"` (v0.2.2 bytes) | `TestCompatFieldNames` vs `testdata/legacy-v0.2.2/` | Yes (Phase D) |
-| `Unmarshal` of v0.2.2 lowercase-keyed output into the same struct succeeds with no selector | `TestDecodeLowercaseFallback` | Yes (Phase D) |
+| Default still encodes `UserID` as `"userid"` (v0.2.2 bytes); `WithGoFieldNames()` encodes `"UserID"` | `TestFieldNamesDefaultUnchanged`, `TestWithGoFieldNames` vs `testdata/legacy-v0.2.2/` | Yes (Phase D) |
+| Default decode matches exactly as v0.2.2 (a `"UserID"` key does not populate an untagged `UserID` field); with `WithCaseInsensitiveFieldNames()` it does | `TestDecodeCaseDefault`, `TestDecodeCaseInsensitive` | Yes (Phase D) |
+| `WithLegacyNoTextBinaryUnmarshal()` reproduces v0.2.2 for `[]byte`/`string`-kinded Unmarshaler types | `TestLegacyNoTextBinaryUnmarshal` | Yes |
 | `New(ModeCoreDeterministic, CompatV02()).Marshal(x)` equals v0.2.2 `Marshal(x)` byte-for-byte over the legacy fixture set (excluding 021 defect fixtures) | `TestCompatV02MarshalGolden` vs `testdata/legacy-v0.2.2/` | Yes |
 | `CompatV02` and `CompatV02Decoding` carry `// Deprecated:` with removal floor v0.32.0 | staticcheck SA1019 fixture | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 
 ---
 
@@ -315,7 +333,7 @@ their sections).
 | A | `Get`/`GetInt`/`GetText`/`Int64`/`Uint64`/`Equal`/`String`, diag move | Pending | Phase A rows green |
 | B | `toarray`, `DisallowUnknownFields`, Unmarshaler symmetry, cache, `omitzero` | Pending | Phase B rows green |
 | C | Migrate sibling modules to Phase A API | Pending | Helpers deleted, tests green |
-| D | Default flip to as-is + `WithLowercaseFieldNames()` + root `CompatV02`/`CompatV02Decoding` bundles; 008 amended | Pending | Phase D rows green; migration guide entry |
+| D | Opt-in `WithGoFieldNames()` / `WithCaseInsensitiveFieldNames()` + root `CompatV02`/`CompatV02Decoding` bundles | Pending | Phase D rows green; migration guide entry |
 
 ---
 
@@ -350,7 +368,7 @@ their sections).
 |---|---|---|---|
 | `Get` linear scan is slow on large maps | med | low | Document O(n); large-map users index once via `AsStringMap` or their own map |
 | `String()` on huge values allocates heavily inside `%v` logging | med | low | Document; no truncation by default; `DiagnosticValue` remains for control |
-| Phase D default flip changes bytes for callers hashing/signing reflection output | med | high | `WithLowercaseFieldNames()` / `CompatV02()`; case-insensitive decode fallback; called out first in the migration guide |
+| Lowercase default keeps corecbor out of step with other Go encoders | high | low | `WithGoFieldNames()` documented prominently in package godoc and the migration guide |
 | `toarray` + embedded struct ordering surprises | low | med | Define order as flattened declaration order; test it |
 | Moving `ErrTypeMismatch` changes `errors.Is` identity | low | med | Root/`rfc8949` names become aliases of the same variable |
 
@@ -368,10 +386,11 @@ their sections).
 - **Separate `diag` package** imported by both. Still a cycle if `cbor`
   imports it for `String()`. Moving the writer into `cbor` is the
   smallest fix.
-- **Keep lowercase as the default, as-is opt-in.** Avoids a wire
-  change, but keeps corecbor out of step with every other Go encoder.
-  Rejected under proposal 034's precedence (deployed ecosystem first),
-  given the v0.30 bump and the `WithLowercaseFieldNames()` selector.
+- **Flip the default to as-is, with a `WithLowercaseFieldNames()`
+  selector.** Matches every other Go encoder, but silently changes the
+  bytes `Marshal` emits for unchanged callers. Rejected under proposal
+  034: existing identifiers keep their semantics, and no standard
+  requires the change. Revisit only at a major version.
 
 ---
 
@@ -401,3 +420,4 @@ their sections).
 |---|---|---|
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

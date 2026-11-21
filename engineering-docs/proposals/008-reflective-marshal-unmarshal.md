@@ -165,7 +165,7 @@ type Example struct {
 | `struct` | `Map` | Keys from field names/tags |
 | `*T` | value or `Null` | nil → Null |
 | `time.Time` | `Tag{1, epoch}` | Integer seconds; sub-second → float |
-| `*big.Int` | `Tag{2, bytes}` or `Tag{3, bytes}` | |
+| `*big.Int` | `Tag{2, bytes}` or `Tag{3, bytes}` | Amended by 024: in deterministic modes, values that fit major type 0/1 encode as integers (RFC 8949 §3.4.3 / §4.2.1) |
 | `Marshaler` impl | custom | `MarshalCBOR()` called |
 | `encoding.BinaryMarshaler` | `Bytes` | fallback |
 

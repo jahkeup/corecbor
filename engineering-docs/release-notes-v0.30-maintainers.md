@@ -48,7 +48,14 @@ v0.30.0.
    particular: has draft-ietf-cbor-serialization published (proposal
    024), and has draft-ietf-cose-hpke received IANA code points
    (proposal 029)?
-8. **CI.** `make check` and `make fuzz` green on all modules. As of
+8. **API stability (signature and semantics), per proposal 034.**
+   `apidiff` against `v0.2.2` shows no removed, renamed or retyped
+   exported identifiers in any module; the only accepted reports are
+   appended `...Option` parameters, each listed in the migration guide.
+   The v0.2.2 golden vectors from step 3 pass when existing identifiers
+   are called with no new options, apart from documented contract-defect
+   fixes.
+9. **CI.** `make check` and `make fuzz` green on all modules. As of
    `6b37e45`, `make` lints and tests the sub-modules on macOS too.
 
 ## Why not v1.0

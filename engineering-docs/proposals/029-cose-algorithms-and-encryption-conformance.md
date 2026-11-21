@@ -35,8 +35,14 @@ Separately, three of our encryption paths are not interoperable:
 This proposal aligns the identifiers with the registry and makes every
 key-establishment path wire-compatible with RFC 9053. It also gates
 draft-only identifiers behind an explicit `WithDraftHPKE27()` selector
-(proposal 034, Draft class), and keeps every v0.2 wire format reachable
-through a named, deprecated legacy selector.
+(proposal 034, Draft class). Per 034, no exported constant changes
+value and existing identifiers keep their semantics: `NewSigner` still
+emits −7/−8 (fully-specified emission is the recommended opt-in), and
+`HPKEKey`/`EncryptEncrypt0` keep their v0.2.2 formats as deprecated
+identifiers. Where an existing identifier contradicts the RFC it names
+(ECDH-ES −25, PBES2's colliding code points), it is fixed in place and
+the v0.2 wire format stays reachable through a named, deprecated legacy
+selector.
 
 Acceptance: RFC 9052/9053 COSE WG example vectors decrypt and verify for
 every supported algorithm, and IANA registry values are asserted by a
@@ -217,9 +223,27 @@ const (
 	AlgSHA384 Algorithm = -43
 	AlgSHA512 Algorithm = -44
 
-	// PBES2 moved to private use (not registered in COSE).
-	AlgPBES2_HS256_A128KW Algorithm = -65601
+	// PBES2 in the private-use range (PBES2 is not registered in COSE).
+	// PBES2Key now emits this value.
+	AlgPrivatePBES2_HS256_A128KW Algorithm = -65601
 )
+
+// Existing constants keep their names and values (proposal 034):
+//
+//   AlgES256 = -7, AlgES384 = -35, AlgES512 = -36, AlgEdDSA = -8
+//     Deprecated: polymorphic identifiers, deprecated by RFC 9864; use
+//     AlgESP256/AlgESP384/AlgESP512/AlgEd25519 and
+//     WithFullySpecifiedAlgorithms. Still emitted by NewSigner by default
+//     and still verified.
+//
+//   AlgPBES2_HS256_A128KW = -11
+//     Deprecated: -11 is registered as direct+HKDF-SHA-512; use
+//     AlgPrivatePBES2_HS256_A128KW. Emitted only under
+//     WithLegacyPBES2Labels.
+//
+//   AlgHPKEBaseP256SHA256AES128GCM = 35, AlgHPKE_Base_P256_SHA256_AES128GCM = 35
+//     Deprecated: corecbor's pre-draft HPKE key-encryption format; see
+//     HPKEKey. Not related to draft-ietf-cose-hpke's HPKE-0.
 
 // Deprecated reports whether IANA marks the algorithm Deprecated.
 func (a Algorithm) Deprecated() bool
@@ -242,8 +266,11 @@ type PartyInfo struct {
 	Nonce    []byte
 	Other    []byte
 }
+// ECDHESKey keeps its v0.2.2 fields; the new ones are appended and their
+// zero values select RFC 9053 behavior for the algorithm its name and
+// Algorithm() already claim (-25, ECDH-ES + HKDF-256, direct).
 type ECDHESKey struct {
-	Alg        Algorithm // -25, -26, -29, -30, -31
+	Alg        Algorithm // zero → -25; or -26, -29, -30, -31
 	PrivateKey *ecdh.PrivateKey
 	PeerPublic *ecdh.PublicKey
 	PartyU     PartyInfo
@@ -259,13 +286,6 @@ type ECDHESKey struct {
 // selector is renamed (not aliased) then, per proposal 034.
 func WithDraftHPKE27() EncryptOption
 
-// WithLegacyHPKE decrypts (and, when sealing, produces) the v0.2 HPKE
-// format: alg 35 used as a recipient algorithm with corecbor's ad-hoc
-// info string. Only corecbor <= v0.2 understands it.
-//
-// Deprecated: non-interoperable; removed no earlier than v0.32.0.
-func WithLegacyHPKE() EncryptOption
-
 // WithLegacyPBES2Labels uses the v0.2 PBES2 identifiers (alg -11,
 // iteration-count label -21) for both seal and open. Both collide with
 // registered COSE values.
@@ -279,11 +299,18 @@ func WithLegacyPBES2Labels() EncryptOption
 // Deprecated: non-conformant to RFC 9053 §6.3; removed no earlier than v0.32.0.
 func WithLegacyECDHES() EncryptOption
 
-// CompatV02Encryption bundles WithLegacyPBES2Labels, WithLegacyECDHES and
-// WithLegacyHPKE.
+// CompatV02Encryption bundles WithLegacyPBES2Labels and WithLegacyECDHES.
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
 func CompatV02Encryption() EncryptOption
+
+// HPKEKey (v0.2.2) is unchanged: it keeps producing and reading
+// corecbor's pre-draft format (alg 35 as a recipient algorithm, ad-hoc
+// info string), which only corecbor understands.
+//
+// Deprecated: non-interoperable; use HPKERecipient with WithDraftHPKE27
+// (and its RFC successor once published).
+type HPKEKey struct{ /* unchanged */ }
 
 type HPKESuite int // HPKE-0 … HPKE-7
 func HPKESeal(plaintext []byte, recipient *Key, suite HPKESuite, opts ...EncryptOption) (*Encrypt0, error)
@@ -297,8 +324,10 @@ type HPKERecipient struct { // key-encryption mode for COSE_Encrypt
 }
 ```
 
-`EncryptEncrypt0` and `DecryptEncrypt0` are kept for one release as
-deprecated wrappers. `EncryptEncrypt0` will now also write label 5.
+`EncryptEncrypt0` and `DecryptEncrypt0` keep their v0.2.2 signatures and
+behavior (caller-supplied nonce, no label 5 written), per proposal 034.
+They are marked `// Deprecated:` in favor of `Encrypt0Seal`/`Encrypt0Open`
+and keep working for the life of the v0.x line.
 
 ### Behavior
 
@@ -307,12 +336,14 @@ deprecated wrappers. `EncryptEncrypt0` will now also write label 5.
      SHA-256, and so on. A polymorphic `ES256` is accepted only with a
      P-256 key, which matches current behavior. The allow-list from 027
      applies to both.
-   - **Sign** emits polymorphic identifiers by default. Many WebAuthn and
-     COSE deployments still list only −7/−8, and RFC 9864 itself tells
-     applications to *use* the fully-specified identifiers, not to reject
-     the old ones. Emitting fully-specified identifiers is opt-in via
-     `WithFullySpecifiedAlgorithms()`. Revisit the default at v1.0
-     (Open questions).
+   - **Sign.** `NewSigner` keeps emitting the polymorphic identifiers it
+     documents today (−7/−8), per proposal 034: existing identifiers
+     keep their semantics. The current-standards path is
+     `WithFullySpecifiedAlgorithms()`, which emits RFC 9864 identifiers
+     and is the recommended option in `NewSigner`'s godoc. The
+     polymorphic constants are marked `// Deprecated:` (see constants
+     above). Callers that need −7/−8 for WebAuthn/mDL peers keep the
+     default.
 2. **ML-DSA.**
    - Signs the ToBeSigned bytes directly with an empty context.
    - AKP keys come from 028.
@@ -339,9 +370,12 @@ deprecated wrappers. `EncryptEncrypt0` will now also write label 5.
    - Moves to a private-use identifier (`< -65536`).
    - The iteration count moves to a private-use header label, also
      `< -65536`.
-   - The old −11/−21 pair is used (seal) and recognized (open) only
-     under `WithLegacyPBES2Labels()`. Without it, the pair is rejected,
-     because −11 means `direct+HKDF-SHA-512` to everyone else.
+   - `PBES2Key.Algorithm()` returns `AlgPrivatePBES2_HS256_A128KW`. The
+     old −11/−21 pair is used (seal) and recognized (open) only under
+     `WithLegacyPBES2Labels()`. Without it, the pair is rejected, because
+     −11 means `direct+HKDF-SHA-512` to everyone else. The
+     `AlgPBES2_HS256_A128KW` constant keeps the value −11 and is
+     deprecated.
    - The bounds from 027 H8 apply.
 5. **HPKE.**
    - The implementation follows draft-27 exactly:
@@ -352,10 +386,12 @@ deprecated wrappers. `EncryptEncrypt0` will now also write label 5.
    - It is reachable only with `WithDraftHPKE27()` until IANA assigns
      values. Then the selector is renamed, the values are pinned, and the
      RFC behavior becomes the default per proposal 034.
-   - The current `HPKEKey` (35-as-recipient) is no longer the default. Its
-     format stays available under `WithLegacyHPKE()` (deprecated), since
-     only corecbor ≤ v0.2 can read it.
-6. **Encrypt0.**
+   - The existing `HPKEKey` (35-as-recipient) keeps its v0.2.2 format and
+     is deprecated. The draft-27 implementation lives in new identifiers
+     (`HPKERecipient`, `HPKESeal`, `HPKEOpen`), so no legacy selector is
+     needed.
+6. **Encrypt0** (new `Encrypt0Seal`/`Encrypt0Open` only; the existing
+   functions are unchanged).
    - The nonce defaults to `crypto/rand`, sized for the AEAD.
    - The nonce is written to unprotected label 5. `Encrypt0Open` reads
      label 5, or reconstructs the nonce from label 6 plus a Base IV.
@@ -374,7 +410,7 @@ No new sentinels. Existing sentinels in new cases:
 
 - `ErrUnsupportedAlgorithm`:
   - a Deprecated RFC 9459 algorithm;
-  - an HPKE id without `WithDraftHPKE27()` (or `WithLegacyHPKE()` for alg 35);
+  - a draft-27 HPKE id without `WithDraftHPKE27()`;
   - legacy PBES2 (−11/−21) without `WithLegacyPBES2Labels()`;
   - raw-point ECDH-ES ephemeral key without `WithLegacyECDHES()`.
 - `ErrMalformed`:
@@ -387,24 +423,28 @@ No new sentinels. Existing sentinels in new cases:
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
+No exported constant changes value and no exported identifier changes
+signature. `ECDHESKey` gains fields whose zero values select the RFC
+behavior its existing name claims.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| Sign emits `-7`/`-8` (polymorphic); verify accepts both families | Ecosystem hold (RFC 9864 vs deployed WebAuthn/COSE) | polymorphic emission | `func WithFullySpecifiedAlgorithms() SignerOption` opts in to ESP256/Ed25519 emission |
-| ML-DSA, RSA/PS, AES-CCM, ChaCha20-Poly1305, SHA-2 constants | Additive | n/a | n/a |
-| ECDH-ES `-25`/`-26` direct; `-29..-31` KEK + AES-KW; COSE_Key ephemeral | Conformance (RFC 9053 §6.3) | RFC 9053 | `func WithLegacyECDHES() EncryptOption` — Deprecated |
-| ECDH-ES MAC recipient (`WrapKey` returned nil) | Defect | works | none — defect |
-| PBES2 identifiers moved to private use | Conformance (code-point collision) | private-use ids | `func WithLegacyPBES2Labels() EncryptOption` — Deprecated (seal + open) |
-| HPKE per draft-ietf-cose-hpke-27 | Draft | off | `func WithDraftHPKE27() EncryptOption` — Experimental |
-| v0.2 HPKE (alg 35 as recipient, ad-hoc info) | Conformance (non-interop) | off | `func WithLegacyHPKE() EncryptOption` — Deprecated |
-| Encrypt0 random IV written to label 5; Partial IV support; 5+6 together rejected | Conformance (RFC 9052 §3.1) | generated + transmitted | none needed: deprecated `EncryptEncrypt0`/`DecryptEncrypt0` keep the caller-nonce signature; v0.2 decoders ignore the extra unprotected label |
-| Ed448 / X448 / RFC 9459 | not implemented | n/a | n/a |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| Polymorphic `-7`/`-8` emission | Superseded contract (RFC 9864) | — | `NewSigner` emits `-7`/`-8` as in v0.2.2; `AlgES256`/`AlgES384`/`AlgES512`/`AlgEdDSA` deprecated; verify accepts both families | `WithFullySpecifiedAlgorithms() SignerOption` (recommended), `AlgESP256`, `AlgESP384`, `AlgESP512`, `AlgEd25519` |
+| ML-DSA, RSA/PS, AES-CCM, ChaCha20-Poly1305, SHA-2 constants | Additive | — | n/a | n/a |
+| `ECDHESKey` (−25) performs direct key agreement; `-29..-31` KEK + AES-KW; COSE_Key ephemeral | Contract defect | `AlgECDH_ES_HKDF_256 = -25` and `ECDHESKey.Algorithm()` (`ecdh_deriver.go:26`) claim RFC 9053 §6.3 −25 (direct), but v0.2.2 did AES-KW (−29 semantics) with a raw-point ephemeral key | RFC 9053 | `func WithLegacyECDHES() EncryptOption` — Deprecated |
+| ECDH-ES MAC recipient (`WrapKey` returned nil) | Safety defect (message nobody can verify) | — | works | none |
+| `PBES2Key` emits a private-use alg and iteration-count label | Contract defect | RFC 9053 / IANA registry: −11 and −21 are registered with other meanings | `AlgPBES2_HS256_A128KW` keeps −11 and is deprecated; `AlgPrivatePBES2_HS256_A128KW` = −65601 | `func WithLegacyPBES2Labels() EncryptOption` — Deprecated (seal + open) |
+| HPKE per draft-ietf-cose-hpke-27 | Draft | — | n/a | `WithDraftHPKE27() EncryptOption` — Experimental, on new `HPKERecipient`/`HPKESeal`/`HPKEOpen` |
+| v0.2 HPKE format (`HPKEKey`, alg 35 as recipient) | Superseded contract | — | `HPKEKey` unchanged and deprecated; both alg-35 constants deprecated | new HPKE identifiers above |
+| Encrypt0 random IV in label 5; Partial IV; 5+6 rejected | Additive (new `Encrypt0Seal`/`Encrypt0Open`) | — | `EncryptEncrypt0`/`DecryptEncrypt0` unchanged (caller nonce, no label 5) and deprecated | `Encrypt0Seal`/`Encrypt0Open` (recommended) |
+| `KeyAgreer` optional interface | Additive (new interface; `KeyDeriver` unchanged) | — | n/a | n/a |
+| Ed448 / X448 / RFC 9459 | not implemented | — | n/a | n/a |
 
 Bundle: `cose.CompatV02Encryption() EncryptOption` = `WithLegacyPBES2Labels()`
-+ `WithLegacyECDHES()` + `WithLegacyHPKE()`. These are interop-only, so
-they're eligible for bundling under 027's rule.
-`WithFullySpecifiedAlgorithms()` is not a legacy selector and is never
-bundled.
++ `WithLegacyECDHES()`. These are interop-only, so they're eligible for
+bundling under 027's rule. `WithFullySpecifiedAlgorithms()` is not a
+legacy selector and is never bundled. No `...Option` parameters are
+appended to existing functions.
 
 ---
 
@@ -427,8 +467,13 @@ bundled.
 | AES-CCM-16-64-128 matches RFC 9053 / cose-wg vectors; edhoc tests still pass after the move | `TestAESCCM*`, `cd edhoc && go test ./...` | Yes |
 | RFC 9053, 9864, 9964 vendored under `engineering-docs/rfcs/` | files + README rows | Yes |
 | Default signer emits `-7` for P-256 and `-8` for Ed25519 keys; `WithFullySpecifiedAlgorithms()` emits `-9`/`-19`; verify accepts all four | `TestCompatAlgorithmEmission` | Yes |
-| v0.2.2-produced PBES2, ECDH-ES (`-25`) and HPKE (alg 35) messages decrypt only under `WithLegacyPBES2Labels()`, `WithLegacyECDHES()`, `WithLegacyHPKE()` respectively, and under `CompatV02Encryption()` | `TestCompatLegacyEncryption*` vs `testdata/legacy-v0.2.2/` | Yes |
+| v0.2.2-produced PBES2 and ECDH-ES (`-25`) messages decrypt only under `WithLegacyPBES2Labels()` / `WithLegacyECDHES()` respectively, and under `CompatV02Encryption()`; v0.2.2 HPKE (alg 35) messages decrypt with `HPKEKey` and no selector | `TestCompatLegacyEncryption*` vs `testdata/legacy-v0.2.2/` | Yes |
 | Legacy selectors and `CompatV02Encryption` carry `// Deprecated:` with removal floor v0.32.0; `WithDraftHPKE27` carries `Experimental:` naming draft-ietf-cose-hpke-27 | staticcheck SA1019 fixture + doc review | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
+| `NewSigner` with no options emits `-7` for P-256 and `-8` for Ed25519 (v0.2.2 bytes); with `WithFullySpecifiedAlgorithms()` it emits `-9` / `-19` | `TestSignerAlgEmissionDefault`, `TestSignerFullySpecified` | Yes |
+| `AlgPBES2_HS256_A128KW == -11` and both alg-35 constants still equal 35 | `TestConstantsFrozen` | Yes |
+| `HPKEKey` and `EncryptEncrypt0` reproduce v0.2.2 golden messages | golden tests | Yes |
 
 ---
 
@@ -469,10 +514,10 @@ bundled.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | HPKE values change before RFC | med | med | `WithDraftHPKE27()` selector named per revision; pinned test vectors per draft revision |
-| Moving 35-as-recipient off the default breaks stored messages | low | med | `WithLegacyHPKE()`; no external interop existed; migration notes |
+| Callers keep using deprecated `HPKEKey` and never interoperate | med | low | Deprecation pointer to `HPKERecipient`; migration notes |
 | `x/crypto` dependency for ChaCha20 is unwelcome in cose | med | low | isolate in `cose/chacha` subpackage, or defer until EDHOC suites 4/5 are needed |
 | ML-DSA requires a newer `go` directive than 1.26.0 | med | med | build-tagged file `mldsa_go127.go`; see Open questions |
-| Emitting polymorphic ids by default keeps deprecated ids alive | high | low | Ecosystem hold under 034, re-evaluated every minor release; flipping it is a Policy change that keeps a selector for polymorphic emission |
+| `NewSigner` keeps emitting deprecated ids by default | high | low | Superseded contract under 034: `NewSigner` godoc and staticcheck SA1019 on `AlgES256`/`AlgEdDSA` steer callers to `WithFullySpecifiedAlgorithms()`; changing `NewSigner`'s default would be a semantic break |
 
 ---
 
@@ -499,8 +544,8 @@ bundled.
 - Ed448 and X448 have no stdlib implementation. Options: take a
   dependency, or register the constants and return
   `ErrUnsupportedAlgorithm`. Recommendation: constants only.
-- Should the signer default flip to fully-specified at v1.0, or follow
-  WebAuthn L3 guidance once it lands?
+- At v1.0 (a major version, where 034's semantic-stability rule allows
+  it), should `NewSigner`'s default flip to fully-specified identifiers?
 - Should PBES2 stay in this module at all, given it is not a COSE
   algorithm? An alternative is moving it to `cose/x/pbes2`.
 
@@ -536,3 +581,4 @@ bundled.
 |---|---|---|
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

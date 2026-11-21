@@ -36,7 +36,10 @@ gating criterion of 004, "RFC 9528 test vectors", was never met:
 nothing in `edhoc/` references RFC 9529.
 
 This proposal rewrites the protocol core against RFC 9528 and gates it
-on the **RFC 9529 traces** as golden tests. It also fixes the credential
+on the **RFC 9529 traces** as golden tests. Per proposal 034 the
+exported Go API stays stable: the internals are rewritten behind the
+existing identifiers (a Contract defect fix — the package documents RFC
+9528), and new capability is added beside them. It also fixes the credential
 and state-machine safety gaps, and adds the RFC 9668 CoAP/OSCORE
 transport helpers.
 
@@ -157,6 +160,15 @@ criterion.
 
 ### Public API surface
 
+Per proposal 034, every v0.2.2 exported identifier keeps its name and
+signature: `InitiatorConfig`/`ResponderConfig` keep all their fields with
+their types, `Credential` keeps `Type` and `CWTBytes`, `OSCOREContext`
+keeps its four fields, and `CreateMessage1`, `ProcessMessage1..4`,
+`CreateMessage4`, `Export` and `ExportOSCORE` keep their signatures. The
+package documents RFC 9528 (`edhoc/doc.go:4-5`), so what those
+identifiers *compute* is a Contract defect and is fixed in place. New
+capability is added beside them.
+
 ```go
 type Method int
 
@@ -167,16 +179,16 @@ const (
 	MethodStatStat Method = 3 // Phase D
 )
 
-// AuthKey is the long-term authentication key. Any crypto.Signer is
-// accepted (KMS / HSM); the suite determines the signature algorithm,
-// and a mismatch is rejected at construction.
-type AuthKey = crypto.Signer
-
-// Credential is a peer's or our own authentication credential.
+// Credential keeps its v0.2.2 fields; new fields are appended.
 type Credential struct {
+	Type     CredentialType // unchanged (CredentialRPK, CredentialCWT)
+	CWTBytes []byte         // unchanged
+
+	// --- new in v0.30 ---
 	// Raw is CRED_x exactly as it enters the transcript (TH_3 / TH_4,
 	// MAC context, Sig_structure). For a CCS this is the encoded
 	// claims set; for X.509 the DER certificate; for a CWT the token.
+	// When empty, it is derived from Type/CWTBytes/the public key.
 	Raw       []byte
 	IDCred    IDCred           // how we refer to it on the wire
 	PublicKey crypto.PublicKey // authentication key bound by Raw
@@ -210,8 +222,9 @@ type EADItem struct {
 	Value    []byte // nil when absent
 }
 
-// NewInitiator / NewResponder build a session. opts are protocol-variant
-// selectors; the zero set is RFC 9528.
+// NewInitiator / NewResponder gain an appended ...Option. With no
+// options they run RFC 9528 (the contract-defect fix); there is no
+// other no-option behavior change.
 func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error)
 func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) // ResponderConfig mirrors InitiatorConfig
 
@@ -221,28 +234,37 @@ type Option func(*options)
 // layout and OSCORE export that corecbor <= v0.2 implemented. It
 // interoperates ONLY with peers running corecbor <= v0.2 and gives none
 // of RFC 9528's credential-binding guarantees (see Motivation). It
-// exists so deployed v0.2 fleets can upgrade both ends in stages.
-// peerPublic plays the role of the v0.2 PeerPublic config field; the
-// config's Peers resolver is ignored in this mode.
+// exists so deployed v0.2 fleets can upgrade both ends in stages. The
+// v0.2 config fields (PeerPublic, PeerCredential, CWTIssuerKey) are
+// used exactly as v0.2.2 used them.
 //
 // Deprecated: non-interoperable and missing identity binding. Removed
 // no earlier than v0.32.0. Not part of any CompatV02 bundle.
-func WithLegacyPreRFCProtocol(peerPublic crypto.PublicKey) Option
+func WithLegacyPreRFCProtocol() Option
 
+// InitiatorConfig keeps every v0.2.2 field with its type; new fields
+// are appended and their zero values select the v0.2.2 credential
+// model (a pinned PeerPublic).
 type InitiatorConfig struct {
-	Method       Method
-	Suites       []CipherSuite // preference order; last = selected (encoded per §5.2.2)
-	AuthKey      AuthKey
-	Credential   *Credential
-	Peers        CredentialResolver
-	ConnectionID ConnectionID // nil: random, guaranteed != peer's after msg 2
-	EAD1, EAD3   []EADItem
+	Suites       []CipherSuite    // unchanged; preference order, last = selected (encoded per §5.2.2)
+	PrivateKey   crypto.Signer    // unchanged; any crypto.Signer (KMS / HSM); suite/key mismatch rejected at construction
+	PeerPublic   crypto.PublicKey // unchanged; when Peers is nil, the pinned peer RPK
+	ConnectionID []byte           // unchanged; nil: random, guaranteed != peer's after msg 2
+
+	Credential     *Credential      // unchanged
+	PeerCredential *Credential      // unchanged; pinned peer credential when Peers is nil
+	CWTIssuerKey   crypto.PublicKey // unchanged; no longer falls back to PeerPublic (Safety defect)
+
+	// --- new in v0.30 ---
+	Method     Method
+	Peers      CredentialResolver // when set, takes precedence over PeerPublic/PeerCredential
+	EAD1, EAD3 []EADItem
 	// Rand overrides crypto/rand for deterministic tests (RFC 9529).
 	Rand io.Reader
 }
 
 // ConnectionID is a C_I / C_R value. Constructors enforce the §3.3.2
-// encoding rules.
+// encoding rules. It is a helper type; config fields stay []byte.
 type ConnectionID []byte
 
 func ConnectionIDFromInt(n int8) (ConnectionID, error) // -24..23
@@ -257,16 +279,18 @@ type ErrorMessage struct {
 func (e *ErrorMessage) Error() string
 func (e *ErrorMessage) MarshalCBOR() ([]byte, error)
 
-// Initiator methods (existing names kept where semantics match).
-func (i *Initiator) CreateMessage1(ctx context.Context) ([]byte, error)
-func (i *Initiator) ProcessMessage2(ctx context.Context, msg2 []byte) (msg3 []byte, err error)
-func (i *Initiator) ProcessMessage4(ctx context.Context, msg4 []byte) error
+// Existing Initiator methods keep their v0.2.2 signatures.
+func (i *Initiator) CreateMessage1() ([]byte, error)
+func (i *Initiator) ProcessMessage2(msg2 []byte) (msg3 []byte, err error) // resolver called with context.Background()
+func (i *Initiator) ProcessMessage4(msg4 []byte) error
+func (i *Initiator) Export(label int, context []byte, length int) ([]byte, error) // now RFC 9528 §4.2.1 EDHOC_Exporter
+func (i *Initiator) ExportOSCORE() (*OSCOREContext, error)                        // now RFC 9528 Appendix A.1
+
+// New Initiator methods.
+func (i *Initiator) ProcessMessage2Context(ctx context.Context, msg2 []byte) (msg3 []byte, err error)
 func (i *Initiator) PeerEAD() []EADItem
 func (i *Initiator) PeerCredential() *Credential
-
-// Session results, available after completion.
 func (i *Initiator) PRKOut() ([]byte, error)
-func (i *Initiator) Exporter(label uint64, context []byte, length int) ([]byte, error)
 func (i *Initiator) KeyUpdate(context []byte) error // §H, labelKeyUpdate
 func (i *Initiator) OSCORE(params OSCOREParams) (*OSCOREContext, error)
 func (i *Initiator) Close() // zeroizes ephemeral key, PRKs, THs; idempotent
@@ -277,24 +301,27 @@ type OSCOREParams struct {
 	SaltLen   int            // default 8
 }
 
+// OSCOREContext keeps its v0.2.2 fields; two are appended.
 type OSCOREContext struct {
 	MasterSecret []byte
 	MasterSalt   []byte
-	SenderID     []byte // the PEER's connection ID
+	SenderID     []byte // the PEER's connection ID (v0.2.2 had these swapped)
 	RecipientID  []byte // OUR connection ID
-	AEAD         cose.Algorithm
-	HKDF         cose.Algorithm
+	AEAD         cose.Algorithm // new
+	HKDF         cose.Algorithm // new
 }
 ```
 
-The responder mirrors this: `ProcessMessage1`, `ProcessMessage3`,
-`CreateMessage4`, `PeerEAD`, `PeerCredential`, `PRKOut`, `Exporter`,
-`KeyUpdate`, `OSCORE`, `Close`. `ProcessMessage1` returns
+The responder mirrors this: the existing `ProcessMessage1`,
+`ProcessMessage3`, `CreateMessage4`, `Export`, `ExportOSCORE` keep their
+signatures, and `ProcessMessage3Context`, `PeerEAD`, `PeerCredential`,
+`PRKOut`, `KeyUpdate`, `OSCORE`, `Close` are added. `ProcessMessage1` returns
 `*ErrorMessage` as the error when the selected suite isn't supported.
 The caller sends `errMsg.MarshalCBOR()` to the peer.
 
-`ctx` exists only for `CredentialResolver` calls. The state machine
-itself stays sans-IO.
+`ctx` exists only for `CredentialResolver` calls, through the new
+`…Context` methods; the existing methods use `context.Background()`.
+The state machine itself stays sans-IO.
 
 ### State machine
 
@@ -309,7 +336,7 @@ Rules:
 - Any error moves the session to `Failed`, and every later call returns
   `ErrStateViolation`.
 - Entering `Failed` or `Closed` zeroizes secrets.
-- `Exporter`, `OSCORE` and `PRKOut` are valid only in `Completed`.
+- `Export`, `ExportOSCORE`, `OSCORE` and `PRKOut` are valid only in `Completed` (as `Export`/`ExportOSCORE` already were in v0.2.2).
 - On the responder, `Completed` means after message_3, or after
   message_4 when the application profile requires it.
 
@@ -355,19 +382,29 @@ must be told about. Every wrap uses `%w`. The current
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
+No exported identifier is removed, renamed or retyped (see Public API
+surface). The package documents RFC 9528 (`edhoc/doc.go:4-5`), so the
+protocol computations behind the existing identifiers are Contract
+defects fixed in place.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| Key schedule, transcripts, message_2 layout, MAC/Sig/AEAD inputs, suite selection, C_ID encoding, P-256 x-only keys, OSCORE export via `EDHOC_Exporter` | Conformance (RFC 9528) | RFC 9528 | `func WithLegacyPreRFCProtocol(peerPublic crypto.PublicKey) Option` — Deprecated; whole-protocol switch, never per-field |
-| Unknown cipher suites fail (ERR_CODE 2) instead of falling back to suite 0 | Defect | error message | none — defect |
-| C_I ≠ C_R enforced; on-curve checks; terminal state after failure; zeroization | Defect | enforced | none — defect (also enforced in legacy mode) |
-| `PeerPublic` config replaced by `Credential` + `CredentialResolver` | API change (not wire) | resolver | the legacy selector carries the v0.2 `PeerPublic` argument |
-| Methods 1–3, EAD, error messages, RFC 9668 helpers, `PRKOut`, `KeyUpdate` | Additive | n/a | n/a |
-| LAKE drafts (PSK, app profiles, GREASE, authz, ra, pqsuites, authkem) | Draft | not implemented | when implemented before publication: `WithDraft…` selectors naming the draft revision, Experimental, never default |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| Key schedule, transcripts, message_2 layout, MAC/Sig/AEAD inputs, suite selection, C_ID encoding, P-256 x-only keys | Contract defect | `edhoc/doc.go:4-5` ("implements the EDHOC authenticated key exchange protocol (RFC 9528)"); RFC 9528 §4, §5 | same methods, RFC 9528 wire format | `func WithLegacyPreRFCProtocol() Option` — Deprecated; whole-protocol switch, never per-field. Not bundled |
+| `Export` uses `EDHOC_Exporter`; `ExportOSCORE` follows Appendix A.1 with Sender/Recipient IDs un-swapped | Contract defect | RFC 9528 §4.2.1, Appendix A.1 | same signatures | covered by `WithLegacyPreRFCProtocol()` |
+| Unknown cipher suites fail (ERR_CODE 2) instead of falling back to suite 0 | Contract defect | RFC 9528 §6.3 | error message | none (also enforced in legacy mode) |
+| `CWTIssuerKey` nil no longer falls back to `PeerPublic`; on-curve checks; C_I ≠ C_R; terminal state after failure; zeroization | Safety defect | — | enforced | none (also enforced in legacy mode) |
+| Credential resolution | Additive | — | `PeerPublic`/`PeerCredential` keep pinning the peer when `Peers` is nil | `InitiatorConfig.Peers` / `ResponderConfig.Peers` |
+| Context-aware resolution | Additive | — | existing methods use `context.Background()` | `ProcessMessage2Context`, `ProcessMessage3Context` |
+| Methods 1–3, EAD, error messages, RFC 9668 helpers, `PRKOut`, `KeyUpdate`, `OSCORE(params)`, `Close` | Additive | — | n/a | n/a |
+| LAKE drafts (PSK, app profiles, GREASE, authz, ra, pqsuites, authkem) | Draft | — | not implemented | when implemented before publication: `WithDraft…` selectors naming the draft revision, Experimental, never default |
 
 **No `edhoc.CompatV02` bundle.** The only legacy selector removes RFC
 9528's identity binding, so under 027's bundling rule it must be named
 explicitly. It is excluded from bundles, as 034's risk table requires.
+
+**Appended `...Option` parameters (apidiff-visible, migration-guide
+entries):** `NewInitiator(cfg, opts ...Option)`,
+`NewResponder(cfg, opts ...Option)`.
 
 ---
 
@@ -385,16 +422,19 @@ explicitly. It is excluded from bundles, as 034's risk table requires.
 | Any processing error → state `Failed`; next call → `ErrStateViolation`; secrets zeroed (checked via test hook) | `TestStateMachine_FailTerminal` | Yes |
 | `Close` zeroizes ephemeral key and PRKs | `TestClose_Zeroizes` (internal test) | Yes |
 | ID_CRED compact kid, x5t, kccs parse; resolver receives parsed `IDCred` and its error is wrapped by `ErrCredentialRejected` | `TestIDCred_*` | Yes |
-| No `PeerPublic` fallback as CWT issuer key (field removed) | compile-time + `TestCredential_NoIssuerFallback` | Yes |
+| No `PeerPublic` fallback as CWT issuer key (`CWTIssuerKey` nil with a CWT credential → error; fields unchanged) | `TestCredential_NoIssuerFallback` | Yes |
 | EC2 credential point not on curve → error | `TestCredential_OffCurve` | Yes |
 | Unknown critical EAD → `ErrCriticalEAD`; non-critical ignored and surfaced via `PeerEAD()` | `TestEAD_*` | Yes |
-| KMS-style `crypto.Signer` (wrapper type) works for suites 0 and 2 | `TestAuthKey_GenericSigner` | Yes |
+| KMS-style `crypto.Signer` (wrapper type) in `PrivateKey` works for suites 0 and 2 | `TestPrivateKey_GenericSigner` | Yes |
+| A v0.2.2-style config (`PrivateKey` + `PeerPublic`, no `Peers`) completes an RFC 9528 handshake with the peer pinned | `TestConfigV022Shape` | Yes |
 | `FuzzProcessMessage1/2/3` 60 s, no panic | fuzz | Yes |
 | `golang.org/x/crypto` removed from `edhoc/go.mod` | `go mod graph` | Yes |
 | Interop smoke test against an external implementation (lakers or uoscore-uedhoc) | manual, documented in PR | No |
 | Default sessions never speak the pre-RFC protocol: a v0.30 initiator against a v0.2.2 responder fixture fails cleanly with an error, never a partial OSCORE context | `TestCompatDefaultRejectsLegacyPeer` | Yes |
 | Two v0.30 peers with `WithLegacyPreRFCProtocol` reproduce the captured v0.2.2 transcripts byte-for-byte (fixed ephemeral keys), and interoperate with a v0.2.2 peer | `TestCompatLegacyPreRFCTranscript` vs `testdata/legacy-v0.2.2/edhoc/` | Yes |
 | `WithLegacyPreRFCProtocol` carries `// Deprecated:` with removal floor v0.32.0 and appears in no bundle | staticcheck SA1019 fixture + API review | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 
 ---
 
@@ -433,7 +473,7 @@ non-conformant derivation.
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Transcription errors in RFC 9529 trace data | med | med | Transcribe from vendored text by script where possible; cross-check against a second implementation's test vectors |
-| API break for existing callers (`PeerPublic`, `ExportOSCORE`) | high | low | The module isn't interoperable today; Phase 0 warns early |
+| Callers relying on the swapped `ExportOSCORE` IDs or v0.2 key schedule break on upgrade | high | low | Contract-defect fix with `WithLegacyPreRFCProtocol()`; the module isn't interoperable today; Phase 0 warns early; migration guide entry |
 | AES-CCM in `edhoc/internal/aesccm` has its own defects | low | high | The RFC 9529 traces exercise it; add NIST CCM vectors if missing |
 | Draft churn in LAKE (PSK method, app profiles) | med | low | Design keeps `Method` open-ended; nothing in this proposal depends on drafts |
 
@@ -445,6 +485,12 @@ non-conformant derivation.
 and message encoding changes, and the current round-trip tests give no
 safety net because both sides are wrong the same way. A rewrite that
 follows the RFC's structure and is gated on traces is cheaper to review.
+The rewrite is internal: the exported API is preserved (proposal 034).
+
+**Redesign the config (`AuthKey`, `ConnectionID` type, resolver-only
+peers, ctx on every method).** Cleaner, but removes/retypes v0.2.2
+fields and changes method signatures. Rejected under 034; new fields
+and `…Context` methods are added beside the existing ones.
 
 **Wrap an existing implementation (lakers via cgo / WASM).** Rejected
 for the same reasons 004 rejected external libraries: no cgo, no
@@ -507,3 +553,4 @@ Phase A doesn't land in a reasonable window, mark the module
 |---|---|---|
 | 2026-11-20 | Initial draft from 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

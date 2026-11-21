@@ -242,22 +242,26 @@ Each one is added to the §5 table. Nothing panics on caller input.
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
-Everything in this proposal is a **Defect**: races, aliasing, panics, or
-wire output that other decoders read as a different value. Per 034,
-defects get no selector. The root `CompatV02()` bundle includes nothing
-from 021.
+No exported identifier changes signature. Every behavior change is a
+**Safety defect** or a **Contract defect** (the implementation
+contradicts what it documents), so per 034 none gets a selector and the
+root `CompatV02()` bundle includes nothing from 021. New identifiers
+(`ByteKey`, `EncodedKey`, `ErrTimeRange`, `ErrContainerOverflow`,
+`ErrStreamMapOrder`) are **Additive**.
 
-| Change | Class | Default (v0.30) | Selector |
-|---|---|---|---|
-| D1 package-level `Marshal`/`Unmarshal` concurrency | Defect | safe for concurrent use | none — defect |
-| D2 decoded `cbor.Value`/`any` no longer alias the internal arena | Defect | independent copies | none — defect (callers wanting aliasing use `WithArena`, 018) |
-| D3 non-hashable `any` map keys decode to `cbor.ByteKey` etc. instead of panicking | Defect | no panic | none — defect |
-| D4 embedded-struct fields flattened on the wire | Defect | flattened (`encoding/json` rules) | none — defect. v0.2.2 output is pinned as a *negative* golden vector (documents the old bytes; not reproducible) |
-| D5 `TimeTo` pre-1970 emits major type 1; `AsTime` range-checks | Defect | `c1 29` for −10 s | none — defect. Stored v0.2 values (huge uint) now return `ErrTimeRange`; the migration guide shows the one-line `int64(n)` reinterpretation for callers who must read them |
-| D5 `BigIntTo(nil)` returns `Null()` | Defect | `Null()` | none — defect |
-| D6 `StreamEncoder` counts nested containers; deterministic modes reject out-of-order map keys | Defect | `ErrContainerOverflow` / `ErrStreamMapOrder` | none — defect (callers that can't pre-sort use `EncodeTo`) |
-| D7 negint ≥ 2^63 into `any` returns `*big.Int`; out-of-range int struct keys don't match | Defect | `*big.Int` / unknown key | none — defect |
-| D8/D9 sequence budget reset; buffer pool type check | Defect | fixed | none — defect |
+| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+|---|---|---|---|---|
+| D1 package-level `Marshal`/`Unmarshal` concurrency | Safety defect | spec §2.5 "No goroutine-safety footguns" (`encoder-decoder-spec.md:160`); package-level functions are concurrency-safe by Go convention (`encoding/json`) | safe for concurrent use | none |
+| D2 decoded `cbor.Value`/`any` targets no longer alias the internal arena | Safety defect | memory safety; `decoder.go:95-101` scopes arena lifetime to `Decode`, not `Unmarshal` targets | independent copies | none (aliasing remains available through `WithArena`, 018) |
+| D3 non-hashable `any` map keys decode to `cbor.ByteKey`/`cbor.EncodedKey` instead of panicking | Safety defect | — (panic on untrusted input) | no panic; text-keyed and scalar-keyed maps decode exactly as in v0.2.2 | none |
+| D4 embedded-struct fields flattened on the wire | Contract defect | proposal 008 struct mapping (`encoding/json` field rules) | flattened | none. v0.2.2 output pinned as a *negative* golden vector |
+| D5 `TimeTo` pre-1970 emits major type 1; `AsTime` range-checks | Contract defect | RFC 8949 §3.4.2 (tag 1 = signed epoch seconds), which `TimeTo` (`cbor/tags.go:55`) and `AsTime` claim to implement | `c1 29` for −10 s; out-of-range input → `ErrTimeRange` | none (034: v0.2 output was not a valid time). Migration guide shows the `int64(n)` reinterpretation for stored v0.2 values |
+| D5 `BigIntTo(nil)` returns `Null()` instead of panicking | Safety defect | — | `Null()` | none |
+| D6 `StreamEncoder` counts nested containers; deterministic modes reject out-of-order map keys | Contract defect | `doc.go:12-17` (deterministic modes sort map keys); spec §6.1 | `ErrContainerOverflow` / `ErrStreamMapOrder` | none (callers that can't pre-sort use `EncodeTo`) |
+| D7 negint ≥ 2^63 into `any` returns `*big.Int`; out-of-range int struct keys don't match | Contract defect | `marshal.go:41-46` (`Unmarshal` decodes the data into `v`; v0.2 produced a different integer) | `*big.Int` / unknown key; every in-range value decodes as in v0.2.2 | none |
+| D8/D9 sequence budget reset; buffer-pool type check | Contract defect / Safety defect | `decoder.go:60-63` (budget is "for a single decode operation") | fixed | none |
+
+No `...Option` parameters are appended to existing functions.
 
 ---
 
@@ -280,6 +284,8 @@ from 021.
 | No §9 metric regresses by more than 5% against `bench-020-baseline.txt` | `make bench` + `benchstat` | Yes |
 | D4 and D5 v0.2.2 outputs are captured in `testdata/legacy-v0.2.2/` as negative golden vectors, and the migration guide shows each before/after | golden test + doc review | Yes |
 | No selector is added for any 021 change (034 Defect class) | API review | Yes |
+| No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
+| Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 
 ---
 
@@ -373,3 +379,4 @@ the pool, which the D2 fix guarantees.
 |---|---|---|
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
+| 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |

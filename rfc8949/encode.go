@@ -175,7 +175,7 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	case cbor.KindFloat64:
 		return encodeFloat64(dst, math.Float64frombits(v.Num), opts)
 	default:
-		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind)
+		return dst, kindError(v.Kind)
 	}
 }
 
@@ -190,7 +190,7 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 //go:noinline
 func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
 	if !rawvalue.Is(v) {
-		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind)
+		return dst, kindError(v.Kind)
 	}
 	return append(dst, v.Bstr...), nil
 }
@@ -371,3 +371,13 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 	}
 	return dst, nil
 }
+
+// kindError is the encoder's unsupported-kind error. It wraps
+// ErrInvalidKind while keeping the v0.2.2 message text.
+type kindError cbor.Kind
+
+func (k kindError) Error() string {
+	return fmt.Sprintf("encode: unsupported Value kind %d", cbor.Kind(k))
+}
+
+func (k kindError) Unwrap() error { return cbor.ErrInvalidKind }

@@ -9,6 +9,7 @@ import (
 	"io"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/decerr"
 	"github.com/jahkeup/corecbor/wire"
 )
 
@@ -127,7 +128,8 @@ func (ir *itemReader) decode() (cbor.Value, error) {
 		// input: Decode reports exactly what it would for them.
 		_, _, derr := Decode(ir.buf, ir.opts)
 		if derr == nil || errors.Is(derr, cbor.ErrTruncated) {
-			return cbor.Value{}, fmt.Errorf("%w at offset %d: %w", cbor.ErrTruncated, len(ir.buf), io.ErrUnexpectedEOF)
+			return cbor.Value{}, decerr.Text(fmt.Errorf("%w: %w", cbor.ErrTruncated, io.ErrUnexpectedEOF), len(ir.buf),
+				fmt.Sprintf("%s at offset %d: %s", cbor.ErrTruncated, len(ir.buf), io.ErrUnexpectedEOF))
 		}
 		return cbor.Value{}, derr
 	default:
@@ -208,7 +210,7 @@ func (ir *itemReader) readHead(off int, ib byte) (wire.HeadResult, error) {
 }
 
 func errAt(sentinel error, off int) error {
-	return fmt.Errorf("%w at offset %d", sentinel, off)
+	return decodeErr(sentinel, off)
 }
 
 func (ir *itemReader) read() error {

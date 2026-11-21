@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/decerr"
 	"github.com/jahkeup/corecbor/wire"
 )
 
@@ -15,7 +16,7 @@ var (
 	ErrNotInContainer = errors.New("cbor: cursor not inside a container")
 	ErrKeyNotFound    = errors.New("cbor: map key not found")
 	ErrNotScalar      = errors.New("cbor: current item is not a scalar")
-	ErrTypeMismatch   = errors.New("cbor: type mismatch")
+	ErrTypeMismatch   = cbor.ErrTypeMismatch
 )
 
 type cursorFrame struct {
@@ -64,7 +65,7 @@ func (c *Cursor) AtBreak() bool {
 // advancing the cursor.
 func (c *Cursor) Kind() (byte, error) {
 	if c.pos >= len(c.src) {
-		return 0, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return 0, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	return c.src[c.pos] & 0xe0, nil
 }
@@ -119,31 +120,30 @@ func (c *Cursor) DecodeRaw() (cbor.Value, []byte, error) {
 // no single contiguous span.
 func (c *Cursor) Bytes() ([]byte, error) {
 	if c.pos >= len(c.src) {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return nil, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	h := wire.ParseHead(c.src[c.pos:])
 	if h.N == 0 {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return nil, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	if h.Major != wire.MajorBytes {
-		return nil, fmt.Errorf("%w at offset %d: expected byte string, got major %d",
-			ErrTypeMismatch, c.pos, h.Major>>5)
+		return nil, decodeErrf(ErrTypeMismatch, c.pos, ": expected byte string, got major %d", h.Major>>5)
 	}
 	if h.AI == wire.AIIndefinite {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrIndefiniteLength, c.pos)
+		return nil, decodeErr(cbor.ErrIndefiniteLength, c.pos)
 	}
 	if h.AI >= 28 && h.AI <= 30 {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, c.pos)
+		return nil, decodeErr(cbor.ErrReservedAI, c.pos)
 	}
 	if c.opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, c.pos)
+		return nil, decodeErr(cbor.ErrNonShortest, c.pos)
 	}
 	if h.Arg > uint64(c.opts.maxBytes()) {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, c.pos)
+		return nil, decodeErr(cbor.ErrMaxByteStringLength, c.pos)
 	}
 	start := c.pos + h.N
 	if h.Arg > uint64(len(c.src)-start) {
-		return nil, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return nil, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	end := start + int(h.Arg)
 	c.pos = end
@@ -177,15 +177,14 @@ func (c *Cursor) consumeFromFrame() {
 // array. Returns the element count (-1 for indefinite-length).
 func (c *Cursor) EnterArray() (int, error) {
 	if c.pos >= len(c.src) {
-		return 0, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return 0, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	h := wire.ParseHead(c.src[c.pos:])
 	if h.N == 0 {
-		return 0, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return 0, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	if h.Major != wire.MajorArray {
-		return 0, fmt.Errorf("%w at offset %d: expected array, got major %d",
-			ErrTypeMismatch, c.pos, h.Major>>5)
+		return 0, decodeErrf(ErrTypeMismatch, c.pos, ": expected array, got major %d", h.Major>>5)
 	}
 	c.pos += h.N
 	count := -1
@@ -201,15 +200,14 @@ func (c *Cursor) EnterArray() (int, error) {
 // alternate: key, value, key, value, ...
 func (c *Cursor) EnterMap() (int, error) {
 	if c.pos >= len(c.src) {
-		return 0, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return 0, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	h := wire.ParseHead(c.src[c.pos:])
 	if h.N == 0 {
-		return 0, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+		return 0, decodeErr(cbor.ErrTruncated, c.pos)
 	}
 	if h.Major != wire.MajorMap {
-		return 0, fmt.Errorf("%w at offset %d: expected map, got major %d",
-			ErrTypeMismatch, c.pos, h.Major>>5)
+		return 0, decodeErrf(ErrTypeMismatch, c.pos, ": expected map, got major %d", h.Major>>5)
 	}
 	c.pos += h.N
 	count := -1
@@ -279,13 +277,13 @@ func (c *Cursor) FindMapKey(key string) error {
 			return ErrKeyNotFound
 		}
 		if c.pos >= len(c.src) {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+			return decodeErr(cbor.ErrTruncated, c.pos)
 		}
 
 		keyStart := c.pos
 		h := wire.ParseHead(c.src[c.pos:])
 		if h.N == 0 {
-			return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+			return decodeErr(cbor.ErrTruncated, c.pos)
 		}
 
 		if h.Major == wire.MajorText && h.AI != wire.AIIndefinite {
@@ -321,7 +319,7 @@ func (c *Cursor) skipRemaining(frame *cursorFrame) error {
 	if frame.remaining < 0 {
 		for !c.AtBreak() {
 			if c.pos >= len(c.src) {
-				return fmt.Errorf("%w at offset %d", cbor.ErrTruncated, c.pos)
+				return decodeErr(cbor.ErrTruncated, c.pos)
 			}
 			if err := c.skipItem(); err != nil {
 				return err
@@ -368,17 +366,17 @@ func (c *Cursor) skipItem() error {
 func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 	src, o := c.src, c.opts
 	if off >= len(src) {
-		return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return off, decodeErr(cbor.ErrTruncated, off)
 	}
 	h := wire.ParseHead(src[off:])
 	if h.N == 0 {
-		return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return off, decodeErr(cbor.ErrTruncated, off)
 	}
 	if h.AI >= 28 && h.AI <= 30 {
-		return off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
+		return off, decodeErr(cbor.ErrReservedAI, off)
 	}
 	if h.AI == wire.AIIndefinite && (h.Major == wire.MajorUint || h.Major == wire.MajorNegInt || h.Major == wire.MajorTag) {
-		return off, fmt.Errorf("%w (indefinite length for major type %d) at offset %d", cbor.ErrReservedAI, h.Major>>5, off)
+		return off, decerr.Text(cbor.ErrReservedAI, off, fmt.Sprintf("%s (indefinite length for major type %d) at offset %d", cbor.ErrReservedAI, h.Major>>5, off))
 	}
 	pos := off + h.N
 	avail := len(src) - pos - reserve
@@ -392,17 +390,17 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 			return c.skipChunks(pos, h.Major)
 		}
 		if h.Arg > uint64(o.maxBytes()) {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+			return off, decodeErr(cbor.ErrMaxByteStringLength, off)
 		}
 		if h.Arg > uint64(len(src)-pos) {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return off, decodeErr(cbor.ErrTruncated, off)
 		}
 		return pos + int(h.Arg), nil
 
 	case wire.MajorArray, wire.MajorMap:
 		isMap := h.Major == wire.MajorMap
 		if depth+1 > o.maxNesting() {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+			return off, decodeErr(cbor.ErrMaxNestingDepth, off)
 		}
 		per := 1
 		if isMap {
@@ -411,13 +409,13 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 		if h.AI == wire.AIIndefinite {
 			for n := 0; ; n++ {
 				if pos >= len(src) {
-					return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+					return pos, decodeErr(cbor.ErrTruncated, pos)
 				}
 				if src[pos] == wire.BreakCode {
 					return pos + 1, nil
 				}
 				if n >= o.maxArray() {
-					return pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, pos)
+					return pos, decodeErr(cbor.ErrMaxArrayLength, pos)
 				}
 				for k := range per {
 					// Pending: the rest of this pair, plus the break code.
@@ -430,11 +428,11 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 			}
 		}
 		if h.Arg > uint64(o.maxArray()) {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
+			return off, decodeErr(cbor.ErrMaxArrayLength, off)
 		}
 		count := int(h.Arg)
 		if count > avail/per {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return off, decodeErr(cbor.ErrTruncated, off)
 		}
 		for i := range count * per {
 			next, err := c.skipAt(pos, depth+1, reserve+count*per-i-1, false)
@@ -447,22 +445,22 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 
 	case wire.MajorTag:
 		if !o.tagAllowed(h.Arg) {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrUnknownTag, off)
+			return off, decodeErr(cbor.ErrUnknownTag, off)
 		}
 		if strip && h.Arg == cbor.TagSelfDescribe {
 			return c.skipAt(pos, depth, reserve, true)
 		}
 		if depth+1 > o.maxNesting() {
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+			return off, decodeErr(cbor.ErrMaxNestingDepth, off)
 		}
 		return c.skipAt(pos, depth+1, reserve, false)
 
 	default: // major type 7
 		switch {
 		case h.AI == wire.AIIndefinite:
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrUnexpectedBreak, off)
+			return off, decodeErr(cbor.ErrUnexpectedBreak, off)
 		case h.AI == wire.AI1Byte && h.Arg < 32:
-			return off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
+			return off, decodeErr(cbor.ErrNonShortest, off)
 		}
 		return pos, nil
 	}
@@ -475,23 +473,23 @@ func (c *Cursor) skipChunks(pos int, major byte) (int, error) {
 	total := uint64(0)
 	for {
 		if pos >= len(src) {
-			return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+			return pos, decodeErr(cbor.ErrTruncated, pos)
 		}
 		if src[pos] == wire.BreakCode {
 			return pos + 1, nil
 		}
 		h := wire.ParseHead(src[pos:])
 		if h.N == 0 || h.Major != major || h.AI == wire.AIIndefinite {
-			return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+			return pos, decodeErr(cbor.ErrTruncated, pos)
 		}
 		if h.AI >= 28 && h.AI <= 30 {
-			return pos, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, pos)
+			return pos, decodeErr(cbor.ErrReservedAI, pos)
 		}
 		if h.Arg > uint64(o.maxBytes()) || total+h.Arg > uint64(o.maxBytes()) {
-			return pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, pos)
+			return pos, decodeErr(cbor.ErrMaxByteStringLength, pos)
 		}
 		if h.Arg > uint64(len(src)-pos-h.N) {
-			return pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+			return pos, decodeErr(cbor.ErrTruncated, pos)
 		}
 		total += h.Arg
 		pos += h.N + int(h.Arg)

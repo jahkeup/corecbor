@@ -3,7 +3,19 @@
 
 package cbor
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/jahkeup/corecbor/internal/decerr"
+)
+
+// DecodeError is the concrete type of every error the decoder returns
+// for malformed or rejected input: Offset is the byte offset of the
+// offending item, Path (with WithErrorPath) locates it, and Err is the
+// wrapped sentinel, so errors.Is matches as before. Use errors.As to
+// read the offset instead of parsing the message, whose text is
+// unchanged from v0.2.2.
+type DecodeError = decerr.Error
 
 // Error sentinels for the corecbor library. Every error returned by
 // the encoder or decoder wraps one of these via fmt.Errorf("%w ...").
@@ -79,6 +91,15 @@ var (
 	// ErrNotDeterministic indicates output or input that does not follow
 	// the deterministic encoding rules of the selected mode.
 	ErrNotDeterministic = errors.New("cbor: not deterministically encoded")
+
+	// ErrTypeMismatch indicates a CBOR value cannot be stored in the Go
+	// target type (reflection), or a Cursor read found a different major
+	// type than requested.
+	ErrTypeMismatch = errors.New("cbor: type mismatch")
+
+	// ErrInvalidKind indicates a Value whose Kind the encoder doesn't
+	// support.
+	ErrInvalidKind = errors.New("cbor: invalid Value kind")
 
 	// ErrReservedSimple indicates an attempt to encode simple value 24
 	// through 31, whose one-byte-argument encodings RFC 8949 §3.3 says

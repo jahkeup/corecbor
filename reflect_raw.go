@@ -5,7 +5,6 @@ package corecbor
 
 import (
 	"bytes"
-	"fmt"
 	"reflect"
 	"sync"
 
@@ -111,7 +110,7 @@ func (r rawState) rawToGo(span []byte, val cbor.Value, target reflect.Value) err
 // over many items of one type look it up once.
 func (r rawState) fill(span []byte, val cbor.Value, target reflect.Value, raw bool) error {
 	if !target.CanSet() {
-		return fmt.Errorf("cbor: cannot set target of type %s", target.Type())
+		return unsupportedTarget(cbor.KindInvalid, target.Type(), "cannot set target of type %s", target.Type())
 	}
 	if !raw {
 		v, err := r.value(span, val)
@@ -183,7 +182,7 @@ func (r rawState) rawArray(span []byte, val cbor.Value, target reflect.Value) er
 	switch target.Kind() {
 	case reflect.Slice, reflect.Array:
 	default:
-		return typeMismatch("Array", target.Type())
+		return typeMismatch(cbor.KindArray, "Array", target.Type())
 	}
 	c := rfc8949.NewCursor(span, r.opts)
 	n, err := c.EnterArray()
@@ -314,7 +313,7 @@ func (r rawState) rawMap(span []byte, val cbor.Value, target reflect.Value) erro
 		mt.fields = getStructFields(target.Type())
 		mt.fieldRaw = rawFields(target.Type(), mt.fields)
 	default:
-		return typeMismatch("Map", target.Type())
+		return typeMismatch(cbor.KindMap, "Map", target.Type())
 	}
 	c := rfc8949.NewCursor(span, r.opts)
 	n, err := c.EnterMap()
@@ -434,10 +433,10 @@ func (r rawState) assign(mt mapTarget, key cbor.Value, keySpan, span []byte, val
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("cbor: field %q expects tag(%d) but got kind %d", fi.name, fi.tagID, v.Kind)
+			return withField(typeMismatchf(v.Kind, fv.Type(), "field %q expects tag(%d) but got kind %d", fi.name, fi.tagID, v.Kind), fi.goName)
 		}
 		if h.Arg != fi.tagID {
-			return fmt.Errorf("cbor: field %q expects tag(%d) but got tag(%d)", fi.name, fi.tagID, h.Arg)
+			return withField(typeMismatchf(cbor.KindTag, fv.Type(), "field %q expects tag(%d) but got tag(%d)", fi.name, fi.tagID, h.Arg), fi.goName)
 		}
 		span = span[h.N:]
 		if val.Kind == cbor.KindTag {
@@ -446,7 +445,10 @@ func (r rawState) assign(mt mapTarget, key cbor.Value, keySpan, span []byte, val
 			val = cbor.Value{}
 		}
 	}
-	return r.fill(span, val, fv, mt.fieldRaw[idx])
+	if err := r.fill(span, val, fv, mt.fieldRaw[idx]); err != nil {
+		return withField(err, fi.goName)
+	}
+	return nil
 }
 
 func (r rawState) assignMap(mt mapTarget, key cbor.Value, keySpan, span []byte, val cbor.Value) error {
@@ -465,7 +467,7 @@ func (r rawState) assignMap(mt mapTarget, key cbor.Value, keySpan, span []byte, 
 		return err
 	}
 	if !k.Comparable() {
-		return typeMismatchf("map key of type %s is not comparable", k.Type())
+		return typeMismatchf(cbor.KindMap, k.Type(), "map key of type %s is not comparable", k.Type())
 	}
 	v := reflect.New(target.Type().Elem()).Elem()
 	if err := r.fill(span, val, v, mt.valRaw); err != nil {

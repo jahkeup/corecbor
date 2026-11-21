@@ -15,6 +15,10 @@ type (
 	MapEntry = cbor.MapEntry
 	Kind     = cbor.Kind
 
+	// DecodeError is the concrete type of decoder errors; see
+	// cbor.DecodeError.
+	DecodeError = cbor.DecodeError
+
 	ByteKey    = cbor.ByteKey
 	EncodedKey = cbor.EncodedKey
 )
@@ -87,6 +91,8 @@ var (
 	ErrNotDeterministic    = cbor.ErrNotDeterministic
 	ErrReservedSimple      = cbor.ErrReservedSimple
 	ErrUnexpectedBreak     = cbor.ErrUnexpectedBreak
+	ErrTypeMismatch        = cbor.ErrTypeMismatch
+	ErrInvalidKind         = cbor.ErrInvalidKind
 )
 
 func AsTime(t Value) (time.Time, error)    { return cbor.AsTime(t) }

@@ -40,7 +40,7 @@ func (u unmarshalState) own(v cbor.Value) cbor.Value {
 
 func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	if !target.CanSet() {
-		return fmt.Errorf("cbor: cannot set target of type %s", target.Type())
+		return unsupportedTarget(cbor.KindInvalid, target.Type(), "cannot set target of type %s", target.Type())
 	}
 
 	if target.Kind() == reflect.Pointer {
@@ -93,23 +93,23 @@ func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 			target.SetBool(val.BoolVal())
 			return nil
 		}
-		return typeMismatch("Bool", target.Type())
+		return typeMismatch(cbor.KindBool, "Bool", target.Type())
 	case cbor.KindText:
 		if target.Kind() == reflect.String {
 			target.SetString(val.TextVal())
 			return nil
 		}
-		return typeMismatch("Text", target.Type())
+		return typeMismatch(cbor.KindText, "Text", target.Type())
 	case cbor.KindBytes:
 		if target.Kind() == reflect.Slice && target.Type().Elem().Kind() == reflect.Uint8 {
 			target.SetBytes(append([]byte(nil), val.BytesVal()...))
 			return nil
 		}
-		return typeMismatch("Bytes", target.Type())
+		return typeMismatch(cbor.KindBytes, "Bytes", target.Type())
 	case cbor.KindFloat32:
-		return setFloat(float64(val.Float32Val()), target)
+		return setFloat(float64(val.Float32Val()), cbor.KindFloat32, target)
 	case cbor.KindFloat64:
-		return setFloat(val.Float64Val(), target)
+		return setFloat(val.Float64Val(), cbor.KindFloat64, target)
 	case cbor.KindArray:
 		return u.decodeArray(val.Array(), target)
 	case cbor.KindMap:
@@ -123,7 +123,7 @@ func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 		target.SetZero()
 		return nil
 	default:
-		return fmt.Errorf("cbor: unsupported Value kind %d for target %s", val.Kind, target.Type())
+		return typeMismatchf(val.Kind, target.Type(), "unsupported Value kind %d for target %s", val.Kind, target.Type())
 	}
 }
 
@@ -136,7 +136,7 @@ func setInterface(goVal any, target reflect.Value) error {
 	}
 	rv := reflect.ValueOf(goVal)
 	if !rv.Type().AssignableTo(target.Type()) {
-		return typeMismatchf("cannot decode %s into Go type %s", rv.Type(), target.Type())
+		return typeMismatchf(cbor.KindInvalid, target.Type(), "cannot decode %s into Go type %s", rv.Type(), target.Type())
 	}
 	target.Set(rv)
 	return nil
@@ -155,17 +155,17 @@ func setUint(n uint64, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		if target.OverflowUint(n) {
-			return fmt.Errorf("%w: %d into %s", ErrOverflow, n, target.Type())
+			return overflowErr(cbor.KindUint, target.Type(), "%d into %s", n, target.Type())
 		}
 		target.SetUint(n)
 		return nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if n > uint64(math.MaxInt64) {
-			return fmt.Errorf("%w: %d into %s", ErrOverflow, n, target.Type())
+			return overflowErr(cbor.KindUint, target.Type(), "%d into %s", n, target.Type())
 		}
 		i := int64(n)
 		if target.OverflowInt(i) {
-			return fmt.Errorf("%w: %d into %s", ErrOverflow, n, target.Type())
+			return overflowErr(cbor.KindUint, target.Type(), "%d into %s", n, target.Type())
 		}
 		target.SetInt(i)
 		return nil
@@ -176,7 +176,7 @@ func setUint(n uint64, target reflect.Value) error {
 		target.Set(reflect.ValueOf(n))
 		return nil
 	default:
-		return typeMismatch("Uint", target.Type())
+		return typeMismatch(cbor.KindUint, "Uint", target.Type())
 	}
 }
 
@@ -184,11 +184,11 @@ func setNegInt(n uint64, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		if n > uint64(math.MaxInt64) {
-			return fmt.Errorf("%w: negint(%d) into %s", ErrOverflow, n, target.Type())
+			return overflowErr(cbor.KindNegInt, target.Type(), "negint(%d) into %s", n, target.Type())
 		}
 		i := -1 - int64(n)
 		if target.OverflowInt(i) {
-			return fmt.Errorf("%w: negint(%d) into %s", ErrOverflow, n, target.Type())
+			return overflowErr(cbor.KindNegInt, target.Type(), "negint(%d) into %s", n, target.Type())
 		}
 		target.SetInt(i)
 		return nil
@@ -196,17 +196,17 @@ func setNegInt(n uint64, target reflect.Value) error {
 		target.SetFloat(-1 - float64(n))
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return fmt.Errorf("%w: negative integer into %s", ErrOverflow, target.Type())
+		return overflowErr(cbor.KindNegInt, target.Type(), "negative integer into %s", target.Type())
 	default:
-		return typeMismatch("NegInt", target.Type())
+		return typeMismatch(cbor.KindNegInt, "NegInt", target.Type())
 	}
 }
 
-func setFloat(f float64, target reflect.Value) error {
+func setFloat(f float64, kind cbor.Kind, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Float32:
 		if target.OverflowFloat(f) {
-			return fmt.Errorf("%w: float %g into float32", ErrOverflow, f)
+			return overflowErr(kind, target.Type(), "float %g into float32", f)
 		}
 		target.SetFloat(f)
 		return nil
@@ -216,25 +216,25 @@ func setFloat(f float64, target reflect.Value) error {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		i, ok := intFromFloat(f)
 		if !ok {
-			return typeMismatch("Float", target.Type())
+			return typeMismatch(kind, "Float", target.Type())
 		}
 		if target.OverflowInt(i) {
-			return fmt.Errorf("%w: float %g into %s", ErrOverflow, f, target.Type())
+			return overflowErr(kind, target.Type(), "float %g into %s", f, target.Type())
 		}
 		target.SetInt(i)
 		return nil
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		if f < 0 || f != math.Trunc(f) {
-			return typeMismatch("Float", target.Type())
+			return typeMismatch(kind, "Float", target.Type())
 		}
 		u := uint64(f)
 		if target.OverflowUint(u) {
-			return fmt.Errorf("%w: float %g into %s", ErrOverflow, f, target.Type())
+			return overflowErr(kind, target.Type(), "float %g into %s", f, target.Type())
 		}
 		target.SetUint(u)
 		return nil
 	default:
-		return typeMismatch("Float", target.Type())
+		return typeMismatch(kind, "Float", target.Type())
 	}
 }
 
@@ -260,7 +260,7 @@ func (u unmarshalState) decodeArray(arr []cbor.Value, target reflect.Value) erro
 		}
 		return nil
 	default:
-		return typeMismatch("Array", target.Type())
+		return typeMismatch(cbor.KindArray, "Array", target.Type())
 	}
 }
 
@@ -271,7 +271,7 @@ func (u unmarshalState) decodeMapReflect(m []cbor.MapEntry, target reflect.Value
 	case reflect.Struct:
 		return u.decodeMapToStruct(m, target)
 	default:
-		return typeMismatch("Map", target.Type())
+		return typeMismatch(cbor.KindMap, "Map", target.Type())
 	}
 }
 
@@ -297,7 +297,7 @@ func (u unmarshalState) decodeMapToMap(m []cbor.MapEntry, target reflect.Value) 
 			return err
 		}
 		if !kv.Comparable() {
-			return typeMismatchf("map key of type %s is not comparable", kv.Type())
+			return typeMismatchf(entry.Key.Kind, kv.Type(), "map key of type %s is not comparable", kv.Type())
 		}
 		vv := reflect.New(valType).Elem()
 		if err := u.valueToGo(entry.Value, vv); err != nil {
@@ -325,15 +325,15 @@ func (u unmarshalState) decodeMapToStruct(m []cbor.MapEntry, target reflect.Valu
 		val := entry.Value
 		if fi.hasTag {
 			if val.Kind != cbor.KindTag {
-				return fmt.Errorf("cbor: field %q expects tag(%d) but got kind %d", fi.name, fi.tagID, val.Kind)
+				return withField(typeMismatchf(val.Kind, fv.Type(), "field %q expects tag(%d) but got kind %d", fi.name, fi.tagID, val.Kind), fi.goName)
 			}
 			if val.TagID() != fi.tagID {
-				return fmt.Errorf("cbor: field %q expects tag(%d) but got tag(%d)", fi.name, fi.tagID, val.TagID())
+				return withField(typeMismatchf(val.Kind, fv.Type(), "field %q expects tag(%d) but got tag(%d)", fi.name, fi.tagID, val.TagID()), fi.goName)
 			}
 			val = val.TagInner()
 		}
 		if err := u.valueToGo(val, fv); err != nil {
-			return err
+			return withField(err, fi.goName)
 		}
 	}
 	return nil
@@ -385,7 +385,7 @@ func (u unmarshalState) decodeTagReflect(t cbor.Value, target reflect.Value) err
 
 func decodeTime(val cbor.Value, target reflect.Value) error {
 	if val.Kind != cbor.KindTag {
-		return typeMismatch("non-Tag", timeType)
+		return typeMismatch(val.Kind, "non-Tag", timeType)
 	}
 	t, err := cbor.AsTime(val)
 	if err != nil {
@@ -397,7 +397,7 @@ func decodeTime(val cbor.Value, target reflect.Value) error {
 
 func decodeBigInt(val cbor.Value, target reflect.Value) error {
 	if val.Kind != cbor.KindTag {
-		return typeMismatch("non-Tag", bigIntType)
+		return typeMismatch(val.Kind, "non-Tag", bigIntType)
 	}
 	bi, err := cbor.AsBigInt(val)
 	if err != nil {
@@ -409,7 +409,7 @@ func decodeBigInt(val cbor.Value, target reflect.Value) error {
 
 func decodeBigIntPtr(val cbor.Value, target reflect.Value) error {
 	if val.Kind != cbor.KindTag {
-		return typeMismatch("non-Tag", bigIntPtrType)
+		return typeMismatch(val.Kind, "non-Tag", bigIntPtrType)
 	}
 	bi, err := cbor.AsBigInt(val)
 	if err != nil {
@@ -528,14 +528,6 @@ func (u unmarshalState) keyToAny(k cbor.Value) (any, error) {
 		return nil, fmt.Errorf("cbor: encoding map key for map[any]any: %w", err)
 	}
 	return cbor.EncodedKey(enc), nil
-}
-
-func typeMismatch(cborType string, goType reflect.Type) error {
-	return fmt.Errorf("cbor: cannot decode %s into Go type %s", cborType, goType)
-}
-
-func typeMismatchf(format string, args ...any) error {
-	return fmt.Errorf("cbor: "+format, args...)
 }
 
 func min(a, b int) int {

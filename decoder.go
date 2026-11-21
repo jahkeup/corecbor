@@ -4,9 +4,8 @@
 package corecbor
 
 import (
-	"fmt"
-
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/decerr"
 	"github.com/jahkeup/corecbor/rfc8949"
 )
 
@@ -232,7 +231,7 @@ func (d *Decoder) Decode(src []byte) (cbor.Value, error) {
 		return cbor.Value{}, err
 	}
 	if n != len(src) {
-		return cbor.Value{}, fmt.Errorf("decode: %w", cbor.ErrTrailingBytes)
+		return cbor.Value{}, decerr.Text(cbor.ErrTrailingBytes, n, "decode: "+cbor.ErrTrailingBytes.Error())
 	}
 	return v, nil
 }

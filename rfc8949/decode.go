@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/decerr"
 	"github.com/jahkeup/corecbor/wire"
 )
 
@@ -83,13 +84,17 @@ func NewBudget(limit int) *BudgetState {
 	return &BudgetState{Limit: limit}
 }
 
-func (bs *BudgetState) charge(n int) error {
+// charge records n bytes of allocation for the item at off. The
+// message keeps its v0.2.2 text (no offset); the offset is available
+// through the DecodeError.
+func (bs *BudgetState) charge(n, off int) error {
 	if bs == nil {
 		return nil
 	}
 	bs.Allocated += n
 	if bs.Allocated > bs.Limit {
-		return fmt.Errorf("%w: used %d, limit %d", cbor.ErrMemoryBudgetExceeded, bs.Allocated, bs.Limit)
+		return decerr.Text(cbor.ErrMemoryBudgetExceeded, off,
+			fmt.Sprintf("%s: used %d, limit %d", cbor.ErrMemoryBudgetExceeded, bs.Allocated, bs.Limit))
 	}
 	return nil
 }
@@ -198,25 +203,25 @@ func (o *DecodeOpts) tagAllowed(id uint64) bool {
 
 func decodeValue(src []byte, off, depth int, opts DecodeOpts, stripSelfDescribe bool) (cbor.Value, int, error) {
 	if off >= len(src) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 
 	h := wire.ParseHead(src[off:])
 	if h.N == 0 {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 
 	if h.AI >= 28 && h.AI <= 30 {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrReservedAI, off)
 	}
 	// Indefinite length (AI 31) is not well-formed for integers and tags
 	// (RFC 8949 §3.2.4); ParseHead reports it with Arg 0.
 	if h.AI == wire.AIIndefinite && (h.Major == wire.MajorUint || h.Major == wire.MajorNegInt || h.Major == wire.MajorTag) {
-		return cbor.Value{}, off, fmt.Errorf("%w (indefinite length for major type %d) at offset %d", cbor.ErrReservedAI, h.Major>>5, off)
+		return cbor.Value{}, off, decerr.Text(cbor.ErrReservedAI, off, fmt.Sprintf("%s (indefinite length for major type %d) at offset %d", cbor.ErrReservedAI, h.Major>>5, off))
 	}
 
 	if opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrNonShortest, off)
 	}
 
 	switch h.Major {
@@ -237,27 +242,27 @@ func decodeValue(src []byte, off, depth int, opts DecodeOpts, stripSelfDescribe 
 	case wire.MajorOther:
 		return decodeOther(src, off, h, opts)
 	default:
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 }
 
 func decodeBytes(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.Value, int, error) {
 	if h.AI == wire.AIIndefinite {
 		if opts.RejectIndefiniteLength {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrIndefiniteLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrIndefiniteLength, off)
 		}
 		return decodeIndefiniteBytes(src, off+h.N, opts)
 	}
 	if h.Arg > uint64(opts.maxBytes()) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxByteStringLength, off)
 	}
 	length := int(h.Arg)
 	start := off + h.N
 	end := start + length
 	if end > len(src) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
-	if err := opts.Budget.charge(length); err != nil {
+	if err := opts.Budget.charge(length, off); err != nil {
 		return cbor.Value{}, off, err
 	}
 	if opts.ZeroCopy {
@@ -272,35 +277,35 @@ func decodeIndefiniteBytes(src []byte, off int, opts DecodeOpts) (cbor.Value, in
 	var buf []byte
 	for {
 		if off >= len(src) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if src[off] == wire.BreakCode {
 			return cbor.Bytes(buf), off + 1, nil
 		}
 		h := wire.ParseHead(src[off:])
 		if h.N == 0 {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if h.Major != wire.MajorBytes || h.AI == wire.AIIndefinite {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if h.AI >= 28 && h.AI <= 30 {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrReservedAI, off)
 		}
 		if opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrNonShortest, off)
 		}
 		if h.Arg > uint64(opts.maxBytes()) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrMaxByteStringLength, off)
 		}
 		length := int(h.Arg)
 		if int64(len(buf))+int64(length) > int64(opts.maxBytes()) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrMaxByteStringLength, off)
 		}
 		start := off + h.N
 		end := start + length
 		if end > len(src) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		buf = append(buf, src[start:end]...)
 		off = end
@@ -310,23 +315,23 @@ func decodeIndefiniteBytes(src []byte, off int, opts DecodeOpts) (cbor.Value, in
 func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.Value, int, error) {
 	if h.AI == wire.AIIndefinite {
 		if opts.RejectIndefiniteLength {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrIndefiniteLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrIndefiniteLength, off)
 		}
 		return decodeIndefiniteText(src, off+h.N, opts)
 	}
 	if h.Arg > uint64(opts.maxBytes()) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxByteStringLength, off)
 	}
 	length := int(h.Arg)
 	start := off + h.N
 	end := start + length
 	if end > len(src) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 	if opts.RejectInvalidUTF8 && !utf8.Valid(src[start:end]) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrInvalidUTF8, off)
 	}
-	if err := opts.Budget.charge(length); err != nil {
+	if err := opts.Budget.charge(length, off); err != nil {
 		return cbor.Value{}, off, err
 	}
 	var s string
@@ -344,39 +349,39 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 	var buf []byte
 	for {
 		if off >= len(src) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if src[off] == wire.BreakCode {
 			s := string(buf)
 			if opts.RejectInvalidUTF8 && !utf8.ValidString(s) {
-				return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, off)
+				return cbor.Value{}, off, decodeErr(cbor.ErrInvalidUTF8, off)
 			}
 			return cbor.Text(s), off + 1, nil
 		}
 		h := wire.ParseHead(src[off:])
 		if h.N == 0 {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if h.Major != wire.MajorText || h.AI == wire.AIIndefinite {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if h.AI >= 28 && h.AI <= 30 {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrReservedAI, off)
 		}
 		if opts.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrNonShortest, off)
 		}
 		if h.Arg > uint64(opts.maxBytes()) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrMaxByteStringLength, off)
 		}
 		length := int(h.Arg)
 		if int64(len(buf))+int64(length) > int64(opts.maxBytes()) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxByteStringLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrMaxByteStringLength, off)
 		}
 		start := off + h.N
 		end := start + length
 		if end > len(src) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		buf = append(buf, src[start:end]...)
 		off = end
@@ -386,25 +391,25 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpts) (cbor.Value, int, error) {
 	if h.AI == wire.AIIndefinite {
 		if opts.RejectIndefiniteLength {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrIndefiniteLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrIndefiniteLength, off)
 		}
 		return decodeIndefiniteArray(src, off+h.N, depth, opts)
 	}
 	count := int(h.Arg)
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxArrayLength, off)
 	}
 	pos := off + h.N
 	childDepth := depth + 1
 	if childDepth > opts.maxNesting() {
-		return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, pos)
+		return cbor.Value{}, pos, decodeErr(cbor.ErrMaxNestingDepth, pos)
 	}
 	// Every element occupies at least one byte, so a count larger than
 	// the available input cannot be satisfied. Fail before allocating.
 	if count > opts.avail(src, pos) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
-	if err := opts.Budget.charge(count * 16); err != nil {
+	if err := opts.Budget.charge(count*16, off); err != nil {
 		return cbor.Value{}, off, err
 	}
 	var arr []cbor.Value
@@ -420,7 +425,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	_ = arr[count-1]
 	for i := range count {
 		if pos >= srcLen {
-			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+			return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 		}
 		ib := src[pos]
 
@@ -434,44 +439,44 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 				n = 1
 			case ai == 24:
 				if pos+1 >= srcLen {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 				}
 				arg = uint64(src[pos+1])
 				n = 2
 				if opts.RejectNonShortest && arg < 24 {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
 				}
 			case ai == 25:
 				if pos+2 >= srcLen {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 				}
 				arg = uint64(src[pos+1])<<8 | uint64(src[pos+2])
 				n = 3
 				if opts.RejectNonShortest && arg <= 0xff {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
 				}
 			case ai == 26:
 				if pos+4 >= srcLen {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 				}
 				arg = uint64(src[pos+1])<<24 | uint64(src[pos+2])<<16 | uint64(src[pos+3])<<8 | uint64(src[pos+4])
 				n = 5
 				if opts.RejectNonShortest && arg <= 0xffff {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
 				}
 			case ai == 27:
 				if pos+8 >= srcLen {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 				}
 				arg = uint64(src[pos+1])<<56 | uint64(src[pos+2])<<48 | uint64(src[pos+3])<<40 | uint64(src[pos+4])<<32 |
 					uint64(src[pos+5])<<24 | uint64(src[pos+6])<<16 | uint64(src[pos+7])<<8 | uint64(src[pos+8])
 				n = 9
 				if opts.RejectNonShortest && arg <= 0xffffffff {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrNonShortest, pos)
 				}
 			default:
 				if ai >= 28 && ai <= 30 {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrReservedAI, pos)
 				}
 				co := opts
 				co.reserve += count - i - 1
@@ -498,7 +503,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 			end := pos + 1 + length
 			if end <= srcLen {
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrInvalidUTF8, pos)
 				}
 				var s string
 				if opts.Interner != nil {
@@ -567,13 +572,13 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 
 func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Value, int, error) {
 	if depth+1 > opts.maxNesting() {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
 	var arr []cbor.Value
 	pos := off
 	for {
 		if pos >= len(src) {
-			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+			return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 		}
 		if src[pos] == wire.BreakCode {
 			if arr == nil {
@@ -582,7 +587,7 @@ func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Va
 			return cbor.MakeArrayFromSlice(arr), pos + 1, nil
 		}
 		if len(arr) >= opts.maxArray() {
-			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, pos)
+			return cbor.Value{}, pos, decodeErr(cbor.ErrMaxArrayLength, pos)
 		}
 		co := opts
 		co.reserve++ // break code
@@ -598,20 +603,20 @@ func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Va
 func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpts) (cbor.Value, int, error) {
 	if h.AI == wire.AIIndefinite {
 		if opts.RejectIndefiniteLength {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrIndefiniteLength, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrIndefiniteLength, off)
 		}
 		return decodeIndefiniteMap(src, off+h.N, depth, opts)
 	}
 	count := int(h.Arg)
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxArrayLength, off)
 	}
 	if depth+1 > opts.maxNesting() {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
 	// Every pair occupies at least two bytes. Fail before allocating.
 	if count > opts.avail(src, off+h.N)/2 {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
 
 	var dedup *keyDedup
@@ -621,7 +626,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		defer keyDedupPool.Put(dedup)
 	}
 
-	if err := opts.Budget.charge(count * 32); err != nil {
+	if err := opts.Budget.charge(count*32, off); err != nil {
 		return cbor.Value{}, off, err
 	}
 	var m []cbor.MapEntry
@@ -646,7 +651,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 				raw := src[pos:end]
 				var s string
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
-					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrInvalidUTF8, pos)
+					return cbor.Value{}, pos, decodeErr(cbor.ErrInvalidUTF8, pos)
 				}
 				if opts.Interner != nil {
 					s = opts.Interner.Intern(src[pos+1 : end])
@@ -676,7 +681,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	keyDone:
 		if opts.RejectNullMapKeys {
 			if k.Kind == cbor.KindNull {
-				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)
+				return cbor.Value{}, keyOff, decodeErr(cbor.ErrNullMapKey, keyOff)
 			}
 		}
 		co := opts
@@ -696,13 +701,13 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 
 func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Value, int, error) {
 	if depth+1 > opts.maxNesting() {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
 	var m []cbor.MapEntry
 	pos := off
 	for {
 		if pos >= len(src) {
-			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, pos)
+			return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 		}
 		if src[pos] == wire.BreakCode {
 			if m == nil {
@@ -711,7 +716,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 			return cbor.MakeMapFromSlice(m), pos + 1, nil
 		}
 		if len(m) >= opts.maxArray() {
-			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, pos)
+			return cbor.Value{}, pos, decodeErr(cbor.ErrMaxArrayLength, pos)
 		}
 		keyOff := pos
 		kOpts := opts
@@ -724,7 +729,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		pos = next
 		if opts.RejectNullMapKeys {
 			if k.Kind == cbor.KindNull {
-				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)
+				return cbor.Value{}, keyOff, decodeErr(cbor.ErrNullMapKey, keyOff)
 			}
 		}
 		vOpts := opts
@@ -747,14 +752,14 @@ func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []
 			h := fnv1a(encodedKey)
 			for _, idx := range dedup.seen[h] {
 				if valuesEqual(m[idx].Key, key) {
-					return m, fmt.Errorf("%w at offset %d", cbor.ErrDuplicateMapKey, keyOff)
+					return m, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
 				}
 			}
 			dedup.seen[h] = append(dedup.seen[h], len(m))
 		} else {
 			for _, entry := range m {
 				if valuesEqual(entry.Key, key) {
-					return m, fmt.Errorf("%w at offset %d", cbor.ErrDuplicateMapKey, keyOff)
+					return m, decodeErr(cbor.ErrDuplicateMapKey, keyOff)
 				}
 			}
 		}
@@ -826,7 +831,7 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	pos := off + h.N
 
 	if !opts.tagAllowed(tagID) {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrUnknownTag, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrUnknownTag, off)
 	}
 
 	if tagID == 55799 && stripSelfDescribe {
@@ -834,7 +839,7 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	}
 
 	if depth+1 > opts.maxNesting() {
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
 	inner, next, err := decodeValue(src, pos, depth+1, opts, false)
 	if err != nil {
@@ -859,34 +864,34 @@ func decodeOther(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.
 	case ai == wire.AI1Byte:
 		sv := uint8(h.Arg)
 		if sv < 32 {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonShortest, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrNonShortest, off)
 		}
 		return cbor.Simple(sv), off + h.N, nil
 	case ai == wire.AI2Bytes:
 		bits := uint16(h.Arg)
 		f := wire.DecodeFloat16(bits)
 		if opts.RejectNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonFiniteFloat, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrNonFiniteFloat, off)
 		}
 		return cbor.Float64(f), off + h.N, nil
 	case ai == wire.AI4Bytes:
 		bits := uint32(h.Arg)
 		f := math.Float32frombits(bits)
 		if opts.RejectNonFiniteFloats && (math.IsNaN(float64(f)) || math.IsInf(float64(f), 0)) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonFiniteFloat, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrNonFiniteFloat, off)
 		}
 		return cbor.Float32(f), off + h.N, nil
 	case ai == wire.AI8Bytes:
 		f := math.Float64frombits(h.Arg)
 		if opts.RejectNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
-			return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrNonFiniteFloat, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrNonFiniteFloat, off)
 		}
 		return cbor.Float64(f), off + h.N, nil
 	case ai == wire.AIIndefinite:
 		// A break is only valid as the terminator of an indefinite-length
 		// item, which the container decoders consume themselves.
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrUnexpectedBreak, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrUnexpectedBreak, off)
 	default:
-		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, off)
+		return cbor.Value{}, off, decodeErr(cbor.ErrReservedAI, off)
 	}
 }

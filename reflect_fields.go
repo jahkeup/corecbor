@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/jahkeup/corecbor/cbor"
 )
 
 // fieldInfo describes one struct field as it appears on the wire.
@@ -20,7 +22,8 @@ type fieldInfo struct {
 	omit   bool
 	tagID  uint64
 	hasTag bool
-	tagged bool // name came from a struct tag
+	tagged bool   // name came from a struct tag
+	goName string // Go field name, for UnmarshalTypeError.Field
 }
 
 // structFields is the cached wire layout of a struct type.
@@ -102,7 +105,7 @@ func typeFields(rt reflect.Type) *structFields {
 				}
 
 				if name != "" || !sf.Anonymous || ft.Kind() != reflect.Struct {
-					fi := fieldInfo{index: index, name: name, tagged: name != ""}
+					fi := fieldInfo{index: index, name: name, tagged: name != "", goName: sf.Name}
 					if fi.name == "" {
 						fi.name = strings.ToLower(sf.Name)
 					}
@@ -225,7 +228,7 @@ func fieldByIndexAlloc(v reflect.Value, index []int) (reflect.Value, error) {
 		if i > 0 && v.Kind() == reflect.Pointer {
 			if v.IsNil() {
 				if !v.CanSet() {
-					return reflect.Value{}, typeMismatchf("cannot set embedded pointer to unexported struct %s", v.Type().Elem())
+					return reflect.Value{}, typeMismatchf(cbor.KindMap, v.Type(), "cannot set embedded pointer to unexported struct %s", v.Type().Elem())
 				}
 				v.Set(reflect.New(v.Type().Elem()))
 			}

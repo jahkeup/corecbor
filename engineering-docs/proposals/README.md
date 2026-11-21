@@ -26,12 +26,12 @@ proposal lifecycle.
 | [032](032-eat-rfc9711-conformance.md) | 3 | Draft | EAT: RFC 9711 conformance | corecbor maintainers | 005, 022, 027, 031 | 2026-11-20 |
 | [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Draft | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 004, 022, 028, 031 | 2026-11-20 |
 | [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Draft | Standards currency and legacy-compatibility selection policy | corecbor maintainers | — | 2026-11-20 |
-| [035](035-invalid-utf8-text-policy.md) | 1 | Accepted | Caller-selected representation of text that is not valid UTF-8 | corecbor maintainers | 021, 023, 034 | 2026-11-21 |
 
 ## Closed proposals
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [035](035-invalid-utf8-text-policy.md) | 1 | Closed | Caller-selected representation of text that is not valid UTF-8 | corecbor maintainers | 2026-11-21 | Reject/Allow/Replace/Lossless on encoder and decoder; TextLossless/AsText; tags 272–274; nested-text validation fixed. |
 | [024](024-serialization-profiles-alignment.md) | 1 | Closed | Serialization alignment and caller-selected map key identity | corecbor maintainers | 2026-11-21 | Erratum 8589; one key-identity rule at every map size + WithMapKeyIdentity/KeepDuplicateMapKeys; preferred bignums; CTAP2 NaN; RequireDeterministic; Experimental PreferredPlus. Strict >16-key decode ~+15% accepted. |
 | [023](023-strict-decode-policy-and-errors.md) | 1 | Closed | Strict decode policy (tag allowlist) and structured errors | corecbor maintainers | 2026-11-21 | StrictDecoder matches spec §3.2; WithAllowedTags/TagsModeled/TagsWellKnown; *DecodeError with offset (+ optional path), *UnmarshalTypeError; err113 enforces sentinel wrapping. |
 | [027](027-cose-verification-hardening.md) | 3 | Closed | COSE verification hardening | corecbor maintainers | 2026-11-21 | Verify over received protected bytes; fail-closed multi-verify; alg binding, crit, duplicate labels; typed headers, decode limits; cose fuzz in CI. |

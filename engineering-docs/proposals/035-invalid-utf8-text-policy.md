@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 035 |
 | **Tier** | 1 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-21 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 021 (D13/D18), 023 (sentinels), 034 |
@@ -206,3 +206,4 @@ Default encoder (Reject) and decoder (Allow) behavior is unchanged.
 |---|---|---|
 | 2026-11-21 | Filed and accepted (maintainer decisions: plain byte string for non-WTF-8 bytes; per-byte replacement) | corecbor maintainers |
 | 2026-11-21 | Status: In-Progress; implementation notes (nested-text validation defect, DecodeTextArray) | corecbor maintainers |
+| 2026-11-21 | Status: Closed (on main 514d72c; CI green incl. fuzz, run 44956820801). Note: under Lossless decoding, a byte string under any tag decodes into a string target, because reflection strips tags generally (not only 272/273/274). Fixed alongside: default Reject now applies to nested text; DecodeTextArray honors RejectInvalidUTF8 | corecbor maintainers |

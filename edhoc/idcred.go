@@ -278,7 +278,7 @@ func decodeEAD(r *seqReader, accept func(EADItem) bool) ([]EADItem, error) {
 			}
 		}
 		if e.Critical && (accept == nil || !accept(e)) {
-			return nil, fmt.Errorf("%w: unsupported critical EAD item %d", ErrAuthentication, e.Label)
+			return nil, fmt.Errorf("%w: %w %d", ErrAuthentication, ErrCriticalEAD, e.Label)
 		}
 		items = append(items, e)
 	}

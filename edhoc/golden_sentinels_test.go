@@ -18,5 +18,8 @@ func init() {
 	edhocSentinels = append(
 		edhocSentinels,
 		g.Sentinel{Name: "ErrPeerError", Err: edhoc.ErrPeerError},
+		g.Sentinel{Name: "ErrCredentialRejected", Err: edhoc.ErrCredentialRejected},
+		g.Sentinel{Name: "ErrConnectionIDCollision", Err: edhoc.ErrConnectionIDCollision},
+		g.Sentinel{Name: "ErrCriticalEAD", Err: edhoc.ErrCriticalEAD},
 	)
 }

@@ -219,7 +219,7 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 	if p.peers != nil {
 		c, err := p.peers.ResolveCredential(ctx, id)
 		if err != nil {
-			return nil, fmt.Errorf("%w: resolving peer credential: %w", ErrAuthentication, err)
+			return nil, fmt.Errorf("%w: %w: %w", ErrAuthentication, ErrCredentialRejected, err)
 		}
 		if c == nil || len(c.Raw) == 0 || c.PublicKey == nil {
 			return nil, unknown

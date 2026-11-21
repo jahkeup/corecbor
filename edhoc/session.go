@@ -127,7 +127,7 @@ func (s *session) randReader() io.Reader {
 func (s *session) pickCID(configured, avoid []byte) ([]byte, error) {
 	if configured != nil {
 		if avoid != nil && bytes.Equal(configured, avoid) {
-			return nil, fmt.Errorf("%w: connection identifier equals the peer's", ErrStateViolation)
+			return nil, fmt.Errorf("%w: %w: connection identifier equals the peer's", ErrStateViolation, ErrConnectionIDCollision)
 		}
 		return slices.Clone(configured), nil
 	}
@@ -399,7 +399,7 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, s.fail(err)
 	}
 	if bytes.Equal(s.peerCID, s.ownCID) {
-		return nil, s.fail(fmt.Errorf("%w: C_R equals C_I", ErrMessageFormat))
+		return nil, s.fail(fmt.Errorf("%w: %w: C_R equals C_I", ErrMessageFormat, ErrConnectionIDCollision))
 	}
 	idv, idRaw, err := pr.next()
 	if err != nil {

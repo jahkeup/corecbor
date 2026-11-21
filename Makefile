@@ -110,8 +110,15 @@ registry-check: ## advisory: fetch IANA into a temp dir and diff against registr
 	$(GO) run ./cmd/cbor-registry-gen -fetch -cache "$$tmp/registry.json" -frozen "$$tmp/names_frozen.txt" -out "$$tmp/tags_gen.go"; \
 	diff -u registry/tags_gen.go "$$tmp/tags_gen.go" && echo "registry: generated constants up to date" || echo "registry: run 'make registry' to refresh"
 
+.PHONY: tidy-check
+tidy-check: ## fail if go.mod/go.sum need tidying in any module (all platforms)
+	@$(GO) mod tidy -diff >/dev/null || { echo "ERROR: root module needs 'go mod tidy'"; exit 1; }
+	@for mod in $(MODULES); do \
+		(cd "$$mod" && $(GO) mod tidy -diff >/dev/null) || { echo "ERROR: $$mod needs 'go mod tidy'"; exit 1; }; \
+	done
+
 .PHONY: check
-check: fmt-check vet lint apicheck test ## CI-gating set: fmt-check + vet + lint + apicheck + test
+check: fmt-check tidy-check vet lint apicheck test ## CI-gating set: fmt-check + tidy-check + vet + lint + apicheck + test
 
 .PHONY: compat
 compat: ## run cross-library compatibility tests (including user-provided payloads)

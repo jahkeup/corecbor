@@ -39,6 +39,9 @@ The files are checked in for three reasons:
 | `rfc9277.txt` | On Stable Storage for Items in CBOR | Proposed Standard | Tags 55799/55800/55801 and content-format tags (proposal 026). |
 | `rfc9581.txt` | CBOR Tags for Time, Duration, and Period | Proposed Standard | Tags 1001/1002 helpers and time map keys (proposal 026). |
 | `rfc9781.txt` | A CBOR Tag for Unprotected CWT Claims Sets (UCCS) | Proposed Standard | Tag 601 constant (proposal 026; CWT work in 031). |
+| `rfc8392.txt` | CBOR Web Token (CWT) | Proposed Standard | The `cwt` module's base spec: claims, tag 61, validation (031). |
+| `rfc8747.txt` | Proof-of-Possession Key Semantics for CBOR Web Tokens (CWTs) | Proposed Standard | `cnf` claim: COSE_Key, Encrypted_COSE_Key, kid (031). |
+| `rfc9200.txt` | Authentication and Authorization for Constrained Environments Using the OAuth 2.0 Framework (ACE-OAuth) | Proposed Standard | `aud` arrays, `scope`, `ace_profile`, `cnonce`, `exi` claims (031). |
 
 ## Refresh procedure
 
@@ -47,7 +50,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

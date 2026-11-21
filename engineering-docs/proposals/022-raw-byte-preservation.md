@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 022 |
 | **Tier** | 1 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 014 (RawMessage/RawTag), 018 (Cursor, zero-copy), 020 (internal arena), 021 (D2 aliasing fix), 034 (compatibility policy) |
@@ -398,3 +398,4 @@ and the 104-byte `Value` (proposal 020) doesn't grow.
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Every `Unmarshaler` receives original bytes (contract defect, maintainer decision); `WithVerbatimUnmarshalerInput` dropped | corecbor maintainers |
 | 2026-11-20 | Status: In-Progress; Phases 1–3 implemented, Cursor skip hardened; implementation notes | corecbor maintainers |
+| 2026-11-20 | Status: Closed (Phases 1–3 + Cursor hardening on main; raw splice gated to Marshal-created values; CI green incl. fuzz). Follow-ups: RawMessage struct decode +12% (offset recording, with 024); large-map duplicate identity → 024 Phase 1 | corecbor maintainers |

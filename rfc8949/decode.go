@@ -53,6 +53,18 @@ type DecodeOpts struct {
 	Interner *StringInterner
 	Arena    *Arena
 	ZeroCopy bool
+
+	// reserve is the number of input bytes that enclosing containers
+	// still need for their own pending items. A nested container may
+	// only claim the bytes beyond it, which bounds total preallocation
+	// across the whole nesting stack by the input length.
+	reserve int
+}
+
+// avail returns the input bytes available to the item starting at pos
+// after setting aside what enclosing containers still need.
+func (o DecodeOpts) avail(src []byte, pos int) int {
+	return len(src) - pos - o.reserve
 }
 
 type BudgetState struct {
@@ -309,6 +321,11 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if h.Arg > uint64(opts.maxArray()) || count < 0 {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, off)
 	}
+	// Every element occupies at least one byte, so a count larger than
+	// the available input cannot be satisfied. Fail before allocating.
+	if count > opts.avail(src, off+h.N) {
+		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+	}
 	if err := opts.Budget.charge(count * 16); err != nil {
 		return cbor.Value{}, off, err
 	}
@@ -383,7 +400,9 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 				if ai >= 28 && ai <= 30 {
 					return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrReservedAI, pos)
 				}
-				v, next, err := decodeValue(src, pos, childDepth, opts, false)
+				co := opts
+				co.reserve += count - i - 1
+				v, next, err := decodeValue(src, pos, childDepth, co, false)
 				if err != nil {
 					return cbor.Value{}, next, err
 				}
@@ -461,7 +480,9 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 			continue
 		}
 
-		v, next, err := decodeValue(src, pos, childDepth, opts, false)
+		co := opts
+		co.reserve += count - i - 1
+		v, next, err := decodeValue(src, pos, childDepth, co, false)
 		if err != nil {
 			return cbor.Value{}, next, err
 		}
@@ -490,7 +511,9 @@ func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Va
 		if len(arr) >= opts.maxArray() {
 			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, pos)
 		}
-		v, next, err := decodeValue(src, pos, depth+1, opts, false)
+		co := opts
+		co.reserve++ // break code
+		v, next, err := decodeValue(src, pos, depth+1, co, false)
 		if err != nil {
 			return cbor.Value{}, next, err
 		}
@@ -513,6 +536,10 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if depth+1 > opts.maxNesting() {
 		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrMaxNestingDepth, off)
 	}
+	// Every pair occupies at least two bytes. Fail before allocating.
+	if count > opts.avail(src, off+h.N)/2 {
+		return cbor.Value{}, off, fmt.Errorf("%w at offset %d", cbor.ErrTruncated, off)
+	}
 
 	var dedup *keyDedup
 	if count > dedupThreshold {
@@ -531,8 +558,10 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		m = make([]cbor.MapEntry, 0, count)
 	}
 	pos := off + h.N
-	for range count {
+	for i := range count {
 		keyOff := pos
+		// Bytes the remaining pairs of this map still need.
+		rest := (count - i - 1) * 2
 
 		// Inline fast-path: short definite-length text key (covers >90% of real map keys)
 		var k cbor.Value
@@ -562,7 +591,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		{
 			var next int
 			var err error
-			k, next, err = decodeValue(src, pos, depth+1, opts, false)
+			co := opts
+			co.reserve += rest + 1 // this pair's value
+			k, next, err = decodeValue(src, pos, depth+1, co, false)
 			if err != nil {
 				return cbor.Value{}, next, err
 			}
@@ -575,7 +606,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)
 			}
 		}
-		v, next, err := decodeValue(src, pos, depth+1, opts, false)
+		co := opts
+		co.reserve += rest
+		v, next, err := decodeValue(src, pos, depth+1, co, false)
 		if err != nil {
 			return cbor.Value{}, next, err
 		}
@@ -608,7 +641,9 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 			return cbor.Value{}, pos, fmt.Errorf("%w at offset %d", cbor.ErrMaxArrayLength, pos)
 		}
 		keyOff := pos
-		k, next, err := decodeValue(src, pos, depth+1, opts, false)
+		kOpts := opts
+		kOpts.reserve += 2 // this pair's value + break code
+		k, next, err := decodeValue(src, pos, depth+1, kOpts, false)
 		if err != nil {
 			return cbor.Value{}, next, err
 		}
@@ -619,7 +654,9 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 				return cbor.Value{}, keyOff, fmt.Errorf("%w at offset %d", cbor.ErrNullMapKey, keyOff)
 			}
 		}
-		v, next, err := decodeValue(src, pos, depth+1, opts, false)
+		vOpts := opts
+		vOpts.reserve++ // break code
+		v, next, err := decodeValue(src, pos, depth+1, vOpts, false)
 		if err != nil {
 			return cbor.Value{}, next, err
 		}

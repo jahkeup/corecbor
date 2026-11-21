@@ -28,10 +28,14 @@ func DecodeUintArray(src []byte, opts DecodeOpts) ([]uint64, int, error) {
 	if h.AI == wire.AIIndefinite {
 		return nil, 0, fmt.Errorf("%w at offset 0: indefinite arrays not supported", ErrTypeMismatch)
 	}
-	count := int(h.Arg)
-	if count > opts.maxArray() {
+	if h.Arg > uint64(opts.maxArray()) {
 		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrMaxArrayLength)
 	}
+	// Every element occupies at least one byte; fail before allocating.
+	if h.Arg > uint64(len(src)-h.N) {
+		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrTruncated)
+	}
+	count := int(h.Arg)
 	result := make([]uint64, count)
 	pos := h.N
 	for i := range count {
@@ -68,10 +72,14 @@ func DecodeFloat64Array(src []byte, opts DecodeOpts) ([]float64, int, error) {
 	if h.AI == wire.AIIndefinite {
 		return nil, 0, fmt.Errorf("%w at offset 0: indefinite arrays not supported", ErrTypeMismatch)
 	}
-	count := int(h.Arg)
-	if count > opts.maxArray() {
+	if h.Arg > uint64(opts.maxArray()) {
 		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrMaxArrayLength)
 	}
+	// Every element occupies at least one byte; fail before allocating.
+	if h.Arg > uint64(len(src)-h.N) {
+		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrTruncated)
+	}
+	count := int(h.Arg)
 	result := make([]float64, count)
 	pos := h.N
 	for i := range count {
@@ -117,10 +125,14 @@ func DecodeBytesArray(src []byte, opts DecodeOpts) ([][]byte, int, error) {
 	if h.AI == wire.AIIndefinite {
 		return nil, 0, fmt.Errorf("%w at offset 0: indefinite arrays not supported", ErrTypeMismatch)
 	}
-	count := int(h.Arg)
-	if count > opts.maxArray() {
+	if h.Arg > uint64(opts.maxArray()) {
 		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrMaxArrayLength)
 	}
+	// Every element occupies at least one byte; fail before allocating.
+	if h.Arg > uint64(len(src)-h.N) {
+		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrTruncated)
+	}
+	count := int(h.Arg)
 	result := make([][]byte, count)
 	pos := h.N
 	for i := range count {
@@ -163,10 +175,14 @@ func DecodeTextArray(src []byte, opts DecodeOpts) ([]string, int, error) {
 	if h.AI == wire.AIIndefinite {
 		return nil, 0, fmt.Errorf("%w at offset 0: indefinite arrays not supported", ErrTypeMismatch)
 	}
-	count := int(h.Arg)
-	if count > opts.maxArray() {
+	if h.Arg > uint64(opts.maxArray()) {
 		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrMaxArrayLength)
 	}
+	// Every element occupies at least one byte; fail before allocating.
+	if h.Arg > uint64(len(src)-h.N) {
+		return nil, 0, fmt.Errorf("%w at offset 0", cbor.ErrTruncated)
+	}
+	count := int(h.Arg)
 	result := make([]string, count)
 	pos := h.N
 	for i := range count {

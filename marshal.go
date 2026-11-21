@@ -5,6 +5,7 @@ package corecbor
 
 import (
 	"errors"
+	"reflect"
 	"sync"
 )
 
@@ -71,11 +72,22 @@ func (e *Encoder) Marshal(v any) ([]byte, error) {
 
 // Unmarshal decodes CBOR data into v using the decoder's strictness settings.
 // v must be a non-nil pointer.
+//
+// Every Unmarshaler reached during decoding (including RawMessage and
+// RawTag) receives its item's bytes exactly as they appear in data,
+// after data has passed the decoder's strictness checks.
 func (d *Decoder) Unmarshal(data []byte, v any) error {
 	val, err := d.Decode(data)
 	if err != nil {
 		return err
 	}
 	clone := d.arena != nil || d.cfg.opts.Arena != nil || d.cfg.opts.ZeroCopy
+	rv := reflect.ValueOf(v)
+	if rv.Kind() == reflect.Pointer && !rv.IsNil() && needsRaw(rv.Elem().Type()) {
+		r := rawState{opts: d.cfg.opts}
+		r.opts.Arena, r.opts.Budget = nil, nil // already validated and charged
+		r.clone = clone
+		return r.rawToGo(stripSelfDescribe(data), val, rv.Elem())
+	}
 	return unmarshalValue(val, v, clone)
 }

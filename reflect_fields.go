@@ -28,6 +28,9 @@ type structFields struct {
 	list   []fieldInfo // in field-index order
 	byName map[string]int
 	byInt  map[int64]int
+
+	rawOnce sync.Once
+	raw     []bool // per field: needsRaw(field type), see reflect_raw.go
 }
 
 var fieldCache sync.Map // reflect.Type -> *structFields

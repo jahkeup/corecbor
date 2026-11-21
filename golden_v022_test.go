@@ -441,6 +441,13 @@ func addUnmarshalCases(add func(string, func() string)) {
 		err := into("a16172a2616201616102", &s)
 		return hexOf([]byte(s.R), err)
 	})
+	add("root/unmarshal/rawmessage-non-shortest", func() string {
+		var s struct {
+			R cc.RawMessage `cbor:"r"`
+		}
+		err := into("a16172821800f93c00", &s) // {"r": [0 (non-shortest), 1.0 (f16)]}
+		return hexOf([]byte(s.R), err)
+	})
 	add("root/unmarshal/struct-tags", func() string {
 		var s goldenTagged
 		err := into("a4646e616d65616165636f756e740501076177d82068687474703a2f2f78", &s)

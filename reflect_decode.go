@@ -312,32 +312,7 @@ func (u unmarshalState) decodeMapToStruct(m []cbor.MapEntry, target reflect.Valu
 	fields := getStructFields(target.Type())
 
 	for _, entry := range m {
-		idx, found := -1, false
-
-		switch entry.Key.Kind {
-		case cbor.KindText:
-			k := entry.Key.TextVal()
-			idx, found = fields.byName[k]
-			if !found {
-				if n, err := strconv.ParseInt(k, 10, 64); err == nil {
-					idx, found = fields.byInt[n]
-				}
-			}
-		case cbor.KindUint:
-			// Keys beyond int64 can't name an integer-keyed field; they
-			// must not wrap around onto a negative one.
-			if entry.Key.UintVal() <= math.MaxInt64 {
-				idx, found = fields.byInt[int64(entry.Key.UintVal())]
-			}
-			if !found {
-				idx, found = fields.byName[strconv.FormatUint(entry.Key.UintVal(), 10)]
-			}
-		case cbor.KindNegInt:
-			if entry.Key.NegIntVal() <= math.MaxInt64 {
-				idx, found = fields.byInt[-1-int64(entry.Key.NegIntVal())]
-			}
-		}
-
+		idx, found := fields.lookup(entry.Key)
 		if !found {
 			continue
 		}
@@ -362,6 +337,37 @@ func (u unmarshalState) decodeMapToStruct(m []cbor.MapEntry, target reflect.Valu
 		}
 	}
 	return nil
+}
+
+// lookup returns the index in f.list of the field a map key names.
+func (f *structFields) lookup(key cbor.Value) (int, bool) {
+	switch key.Kind {
+	case cbor.KindText:
+		k := key.TextVal()
+		if idx, ok := f.byName[k]; ok {
+			return idx, true
+		}
+		if n, err := strconv.ParseInt(k, 10, 64); err == nil {
+			idx, ok := f.byInt[n]
+			return idx, ok
+		}
+	case cbor.KindUint:
+		// Keys beyond int64 can't name an integer-keyed field; they
+		// must not wrap around onto a negative one.
+		if key.UintVal() <= math.MaxInt64 {
+			if idx, ok := f.byInt[int64(key.UintVal())]; ok {
+				return idx, true
+			}
+		}
+		idx, ok := f.byName[strconv.FormatUint(key.UintVal(), 10)]
+		return idx, ok
+	case cbor.KindNegInt:
+		if key.NegIntVal() <= math.MaxInt64 {
+			idx, ok := f.byInt[-1-int64(key.NegIntVal())]
+			return idx, ok
+		}
+	}
+	return -1, false
 }
 
 func (u unmarshalState) decodeTagReflect(t cbor.Value, target reflect.Value) error {

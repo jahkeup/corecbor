@@ -71,4 +71,6 @@ var goldenChanges = map[string]string{
 
 	// Proposal 022 — raw byte preservation.
 	"root/unmarshal/rawmessage-unsorted-map": "proposal 022: RawMessage receives the original bytes",
+	"root/raw/rawtag-unmarshal-unsorted":     "proposal 022: RawTag keeps the tag content's original bytes",
+	"root/unmarshal/rawmessage-non-shortest": "proposal 022: RawMessage receives the original bytes (non-shortest int kept)",
 }

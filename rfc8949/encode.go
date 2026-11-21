@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
 	"github.com/jahkeup/corecbor/wire"
 )
 
@@ -171,6 +172,12 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	case cbor.KindFloat64:
 		return encodeFloat64(dst, math.Float64frombits(v.Num), opts)
 	default:
+		if v.Kind == rawvalue.Kind {
+			// Pre-encoded, validated item (Permissive-mode
+			// RawMessage/RawTag). Checked here, outside the case list,
+			// so the switch stays a dense jump table.
+			return append(dst, v.Bstr...), nil
+		}
 		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind)
 	}
 }

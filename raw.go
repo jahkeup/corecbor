@@ -42,6 +42,9 @@ func (t RawTag) MarshalCBOR() ([]byte, error) {
 	return append(head, t.Content...), nil
 }
 
+// UnmarshalCBOR stores the tag number and the tag content's original
+// bytes. data must be exactly one well-formed tagged item; leading
+// self-describe tags (55799) are skipped, as Decode does.
 func (t *RawTag) UnmarshalCBOR(data []byte) error {
 	if t == nil {
 		return fmt.Errorf("cbor: UnmarshalCBOR on nil *RawTag")
@@ -54,12 +57,9 @@ func (t *RawTag) UnmarshalCBOR(data []byte) error {
 	if val.Kind != cbor.KindTag {
 		return fmt.Errorf("cbor: RawTag expected Tag, got kind %d", val.Kind)
 	}
-	t.ID = val.TagID()
-	enc := New(ModeCoreDeterministic)
-	inner, err := enc.Encode(nil, val.TagInner())
-	if err != nil {
-		return fmt.Errorf("cbor: RawTag encode inner: %w", err)
-	}
-	t.Content = inner
+	item := stripSelfDescribe(data)
+	h := wire.ParseHead(item)
+	t.ID = h.Arg
+	t.Content = append(RawMessage(nil), item[h.N:]...)
 	return nil
 }

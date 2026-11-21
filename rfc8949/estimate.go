@@ -3,13 +3,19 @@
 
 package rfc8949
 
-import "github.com/jahkeup/corecbor/cbor"
+import (
+	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
+)
 
 const maxHeadSize = 9
 
 func EstimateSize(v cbor.Value) int {
 	if v.IsZero() {
 		return 0
+	}
+	if v.Kind == rawvalue.Kind {
+		return len(v.Bstr)
 	}
 	switch v.Kind {
 	case cbor.KindUint:

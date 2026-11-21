@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
 	"github.com/jahkeup/corecbor/rfc8949"
 )
 
@@ -51,11 +52,11 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 	if rv.CanInterface() {
 		iface := rv.Interface()
 		if m, ok := iface.(Marshaler); ok {
-			return marshalerToValue(m)
+			return marshalerToValue(m, opts)
 		}
 		if rv.CanAddr() {
 			if m, ok := rv.Addr().Interface().(Marshaler); ok {
-				return marshalerToValue(m)
+				return marshalerToValue(m, opts)
 			}
 		}
 	}
@@ -172,7 +173,12 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 	}
 }
 
-func marshalerToValue(m Marshaler) (cbor.Value, error) {
+// marshalerToValue converts a Marshaler's output to a Value. Its bytes
+// are always validated. In Permissive mode, RawMessage and RawTag bytes
+// are spliced into the output verbatim (proposal 014: "emitted
+// directly, no re-encoding"); otherwise the output is decoded and
+// re-encoded in the encoder's mode, which deterministic modes require.
+func marshalerToValue(m Marshaler, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	data, err := m.MarshalCBOR()
 	if err != nil {
 		return cbor.Value{}, fmt.Errorf("cbor: Marshaler: %w", err)
@@ -181,6 +187,12 @@ func marshalerToValue(m Marshaler) (cbor.Value, error) {
 	val, decErr := dec.Decode(data)
 	if decErr != nil {
 		return cbor.Value{}, fmt.Errorf("cbor: Marshaler produced invalid CBOR: %w", decErr)
+	}
+	if !opts.Deterministic {
+		switch m.(type) {
+		case RawMessage, *RawMessage, RawTag, *RawTag:
+			return rawvalue.Make(data), nil
+		}
 	}
 	return val, nil
 }

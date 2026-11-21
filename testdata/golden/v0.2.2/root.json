@@ -2331,6 +2331,10 @@
       "result": "hex:a2616102616201"
     },
     {
+      "id": "root/unmarshal/rawmessage-non-shortest",
+      "result": "hex:8200f93c00"
+    },
+    {
       "id": "root/unmarshal/struct-tags",
       "result": "ok:string:a|5|7|http://x"
     },

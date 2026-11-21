@@ -68,6 +68,13 @@ func AllowShortCoordinates() KeyOption {
 	return func(c *keyParseConfig) { c.allowShort = true }
 }
 
+// newKeyDecoder is the decoder for COSE_Key and COSE_KeySet: duplicate
+// labels are rejected (RFC 9052 §7), and so is text that isn't valid
+// UTF-8 (RFC 8949 §3.1), so every parsed key can be re-encoded.
+func newKeyDecoder() *corecbor.Decoder {
+	return corecbor.NewDecoder(corecbor.RejectDuplicateMapKeys(), corecbor.RejectInvalidUTF8())
+}
+
 // ParseKey decodes one COSE_Key (RFC 9052 §7). data must hold exactly
 // one item. Duplicate labels are ErrMalformed; a missing or unsupported
 // kty, missing or mis-sized key material, an off-curve point, or a
@@ -75,7 +82,7 @@ func AllowShortCoordinates() KeyOption {
 // A compressed EC2 point (y as a bool) is decompressed, so the parsed
 // key always has a bstr y.
 func ParseKey(data []byte, opts ...KeyOption) (*Key, error) {
-	v, err := newMessageDecoder(DecodeLimits{}).Decode(data)
+	v, err := newKeyDecoder().Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -87,7 +94,7 @@ func ParseKey(data []byte, opts ...KeyOption) (*Key, error) {
 // (for example WebAuthn attested credential data followed by
 // extensions).
 func ParseKeyPrefix(data []byte, opts ...KeyOption) (*Key, []byte, error) {
-	v, rest, err := newMessageDecoder(DecodeLimits{}).DecodePrefix(data)
+	v, rest, err := newKeyDecoder().DecodePrefix(data)
 	if err != nil {
 		return nil, nil, decodeError(err)
 	}
@@ -605,7 +612,7 @@ type KeySet []*Key
 // ParseKeySet decodes a COSE_KeySet. Every key is parsed as ParseKey
 // does with opts.
 func ParseKeySet(data []byte, opts ...KeyOption) (KeySet, error) {
-	v, err := newMessageDecoder(DecodeLimits{}).Decode(data)
+	v, err := newKeyDecoder().Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}

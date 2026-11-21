@@ -38,7 +38,7 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 	} else {
 		cek = make([]byte, cekLen)
 		if _, err := rand.Read(cek); err != nil {
-			return nil, fmt.Errorf("generating MAC key: %v", err)
+			return nil, fmt.Errorf("generating MAC key: %w", err)
 		}
 	}
 

@@ -27,7 +27,7 @@ func NewKeyFromPublic(pub crypto.PublicKey) (*Key, error) {
 		size := curveKeySize(p.Curve)
 		raw, err := p.Bytes()
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 		}
 		// raw is uncompressed: 0x04 || X || Y
 		x := padLeft(raw[1:1+size], size)
@@ -52,7 +52,7 @@ func NewKeyFromSigner(s crypto.Signer) (*Key, error) {
 		size := curveKeySize(p.Curve)
 		d, err := p.Bytes()
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 		}
 		k.set(keyLabelD, padLeft(d, size))
 	default:
@@ -96,7 +96,7 @@ func (k *Key) PublicKey() (crypto.PublicKey, error) {
 		copy(point[1+size:], padLeft(y, size))
 		pub, err := ecdsa.ParseUncompressedPublicKey(goCrv, point)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 		}
 		return pub, nil
 
@@ -131,7 +131,7 @@ func (k *Key) Signer() (crypto.Signer, error) {
 		}
 		priv, err := ecdsa.ParseRawPrivateKey(goCrv, d)
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+			return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 		}
 		return priv, nil
 

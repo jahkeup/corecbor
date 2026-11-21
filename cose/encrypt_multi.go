@@ -27,7 +27,7 @@ func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDerive
 
 	cek := make([]byte, cekLen)
 	if _, err := rand.Read(cek); err != nil {
-		return nil, fmt.Errorf("generating CEK: %v", err)
+		return nil, fmt.Errorf("generating CEK: %w", err)
 	}
 
 	msg := &Encrypt{}
@@ -45,7 +45,7 @@ func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDerive
 
 	nonce := make([]byte, 12)
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("generating nonce: %v", err)
+		return nil, fmt.Errorf("generating nonce: %w", err)
 	}
 	msg.Unprotected.Set(int64(5), nonce)
 

@@ -32,7 +32,7 @@ func (a *AESKWKey) WrapKey(cek []byte, opts KeyWrapOpts) ([]byte, Headers, error
 	}
 	wrapped, err := aeskw.Wrap(a.Key, cek)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
 	return wrapped, Headers{}, nil
 }

@@ -25,6 +25,8 @@ func WithSignerExternalData(ext []byte) SignerOption {
 	return func(s *Signer) { s.external = ext }
 }
 
+// Signer signs COSE_Sign1 and COSE_Sign messages. A Signer is safe for
+// concurrent use after construction, provided its key is.
 type Signer struct {
 	key            crypto.Signer
 	alg            Algorithm
@@ -41,7 +43,7 @@ func NewSigner(key crypto.Signer, opts ...SignerOption) (*Signer, error) {
 	s := &Signer{
 		key: key,
 		alg: alg,
-		enc: corecbor.New(corecbor.ModeCoreDeterministic),
+		enc: sharedEncoder,
 	}
 	for _, o := range opts {
 		o(s)
@@ -156,6 +158,9 @@ func WithLegacyIgnoreCritical() VerifierOption {
 	return func(v *Verifier) { v.policy.legacyCrit = true }
 }
 
+// Verifier verifies COSE_Sign1 and COSE_Sign messages. A Verifier is
+// safe for concurrent use after construction, including concurrent
+// verification of the same message.
 type Verifier struct {
 	key      crypto.PublicKey
 	alg      Algorithm
@@ -172,7 +177,7 @@ func NewVerifier(key crypto.PublicKey, opts ...VerifierOption) (*Verifier, error
 	v := &Verifier{
 		key: key,
 		alg: alg,
-		enc: corecbor.New(corecbor.ModeCoreDeterministic),
+		enc: sharedEncoder,
 	}
 	for _, o := range opts {
 		o(v)

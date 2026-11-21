@@ -35,7 +35,7 @@ func (h *HPKEKey) WrapKey(cek []byte, opts KeyWrapOpts) ([]byte, Headers, error)
 	}
 	pub, err := hpke.NewDHKEMPublicKey(h.PublicKey)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
 	info := []byte(fmt.Sprintf("COSE-HPKE-CEK-%d", opts.CEKAlgorithm))
 	sealed, err := hpke.Seal(pub, hpke.HKDFSHA256(), hpke.AES128GCM(), info, cek)
@@ -52,7 +52,7 @@ func (h *HPKEKey) UnwrapKey(ciphertext []byte, hdrs Headers, opts KeyUnwrapOpts)
 	}
 	priv, err := hpke.NewDHKEMPrivateKey(h.PrivateKey)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
 	info := []byte(fmt.Sprintf("COSE-HPKE-CEK-%d", opts.CEKAlgorithm))
 	cek, err := hpke.Open(priv, hpke.HKDFSHA256(), hpke.AES128GCM(), info, ciphertext)

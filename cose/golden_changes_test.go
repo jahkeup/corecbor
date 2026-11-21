@@ -19,4 +19,7 @@ var goldenChanges = map[string]string{
 	// Proposal 027 Phase 2.
 	"cose/mac0/empty-key":                 "proposal 027: an empty HMAC key is ErrInvalidKey (a MAC under it authenticates nothing)",
 	"cose/mac0/verify-alg-param-mismatch": "proposal 027 H2: the header alg must match the caller's algorithm (ErrAlgorithmMismatch)",
+
+	// Proposal 027 Phase 3.
+	"cose/headers/set-algorithm-typed": "proposal 027 H9: Set(1, AlgES256) encodes alg -7 instead of null",
 }

@@ -40,7 +40,7 @@ func (p *PBES2Key) WrapKey(cek []byte, _ KeyWrapOpts) ([]byte, Headers, error) {
 	if salt == nil {
 		salt = make([]byte, defaultPBES2SaltLen)
 		if _, err := rand.Read(salt); err != nil {
-			return nil, Headers{}, fmt.Errorf("%w: generating salt: %v", ErrInvalidKey, err)
+			return nil, Headers{}, fmt.Errorf("%w: generating salt: %w", ErrInvalidKey, err)
 		}
 	}
 
@@ -51,12 +51,12 @@ func (p *PBES2Key) WrapKey(cek []byte, _ KeyWrapOpts) ([]byte, Headers, error) {
 
 	kek, err := pbkdf2.Key(sha256.New, string(p.Password), salt, count, 16)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: PBKDF2: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: PBKDF2: %w", ErrInvalidKey, err)
 	}
 
 	wrapped, err := aeskw.Wrap(kek, cek)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
 
 	var h Headers
@@ -91,7 +91,7 @@ func (p *PBES2Key) UnwrapKey(ciphertext []byte, h Headers, _ KeyUnwrapOpts) ([]b
 
 	kek, err := pbkdf2.Key(sha256.New, string(p.Password), salt, int(count), 16)
 	if err != nil {
-		return nil, fmt.Errorf("%w: PBKDF2: %v", ErrDecryption, err)
+		return nil, fmt.Errorf("%w: PBKDF2: %w", ErrDecryption, err)
 	}
 
 	cek, kerr := aeskw.Unwrap(kek, ciphertext)

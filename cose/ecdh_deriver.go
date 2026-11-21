@@ -32,12 +32,12 @@ func (e *ECDHESKey) WrapKey(cek []byte, opts KeyWrapOpts) ([]byte, Headers, erro
 	curve := e.PeerPublic.Curve()
 	ephemeral, err := curve.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: generating ephemeral key: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: generating ephemeral key: %w", ErrInvalidKey, err)
 	}
 
 	shared, err := ephemeral.ECDH(e.PeerPublic)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: ECDH failed: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: ECDH failed: %w", ErrInvalidKey, err)
 	}
 
 	keyLen := opts.CEKLength
@@ -78,12 +78,12 @@ func (e *ECDHESKey) UnwrapKey(_ []byte, h Headers, opts KeyUnwrapOpts) ([]byte, 
 	curve := e.PrivateKey.PublicKey().Curve()
 	ephPub, err := curve.NewPublicKey(ephBytes)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid ephemeral key: %v", ErrDecryption, err)
+		return nil, fmt.Errorf("%w: invalid ephemeral key: %w", ErrDecryption, err)
 	}
 
 	shared, err := e.PrivateKey.ECDH(ephPub)
 	if err != nil {
-		return nil, fmt.Errorf("%w: ECDH failed: %v", ErrDecryption, err)
+		return nil, fmt.Errorf("%w: ECDH failed: %w", ErrDecryption, err)
 	}
 
 	keyLen := opts.CEKLength
@@ -110,12 +110,12 @@ func (e *ECDHESKey) DeriveKey(opts KeyWrapOpts) (cek []byte, headers Headers, er
 	curve := e.PeerPublic.Curve()
 	ephemeral, err := curve.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: generating ephemeral key: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: generating ephemeral key: %w", ErrInvalidKey, err)
 	}
 
 	shared, err := ephemeral.ECDH(e.PeerPublic)
 	if err != nil {
-		return nil, Headers{}, fmt.Errorf("%w: ECDH failed: %v", ErrInvalidKey, err)
+		return nil, Headers{}, fmt.Errorf("%w: ECDH failed: %w", ErrInvalidKey, err)
 	}
 
 	keyLen := opts.CEKLength

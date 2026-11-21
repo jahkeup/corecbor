@@ -19,5 +19,6 @@ func init() {
 		g.Sentinel{Name: "ErrAlgorithmMismatch", Err: cose.ErrAlgorithmMismatch},
 		g.Sentinel{Name: "ErrCriticalHeader", Err: cose.ErrCriticalHeader},
 		g.Sentinel{Name: "ErrDuplicateLabel", Err: cose.ErrDuplicateLabel},
+		g.Sentinel{Name: "ErrUnsupportedHeader", Err: cose.ErrUnsupportedHeader},
 	)
 }

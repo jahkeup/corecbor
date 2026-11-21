@@ -33,4 +33,9 @@ var (
 	// once in a bucket, or in both the protected and unprotected
 	// buckets of one layer (RFC 9052 §3).
 	ErrDuplicateLabel = errors.New("cose: header label present more than once")
+
+	// ErrUnsupportedHeader indicates a header label or value whose Go
+	// type has no CBOR encoding here. SetChecked returns it directly;
+	// a value stored with Set surfaces it from the next Marshal*.
+	ErrUnsupportedHeader = errors.New("cose: header value type not encodable")
 )

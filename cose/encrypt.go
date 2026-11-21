@@ -148,11 +148,11 @@ func buildEncStructure(protectedBytes, externalAAD []byte) ([]byte, error) {
 func newGCM(key []byte) (cipher.AEAD, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidKey, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 	}
 	return gcm, nil
 }

@@ -111,13 +111,22 @@ func FuzzHeadersDecode(f *testing.F) {
 		f.Add(b)
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		h, err := decodeProtected(data)
+		h, err := decodeProtected(data, DecodeLimits{})
 		if err != nil {
 			return
 		}
 		got, err := h.encodeProtected()
 		if err != nil {
 			t.Fatalf("encodeProtected after decode: %v", err)
+		}
+		// Every decoded value has an encoding (027 H9): without the raw
+		// bytes, the headers are encoded from their parameters. The
+		// deterministic encoder may still refuse content the forgiving
+		// decoder accepted (invalid UTF-8, non-finite floats); that is
+		// not a typing gap.
+		local := Headers{params: h.params}
+		if _, err := local.encodeProtected(); errors.Is(err, ErrUnsupportedHeader) {
+			t.Fatalf("re-encoding decoded headers: %v", err)
 		}
 		if h.IsEmpty() {
 			if len(got) != 0 {

@@ -20,6 +20,30 @@ const (
 
 var sharedEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic)
 
+// DecodeLimits bounds the work of the Unmarshal*With functions. The zero
+// value applies the same limits as the Unmarshal* functions (the core
+// decoder's defaults), so DecodeLimits{} changes nothing.
+type DecodeLimits struct {
+	// MemoryBudget caps decode allocations in bytes; 0 means the core
+	// default (no budget).
+	MemoryBudget int
+	// MaxDepth caps nesting depth; 0 means the core default (256).
+	MaxDepth int
+	// AllowDuplicateLabels restores v0.2.2 behavior: a label repeated in
+	// a bucket resolves last-wins, and a label may appear in both the
+	// protected and unprotected buckets.
+	//
+	// Deprecated: duplicate labels are invalid (RFC 9052 §3, proposal
+	// 027 H4). Retained for migration only; removed no earlier than
+	// v0.32.0.
+	AllowDuplicateLabels bool
+}
+
+// RecommendedDecodeLimits is the recommended bound for untrusted input:
+// a 1 MiB decode budget and nesting depth 16, ample for any COSE
+// structure this package produces.
+var RecommendedDecodeLimits = DecodeLimits{MemoryBudget: 1 << 20, MaxDepth: 16}
+
 // MarshalSign1 encodes a Sign1 message as CBOR with tag 18.
 func MarshalSign1(msg *Sign1) ([]byte, error) {
 	protectedBytes, err := msg.Protected.encodeProtected()
@@ -30,7 +54,10 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 		protectedBytes = []byte{}
 	}
 
-	unprotectedMap := msg.Unprotected.toCBORMap()
+	unprotectedMap, err := msg.Unprotected.toCBORMap()
+	if err != nil {
+		return nil, err
+	}
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -54,7 +81,13 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 
 // UnmarshalSign1 decodes a Sign1 message from CBOR (tagged or untagged).
 func UnmarshalSign1(data []byte) (*Sign1, error) {
-	v, err := newMessageDecoder().Decode(data)
+	return UnmarshalSign1With(data, DecodeLimits{})
+}
+
+// UnmarshalSign1With is UnmarshalSign1 with explicit decode limits; use
+// RecommendedDecodeLimits for untrusted input.
+func UnmarshalSign1With(data []byte, lim DecodeLimits) (*Sign1, error) {
+	v, err := newMessageDecoder(lim).Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -89,7 +122,7 @@ func UnmarshalSign1(data []byte) (*Sign1, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1], lim)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -129,7 +162,10 @@ func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
 		protectedBytes = []byte{}
 	}
 
-	unprotectedMap := msg.Unprotected.toCBORMap()
+	unprotectedMap, err := msg.Unprotected.toCBORMap()
+	if err != nil {
+		return nil, err
+	}
 
 	var ciphertextVal corecbor.Value
 	if msg.Ciphertext == nil {
@@ -150,7 +186,13 @@ func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
 }
 
 func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
-	v, err := newMessageDecoder().Decode(data)
+	return UnmarshalEncrypt0With(data, DecodeLimits{})
+}
+
+// UnmarshalEncrypt0With is UnmarshalEncrypt0 with explicit decode limits; use
+// RecommendedDecodeLimits for untrusted input.
+func UnmarshalEncrypt0With(data []byte, lim DecodeLimits) (*Encrypt0, error) {
+	v, err := newMessageDecoder(lim).Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -185,7 +227,7 @@ func UnmarshalEncrypt0(data []byte) (*Encrypt0, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1], lim)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -216,7 +258,10 @@ func MarshalMac0(msg *Mac0) ([]byte, error) {
 		protectedBytes = []byte{}
 	}
 
-	unprotectedMap := msg.Unprotected.toCBORMap()
+	unprotectedMap, err := msg.Unprotected.toCBORMap()
+	if err != nil {
+		return nil, err
+	}
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -238,7 +283,13 @@ func MarshalMac0(msg *Mac0) ([]byte, error) {
 }
 
 func UnmarshalMac0(data []byte) (*Mac0, error) {
-	v, err := newMessageDecoder().Decode(data)
+	return UnmarshalMac0With(data, DecodeLimits{})
+}
+
+// UnmarshalMac0With is UnmarshalMac0 with explicit decode limits; use
+// RecommendedDecodeLimits for untrusted input.
+func UnmarshalMac0With(data []byte, lim DecodeLimits) (*Mac0, error) {
+	v, err := newMessageDecoder(lim).Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -273,7 +324,7 @@ func UnmarshalMac0(data []byte) (*Mac0, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1], lim)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -311,7 +362,10 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 		protectedBytes = []byte{}
 	}
 
-	unprotectedMap := msg.Unprotected.toCBORMap()
+	unprotectedMap, err := msg.Unprotected.toCBORMap()
+	if err != nil {
+		return nil, err
+	}
 
 	var ciphertextVal corecbor.Value
 	if msg.Ciphertext == nil {
@@ -329,7 +383,10 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 		if rProtBytes == nil {
 			rProtBytes = []byte{}
 		}
-		rUnprotMap := r.Unprotected.toCBORMap()
+		rUnprotMap, err := r.Unprotected.toCBORMap()
+		if err != nil {
+			return nil, err
+		}
 		if rUnprotMap.IsZero() {
 			rUnprotMap = corecbor.MakeMap()
 		}
@@ -359,7 +416,13 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 }
 
 func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
-	v, err := newMessageDecoder().Decode(data)
+	return UnmarshalEncryptWith(data, DecodeLimits{})
+}
+
+// UnmarshalEncryptWith is UnmarshalEncrypt with explicit decode limits; use
+// RecommendedDecodeLimits for untrusted input.
+func UnmarshalEncryptWith(data []byte, lim DecodeLimits) (*Encrypt, error) {
+	v, err := newMessageDecoder(lim).Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -394,7 +457,7 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1], lim)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -428,7 +491,7 @@ func UnmarshalEncrypt(data []byte) (*Encrypt, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
-		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1])
+		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1], lim)
 		if err != nil {
 			return nil, fmt.Errorf("%w: recipient %d: %w", ErrMalformed, i, err)
 		}
@@ -467,7 +530,10 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 		protectedBytes = []byte{}
 	}
 
-	unprotectedMap := msg.Unprotected.toCBORMap()
+	unprotectedMap, err := msg.Unprotected.toCBORMap()
+	if err != nil {
+		return nil, err
+	}
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -485,7 +551,10 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 		if sProtBytes == nil {
 			sProtBytes = []byte{}
 		}
-		sUnprotMap := s.Unprotected.toCBORMap()
+		sUnprotMap, err := s.Unprotected.toCBORMap()
+		if err != nil {
+			return nil, err
+		}
 		if sUnprotMap.IsZero() {
 			sUnprotMap = corecbor.MakeMap()
 		}
@@ -509,7 +578,13 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 }
 
 func UnmarshalSign(data []byte) (*Sign, error) {
-	v, err := newMessageDecoder().Decode(data)
+	return UnmarshalSignWith(data, DecodeLimits{})
+}
+
+// UnmarshalSignWith is UnmarshalSign with explicit decode limits; use
+// RecommendedDecodeLimits for untrusted input.
+func UnmarshalSignWith(data []byte, lim DecodeLimits) (*Sign, error) {
+	v, err := newMessageDecoder(lim).Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -544,7 +619,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1], lim)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -578,7 +653,7 @@ func UnmarshalSign(data []byte) (*Sign, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: signature %d protected must be bstr", ErrMalformed, i)
 		}
-		sProt, sUnprot, err := decodeBuckets([]byte(sProtBstr), sArr[1])
+		sProt, sUnprot, err := decodeBuckets([]byte(sProtBstr), sArr[1], lim)
 		if err != nil {
 			return nil, fmt.Errorf("%w: signature %d: %w", ErrMalformed, i, err)
 		}
@@ -613,7 +688,10 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 		protectedBytes = []byte{}
 	}
 
-	unprotectedMap := msg.Unprotected.toCBORMap()
+	unprotectedMap, err := msg.Unprotected.toCBORMap()
+	if err != nil {
+		return nil, err
+	}
 
 	var payloadVal corecbor.Value
 	if msg.Payload == nil {
@@ -631,7 +709,10 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 		if rProtBytes == nil {
 			rProtBytes = []byte{}
 		}
-		rUnprotMap := r.Unprotected.toCBORMap()
+		rUnprotMap, err := r.Unprotected.toCBORMap()
+		if err != nil {
+			return nil, err
+		}
 		if rUnprotMap.IsZero() {
 			rUnprotMap = corecbor.MakeMap()
 		}
@@ -662,7 +743,13 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 }
 
 func UnmarshalMac(data []byte) (*Mac, error) {
-	v, err := newMessageDecoder().Decode(data)
+	return UnmarshalMacWith(data, DecodeLimits{})
+}
+
+// UnmarshalMacWith is UnmarshalMac with explicit decode limits; use
+// RecommendedDecodeLimits for untrusted input.
+func UnmarshalMacWith(data []byte, lim DecodeLimits) (*Mac, error) {
+	v, err := newMessageDecoder(lim).Decode(data)
 	if err != nil {
 		return nil, decodeError(err)
 	}
@@ -697,7 +784,7 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		return nil, fmt.Errorf("%w: protected must be bstr", ErrMalformed)
 	}
 
-	prot, unprot, err := decodeBuckets(protectedBstr, arr[1])
+	prot, unprot, err := decodeBuckets(protectedBstr, arr[1], lim)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -737,7 +824,7 @@ func UnmarshalMac(data []byte) (*Mac, error) {
 		if !ok {
 			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
 		}
-		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1])
+		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1], lim)
 		if err != nil {
 			return nil, fmt.Errorf("%w: recipient %d: %w", ErrMalformed, i, err)
 		}

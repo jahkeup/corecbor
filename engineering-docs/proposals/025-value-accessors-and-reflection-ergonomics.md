@@ -139,6 +139,22 @@ func (v Value) Equal(w Value) bool
 func (v Value) String() string
 ```
 
+```go
+// String returns the kind's name ("uint", "negint", "bytes", "text",
+// "array", "map", "tag", "bool", "null", "undefined", "float32",
+// "float64", "simple", or "invalid"); unknown values print as
+// "Kind(N)". It implements fmt.Stringer, so %v and %s print names
+// where they printed numbers.
+func (k Kind) String() string
+```
+
+`Kind.String()` was requested by a downstream consumer whose v0.2
+migration replaced `%T` with `kind %d` in error messages and asked for
+a readable form. Adding a `String` method changes what `%v`/`%s` print for a
+`Kind`; `%d` is unchanged. Per 034 that is additive (no existing
+identifier's documented behavior changes), and callers that need the
+number keep using `%d`.
+
 Sentinels: `ErrOverflow` and `ErrTypeMismatch` move into `cbor/errors.go`
 next to the existing catalog. The root package keeps aliases
 (`corecbor.ErrOverflow` already exists at `marshal.go:21`;
@@ -421,3 +437,4 @@ existing functions.
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-20 | Add `Kind.String()` (downstream request) to Phase A | corecbor maintainers |

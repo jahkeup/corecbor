@@ -121,6 +121,10 @@ compat: ## run cross-library compatibility tests (including user-provided payloa
 		grep -c '"Test".*"Pass":true' 2>/dev/null || \
 		$(GO) test -count=1 -run "TestCompat" . > /dev/null 2>&1 && echo "  all compatibility tests PASS" || echo "  FAILURES detected — run 'go test -run TestCompat -v .' for details"
 
+.PHONY: consumer-check
+consumer-check: ## check this tree is a drop-in for a downstream module (see tools/consumer-check/run.sh)
+	tools/consumer-check/run.sh
+
 .PHONY: clean
 clean: ## remove build artifacts (does NOT touch testdata/fuzz corpora)
 	$(GO) clean -testcache

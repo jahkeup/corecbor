@@ -23,7 +23,14 @@ var (
 	bigIntPtrType = reflect.TypeFor[*big.Int]()
 )
 
-func goToValue(v any, opts rfc8949.EncodeOpts) (cbor.Value, error) {
+// marshalOpts is what reflection needs from the encoder: its encode
+// options plus reflection-only settings.
+type marshalOpts struct {
+	rfc8949.EncodeOpts
+	goNames bool // WithGoFieldNames
+}
+
+func goToValue(v any, opts *marshalOpts) (cbor.Value, error) {
 	if v == nil {
 		return cbor.Null(), nil
 	}
@@ -33,7 +40,7 @@ func goToValue(v any, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	return reflectToValue(reflect.ValueOf(v), opts)
 }
 
-func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
+func reflectToValue(rv reflect.Value, opts *marshalOpts) (cbor.Value, error) {
 	if !rv.IsValid() {
 		return cbor.Null(), nil
 	}
@@ -178,7 +185,7 @@ func reflectToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, erro
 // are spliced into the output verbatim (proposal 014: "emitted
 // directly, no re-encoding"); otherwise the output is decoded and
 // re-encoded in the encoder's mode, which deterministic modes require.
-func marshalerToValue(m Marshaler, opts rfc8949.EncodeOpts) (cbor.Value, error) {
+func marshalerToValue(m Marshaler, opts *marshalOpts) (cbor.Value, error) {
 	data, err := m.MarshalCBOR()
 	if err != nil {
 		return cbor.Value{}, fmt.Errorf("cbor: Marshaler: %w", err)
@@ -204,7 +211,7 @@ func timeToValue(t time.Time) cbor.Value {
 	return cbor.TimeTo(t)
 }
 
-func sliceToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
+func sliceToValue(rv reflect.Value, opts *marshalOpts) (cbor.Value, error) {
 	n := rv.Len()
 	arr := make([]cbor.Value, n)
 	for i := range n {
@@ -217,7 +224,7 @@ func sliceToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error)
 	return cbor.MakeArrayFromSlice(arr), nil
 }
 
-func mapToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
+func mapToValue(rv reflect.Value, opts *marshalOpts) (cbor.Value, error) {
 	entries := make([]cbor.MapEntry, 0, rv.Len())
 	iter := rv.MapRange()
 	for iter.Next() {
@@ -234,8 +241,12 @@ func mapToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
 	return cbor.MakeMapFromSlice(entries), nil
 }
 
-func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error) {
-	fields := getStructFields(rv.Type()).list
+func structToValue(rv reflect.Value, opts *marshalOpts) (cbor.Value, error) {
+	sf := structFieldsFor(rv.Type(), opts.goNames)
+	if sf.toArray {
+		return structToArray(rv, sf, opts)
+	}
+	fields := sf.list
 	entries := make([]cbor.MapEntry, 0, len(fields))
 
 	for i := range fields {
@@ -245,6 +256,9 @@ func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error
 			continue // nil embedded pointer: its fields are absent
 		}
 		if fi.omit && isZero(fv) {
+			continue
+		}
+		if fi.omitZero && isZeroValue(fv) {
 			continue
 		}
 
@@ -272,6 +286,54 @@ func structToValue(rv reflect.Value, opts rfc8949.EncodeOpts) (cbor.Value, error
 	}
 
 	return cbor.MakeMapFromSlice(entries), nil
+}
+
+// structToArray encodes a toarray struct: its fields in declaration
+// order, no keys. A field under a nil embedded pointer is null.
+func structToArray(rv reflect.Value, sf *structFields, opts *marshalOpts) (cbor.Value, error) {
+	if sf.arrayErr != nil {
+		return cbor.Value{}, sf.arrayErr
+	}
+	items := make([]cbor.Value, len(sf.list))
+	for i := range sf.list {
+		fi := &sf.list[i]
+		fv, ok := fieldByIndex(rv, fi.index)
+		if !ok {
+			items[i] = cbor.Null()
+			continue
+		}
+		val, err := reflectToValue(fv, opts)
+		if err != nil {
+			return cbor.Value{}, err
+		}
+		if fi.hasTag {
+			val = cbor.MakeTag(fi.tagID, val)
+		}
+		items[i] = val
+	}
+	return cbor.MakeArrayFromSlice(items), nil
+}
+
+type isZeroer interface{ IsZero() bool }
+
+// isZeroValue is the omitzero test: an IsZero() bool method decides
+// when the field's type (or a pointer to it) has one, otherwise
+// reflect.Value.IsZero does, as in encoding/json.
+func isZeroValue(rv reflect.Value) bool {
+	if rv.Kind() == reflect.Pointer && rv.IsNil() {
+		return true
+	}
+	if rv.CanInterface() {
+		if z, ok := rv.Interface().(isZeroer); ok {
+			return z.IsZero()
+		}
+		if rv.CanAddr() {
+			if z, ok := rv.Addr().Interface().(isZeroer); ok {
+				return z.IsZero()
+			}
+		}
+	}
+	return rv.IsZero()
 }
 
 func isZero(rv reflect.Value) bool {

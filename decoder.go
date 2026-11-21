@@ -13,6 +13,11 @@ type decodeConfig struct {
 	opts            rfc8949.DecodeOpts
 	noInternalArena bool
 	textLossless    bool // InvalidUTF8Lossless: Unmarshal into string accepts non-UTF-8 forms
+
+	// Reflection options (proposal 025).
+	disallowUnknown    bool
+	caseInsensitive    bool
+	legacyNoTextBinary bool
 }
 
 type DecoderOption func(*decodeConfig)
@@ -157,11 +162,15 @@ func WithLegacyFloatKeyEquality() DecoderOption {
 }
 
 // CompatV02Decoding applies every decoder selector needed to reproduce
-// v0.2.x results: currently WithLegacyFloatKeyEquality (proposal 034).
+// v0.2.x results: WithLegacyFloatKeyEquality (proposal 024) and
+// WithLegacyNoTextBinaryUnmarshal (proposal 025).
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
 func CompatV02Decoding() DecoderOption {
-	return func(c *decodeConfig) { c.opts.LegacyFloatKeyEquality = true }
+	return func(c *decodeConfig) {
+		c.opts.LegacyFloatKeyEquality = true
+		c.legacyNoTextBinary = true
+	}
 }
 
 // RequireDeterministic rejects input that is not RFC 8949 §4.2.1 Core

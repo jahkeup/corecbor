@@ -4,6 +4,7 @@
 package corecbor
 
 import (
+	"encoding"
 	"fmt"
 	"math"
 	"math/big"
@@ -24,14 +25,18 @@ type unmarshalState struct {
 	// 272/273/274 around them) with their exact bytes
 	// (InvalidUTF8Lossless, proposal 035).
 	lossless bool
+
+	// Proposal 025.
+	disallowUnknown    bool // DisallowUnknownFields
+	caseInsensitive    bool // WithCaseInsensitiveFieldNames
+	legacyNoTextBinary bool // WithLegacyNoTextBinaryUnmarshal
 }
 
-func unmarshalValue(val cbor.Value, v any, clone, lossless bool) error {
+func unmarshalValue(val cbor.Value, v any, u unmarshalState) error {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return ErrNotPointer
 	}
-	u := unmarshalState{clone: clone, lossless: lossless}
 	return u.valueToGo(val, rv.Elem())
 }
 
@@ -72,6 +77,15 @@ func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	}
 	if target.Type() == bigIntPtrType {
 		return decodeBigIntPtr(val, target)
+	}
+
+	// encoding.BinaryUnmarshaler takes byte strings and
+	// encoding.TextUnmarshaler text strings, mirroring encode (proposal
+	// 025; 008 documents both as supported).
+	if !u.legacyNoTextBinary && target.CanAddr() {
+		if done, err := callTextBinary(val, target); done {
+			return err
+		}
 	}
 
 	if target.Type() == valueType {
@@ -267,9 +281,111 @@ func (u unmarshalState) decodeArray(arr []cbor.Value, target reflect.Value) erro
 			}
 		}
 		return nil
+	case reflect.Struct:
+		sf := getStructFields(target.Type())
+		if !sf.toArray {
+			return typeMismatch(cbor.KindArray, "Array", target.Type())
+		}
+		if err := checkArrayLen(sf, len(arr), target.Type()); err != nil {
+			return err
+		}
+		for i := range arr {
+			fi := &sf.list[i]
+			fv, err := fieldByIndexAlloc(target, fi.index)
+			if err != nil {
+				return err
+			}
+			val, err := untagField(fi, arr[i], fv.Type())
+			if err != nil {
+				return err
+			}
+			if err := u.valueToGo(val, fv); err != nil {
+				return withField(err, fi.goName)
+			}
+		}
+		return nil
 	default:
 		return typeMismatch(cbor.KindArray, "Array", target.Type())
 	}
+}
+
+// checkArrayLen validates an array of n items against toarray struct
+// fields sf: no more items than fields, and missing trailing fields
+// must be pointers (CDDL "? optional" tail items).
+func checkArrayLen(sf *structFields, n int, t reflect.Type) error {
+	if sf.arrayErr != nil {
+		return sf.arrayErr
+	}
+	if n > len(sf.list) {
+		return fmt.Errorf("%w: %s has %d fields, array has %d items", ErrArrayLength, t, len(sf.list), n)
+	}
+	for i := n; i < len(sf.list); i++ {
+		if ft := t.FieldByIndex(sf.list[i].index).Type; ft.Kind() != reflect.Pointer {
+			return fmt.Errorf("%w: %s has %d fields, array has %d items and field %s isn't optional (a pointer)",
+				ErrArrayLength, t, len(sf.list), n, sf.list[i].goName)
+		}
+	}
+	return nil
+}
+
+// untagField strips a field's declared tag=N wrapper from val.
+func untagField(fi *fieldInfo, val cbor.Value, ft reflect.Type) (cbor.Value, error) {
+	if !fi.hasTag {
+		return val, nil
+	}
+	if val.Kind != cbor.KindTag {
+		return val, withField(typeMismatchf(val.Kind, ft, "field %q expects tag(%d) but got kind %d", fi.name, fi.tagID, val.Kind), fi.goName)
+	}
+	if val.TagID() != fi.tagID {
+		return val, withField(typeMismatchf(val.Kind, ft, "field %q expects tag(%d) but got tag(%d)", fi.name, fi.tagID, val.TagID()), fi.goName)
+	}
+	return val.TagInner(), nil
+}
+
+// callTextBinary calls target's encoding.BinaryUnmarshaler for a byte
+// string or encoding.TextUnmarshaler for a text string. done is false
+// when neither applies.
+func callTextBinary(val cbor.Value, target reflect.Value) (done bool, err error) {
+	switch val.Kind {
+	case cbor.KindBytes:
+		if m, ok := target.Addr().Interface().(encoding.BinaryUnmarshaler); ok {
+			if err := m.UnmarshalBinary(append([]byte(nil), val.Bstr...)); err != nil {
+				return true, fmt.Errorf("cbor: UnmarshalBinary into %s: %w", target.Type(), err)
+			}
+			return true, nil
+		}
+	case cbor.KindText:
+		if m, ok := target.Addr().Interface().(encoding.TextUnmarshaler); ok {
+			if err := m.UnmarshalText([]byte(val.Str)); err != nil {
+				return true, fmt.Errorf("cbor: UnmarshalText into %s: %w", target.Type(), err)
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// unknownField reports a map key that names no struct field.
+func unknownField(key cbor.Value, t reflect.Type) error {
+	return fmt.Errorf("%w: %s has no field for key %s", ErrUnknownField, t, key)
+}
+
+// fieldFor resolves a map key to a field index under u's matching
+// rules. exact (from structFields.exactFields) is non-nil only for
+// case-insensitive matching. ok is false for keys to skip; err is set
+// for keys DisallowUnknownFields rejects.
+func (u unmarshalState) fieldFor(sf *structFields, key cbor.Value, exact []bool, t reflect.Type) (idx int, ok bool, err error) {
+	if !u.caseInsensitive {
+		if idx, ok := sf.lookup(key); ok {
+			return idx, true, nil
+		}
+	} else if idx, isExact, ok := sf.lookupFold(key); ok && (isExact || !exact[idx]) {
+		return idx, true, nil
+	}
+	if u.disallowUnknown {
+		return -1, false, unknownField(key, t)
+	}
+	return -1, false, nil
 }
 
 func (u unmarshalState) decodeMapReflect(m []cbor.MapEntry, target reflect.Value) error {
@@ -318,9 +434,25 @@ func (u unmarshalState) decodeMapToMap(m []cbor.MapEntry, target reflect.Value) 
 
 func (u unmarshalState) decodeMapToStruct(m []cbor.MapEntry, target reflect.Value) error {
 	fields := getStructFields(target.Type())
+	if fields.toArray {
+		return typeMismatch(cbor.KindMap, "Map", target.Type())
+	}
+	var exact []bool
+	if u.caseInsensitive {
+		exact = fields.exactFields(func(yield func(cbor.Value) bool) {
+			for i := range m {
+				if !yield(m[i].Key) {
+					return
+				}
+			}
+		})
+	}
 
 	for _, entry := range m {
-		idx, found := fields.lookup(entry.Key)
+		idx, found, err := u.fieldFor(fields, entry.Key, exact, target.Type())
+		if err != nil {
+			return err
+		}
 		if !found {
 			continue
 		}

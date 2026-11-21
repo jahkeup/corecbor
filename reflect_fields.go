@@ -4,6 +4,7 @@
 package corecbor
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strconv"
@@ -20,10 +21,13 @@ type fieldInfo struct {
 	intKey int64
 	hasInt bool
 	omit   bool
-	tagID  uint64
-	hasTag bool
-	tagged bool   // name came from a struct tag
-	goName string // Go field name, for UnmarshalTypeError.Field
+	// omitZero omits the field when its IsZero() bool method returns
+	// true, or else when reflect.Value.IsZero is (proposal 025).
+	omitZero bool
+	tagID    uint64
+	hasTag   bool
+	tagged   bool   // name came from a struct tag
+	goName   string // Go field name, for UnmarshalTypeError.Field
 }
 
 // structFields is the cached wire layout of a struct type.
@@ -32,11 +36,24 @@ type structFields struct {
 	byName map[string]int
 	byInt  map[int64]int
 
+	// toArray is set by a blank field `_ struct{} cbor:",toarray"`: the
+	// struct encodes as an array of its fields in list order. arrayErr
+	// reports a field option that can't apply positionally.
+	toArray  bool
+	arrayErr error
+
 	rawOnce sync.Once
 	raw     []bool // per field: needsRaw(field type), see reflect_raw.go
 }
 
-var fieldCache sync.Map // reflect.Type -> *structFields
+// fieldKey keys the cache: the same type has a different layout when
+// untagged fields keep their Go names (WithGoFieldNames).
+type fieldKey struct {
+	t       reflect.Type
+	goNames bool
+}
+
+var fieldCache sync.Map // fieldKey -> *structFields
 
 // getStructFields returns the wire layout of struct type rt. Embedded
 // structs are flattened using the encoding/json rules: the shallowest
@@ -44,15 +61,21 @@ var fieldCache sync.Map // reflect.Type -> *structFields
 // and any remaining tie drops every conflicting field. Fields of
 // unexported embedded struct types and of embedded struct pointers are
 // promoted like any other.
-func getStructFields(rt reflect.Type) *structFields {
-	if f, ok := fieldCache.Load(rt); ok {
+func getStructFields(rt reflect.Type) *structFields { return structFieldsFor(rt, false) }
+
+// structFieldsFor is getStructFields with the naming mode: goNames keys
+// untagged fields by the Go field name as-is instead of lowercased.
+func structFieldsFor(rt reflect.Type, goNames bool) *structFields {
+	k := fieldKey{rt, goNames}
+	if f, ok := fieldCache.Load(k); ok {
 		return f.(*structFields)
 	}
-	f, _ := fieldCache.LoadOrStore(rt, typeFields(rt))
+	f, _ := fieldCache.LoadOrStore(k, typeFields(rt, goNames))
 	return f.(*structFields)
 }
 
-func typeFields(rt reflect.Type) *structFields {
+func typeFields(rt reflect.Type, goNames bool) *structFields {
+	toArray := false
 	type scan struct {
 		typ   reflect.Type
 		index []int
@@ -86,6 +109,16 @@ func typeFields(rt reflect.Type) *structFields {
 						continue
 					}
 				} else if !sf.IsExported() {
+					// `_ struct{} cbor:",toarray"` on the struct itself
+					// switches it to array encoding.
+					if sf.Name == "_" && len(f.index) == 0 {
+						_, opts, _ := strings.Cut(sf.Tag.Get("cbor"), ",")
+						for opt := range strings.SplitSeq(opts, ",") {
+							if opt == "toarray" {
+								toArray = true
+							}
+						}
+					}
 					continue
 				}
 
@@ -108,11 +141,16 @@ func typeFields(rt reflect.Type) *structFields {
 					fi := fieldInfo{index: index, name: name, tagged: name != "", goName: sf.Name}
 					if fi.name == "" {
 						fi.name = strings.ToLower(sf.Name)
+						if goNames {
+							fi.name = sf.Name
+						}
 					}
 					for opt := range strings.SplitSeq(opts, ",") {
 						switch {
 						case opt == "omitempty":
 							fi.omit = true
+						case opt == "omitzero":
+							fi.omitZero = true
 						case strings.HasPrefix(opt, "tag="):
 							if n, err := strconv.ParseUint(opt[4:], 10, 64); err == nil {
 								fi.tagID = n
@@ -181,9 +219,10 @@ func typeFields(rt reflect.Type) *structFields {
 	slices.SortFunc(fields, func(a, b fieldInfo) int { return slices.Compare(a.index, b.index) })
 
 	sf := &structFields{
-		list:   fields,
-		byName: make(map[string]int, len(fields)),
-		byInt:  make(map[int64]int),
+		list:    fields,
+		byName:  make(map[string]int, len(fields)),
+		byInt:   make(map[int64]int),
+		toArray: toArray,
 	}
 	for i, fi := range fields {
 		if fi.hasInt {
@@ -191,8 +230,44 @@ func typeFields(rt reflect.Type) *structFields {
 		} else {
 			sf.byName[fi.name] = i
 		}
+		if toArray && (fi.omit || fi.omitZero) && sf.arrayErr == nil {
+			// Position is the identity of a toarray field, so it can't
+			// be left out.
+			sf.arrayErr = fmt.Errorf("%w: %s: field %s can't use omitempty/omitzero in a toarray struct",
+				ErrUnsupportedType, rt, fi.goName)
+		}
 	}
 	return sf
+}
+
+// lookupFold is lookup plus the encoding/json fallback: a text key
+// that names no field exactly matches an untagged-or-tagged text field
+// case-insensitively. exact reports which kind of match it was.
+func (f *structFields) lookupFold(key cbor.Value) (idx int, exact, ok bool) {
+	if idx, ok := f.lookup(key); ok {
+		return idx, true, true
+	}
+	if key.Kind != cbor.KindText {
+		return -1, false, false
+	}
+	for i := range f.list {
+		if fi := &f.list[i]; !fi.hasInt && strings.EqualFold(fi.name, key.Str) {
+			return i, false, true
+		}
+	}
+	return -1, false, false
+}
+
+// exactFields reports, per field, whether some key in keys names it
+// exactly; a case-insensitive match then yields to it.
+func (f *structFields) exactFields(keys func(yield func(cbor.Value) bool)) []bool {
+	seen := make([]bool, len(f.list))
+	for k := range keys {
+		if idx, ok := f.lookup(k); ok {
+			seen[idx] = true
+		}
+	}
+	return seen
 }
 
 // dominantField picks the winner among fields sharing a name, sorted

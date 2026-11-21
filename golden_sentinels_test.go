@@ -22,5 +22,7 @@ func init() {
 		g.Sentinel{Name: "ErrUnexpectedBreak", Err: cc.ErrUnexpectedBreak},
 		g.Sentinel{Name: "ErrNotPreferred", Err: cc.ErrNotPreferred},
 		g.Sentinel{Name: "ErrInvalidOption", Err: cc.ErrInvalidOption},
+		g.Sentinel{Name: "ErrUnknownField", Err: cc.ErrUnknownField},
+		g.Sentinel{Name: "ErrArrayLength", Err: cc.ErrArrayLength},
 	)
 }

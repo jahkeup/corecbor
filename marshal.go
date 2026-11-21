@@ -65,7 +65,7 @@ func Unmarshal(data []byte, v any) error {
 
 // Marshal encodes v into CBOR using the encoder's mode settings.
 func (e *Encoder) Marshal(v any) ([]byte, error) {
-	val, err := goToValue(v, e.encodeOpts())
+	val, err := goToValue(v, &marshalOpts{EncodeOpts: e.encodeOpts(), goNames: e.cfg.goNames})
 	if err != nil {
 		return nil, err
 	}
@@ -83,14 +83,18 @@ func (d *Decoder) Unmarshal(data []byte, v any) error {
 	if err != nil {
 		return err
 	}
-	clone := d.arena != nil || d.cfg.opts.Arena != nil || d.cfg.opts.ZeroCopy
+	u := unmarshalState{
+		clone:              d.arena != nil || d.cfg.opts.Arena != nil || d.cfg.opts.ZeroCopy,
+		lossless:           d.cfg.textLossless,
+		disallowUnknown:    d.cfg.disallowUnknown,
+		caseInsensitive:    d.cfg.caseInsensitive,
+		legacyNoTextBinary: d.cfg.legacyNoTextBinary,
+	}
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer && !rv.IsNil() && needsRaw(rv.Elem().Type()) {
-		r := rawState{opts: d.cfg.opts}
+		r := rawState{unmarshalState: u, opts: d.cfg.opts}
 		r.opts.Arena, r.opts.Budget = nil, nil // already validated and charged
-		r.clone = clone
-		r.lossless = d.cfg.textLossless
 		return r.rawToGo(stripSelfDescribe(data), val, rv.Elem())
 	}
-	return unmarshalValue(val, v, clone, d.cfg.textLossless)
+	return unmarshalValue(val, v, u)
 }

@@ -180,6 +180,8 @@ func (r rawState) items(c *rfc8949.Cursor, n int) ([][]byte, error) {
 func (r rawState) rawArray(span []byte, val cbor.Value, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Slice, reflect.Array:
+	case reflect.Struct:
+		return r.rawToArrayStruct(span, val, target)
 	default:
 		return typeMismatch(cbor.KindArray, "Array", target.Type())
 	}
@@ -233,12 +235,81 @@ func (r rawState) rawArray(span []byte, val cbor.Value, target reflect.Value) er
 	return nil
 }
 
+// rawToArrayStruct fills a toarray struct from an array's span.
+func (r rawState) rawToArrayStruct(span []byte, val cbor.Value, target reflect.Value) error {
+	sf := getStructFields(target.Type())
+	if !sf.toArray {
+		return typeMismatch(cbor.KindArray, "Array", target.Type())
+	}
+	c := rfc8949.NewCursor(span, r.opts)
+	n, err := c.EnterArray()
+	if err != nil {
+		return err
+	}
+	elems, err := r.items(c, n)
+	if err != nil {
+		return err
+	}
+	if err := checkArrayLen(sf, len(elems), target.Type()); err != nil {
+		return err
+	}
+	var vals []cbor.Value
+	if val.Kind == cbor.KindArray && len(val.Items) == len(elems) {
+		vals = val.Items
+	}
+	fieldRaw := rawFields(target.Type(), sf)
+	for i, b := range elems {
+		fi := &sf.list[i]
+		fv, err := fieldByIndexAlloc(target, fi.index)
+		if err != nil {
+			return err
+		}
+		var v cbor.Value
+		if vals != nil {
+			v = vals[i]
+		}
+		if fi.hasTag {
+			h := wire.ParseHead(b)
+			if h.Major != wire.MajorTag || h.Arg != fi.tagID {
+				dv, err := r.value(b, v)
+				if err != nil {
+					return err
+				}
+				_, err = untagField(fi, dv, fv.Type())
+				return err
+			}
+			b = b[h.N:]
+			if v.Kind == cbor.KindTag {
+				v = v.TagInner()
+			} else {
+				v = cbor.Value{}
+			}
+		}
+		if err := r.fill(b, v, fv, fieldRaw[i]); err != nil {
+			return withField(err, fi.goName)
+		}
+	}
+	return nil
+}
+
 // mapTarget assigns one map entry to a Go map or struct target.
 type mapTarget struct {
 	target         reflect.Value
 	fields         *structFields // struct targets
 	fieldRaw       []bool        // struct targets: needsRaw per field
+	exact          []bool        // struct targets, case-insensitive: fields some key names exactly
 	keyRaw, valRaw bool          // map targets
+}
+
+// pairKeys yields the keys of pairs.
+func pairKeys(pairs []cbor.MapEntry) func(yield func(cbor.Value) bool) {
+	return func(yield func(cbor.Value) bool) {
+		for i := range pairs {
+			if !yield(pairs[i].Key) {
+				return
+			}
+		}
+	}
 }
 
 // rawFields returns needsRaw for each field of the struct type t.
@@ -267,6 +338,9 @@ func (r rawState) rawMap(span []byte, val cbor.Value, target reflect.Value) erro
 		mt.valRaw = needsRaw(target.Type().Elem())
 	case reflect.Struct:
 		mt.fields = getStructFields(target.Type())
+		if mt.fields.toArray {
+			return typeMismatch(cbor.KindMap, "Map", target.Type())
+		}
 		mt.fieldRaw = rawFields(target.Type(), mt.fields)
 	default:
 		return typeMismatch(cbor.KindMap, "Map", target.Type())
@@ -281,6 +355,9 @@ func (r rawState) rawMap(span []byte, val cbor.Value, target reflect.Value) erro
 	// pairs line up in order. Stream them, using the decoded keys and
 	// values.
 	if n >= 0 && val.Kind == cbor.KindMap && len(val.Pairs) == n {
+		if mt.fields != nil && r.caseInsensitive {
+			mt.exact = mt.fields.exactFields(pairKeys(val.Pairs))
+		}
 		for i := range n {
 			ks, err := c.RawBytes()
 			if err != nil {
@@ -310,6 +387,9 @@ func (r rawState) rawMapMerged(span []byte, mt mapTarget) error {
 	if err != nil {
 		return err
 	}
+	if mt.fields != nil && r.caseInsensitive {
+		mt.exact = mt.fields.exactFields(pairKeys(m.Pairs))
+	}
 	for i, s := range spans {
 		p := &m.Pairs[i]
 		if err := r.assign(mt, p.Key, span[s.KeyStart:s.KeyEnd], span[s.ValueStart:s.ValueEnd], p.Value); err != nil {
@@ -325,9 +405,9 @@ func (r rawState) assign(mt mapTarget, key cbor.Value, keySpan, span []byte, val
 	if mt.fields == nil {
 		return r.assignMap(mt, key, keySpan, span, val)
 	}
-	idx, found := mt.fields.lookup(key)
-	if !found {
-		return nil
+	idx, found, err := r.fieldFor(mt.fields, key, mt.exact, mt.target.Type())
+	if err != nil || !found {
+		return err
 	}
 	fi := &mt.fields.list[idx]
 	fv, err := fieldByIndexAlloc(mt.target, fi.index)

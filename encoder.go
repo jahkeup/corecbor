@@ -38,6 +38,7 @@ type encodeConfig struct {
 	legacyBignum         bool
 	bufferPool           *sync.Pool
 	invalidUTF8          rfc8949.InvalidUTF8
+	goNames              bool // WithGoFieldNames (proposal 025)
 }
 
 type Option func(*encodeConfig)

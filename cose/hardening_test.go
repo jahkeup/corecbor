@@ -502,7 +502,10 @@ func TestVerifyEmptyPayload(t *testing.T) {
 func TestECDHNilKeys(t *testing.T) {
 	opts := KeyWrapOpts{CEKAlgorithm: AlgA128GCM}
 	k := &ECDHESKey{}
-	if _, _, err := k.WrapKey(nil, opts); !errors.Is(err, ErrInvalidKey) {
+	if _, _, err := k.AgreeKey(opts); !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("AgreeKey: %v", err)
+	}
+	if _, _, err := (&ECDHESKey{Alg: AlgECDH_ES_A128KW}).WrapKey(nil, opts); !errors.Is(err, ErrInvalidKey) {
 		t.Fatalf("WrapKey: %v", err)
 	}
 	if _, _, err := k.DeriveKey(opts); !errors.Is(err, ErrInvalidKey) {
@@ -515,8 +518,14 @@ func TestECDHNilKeys(t *testing.T) {
 	}
 	priv, _ := ecdh.P256().GenerateKey(rand.Reader)
 	k = &ECDHESKey{PrivateKey: priv}
-	if _, err := k.UnwrapKey(nil, h, KeyUnwrapOpts{CEKAlgorithm: AlgA128GCM}); !errors.Is(err, ErrDecryption) {
-		t.Fatalf("UnwrapKey(bad ephemeral): %v", err)
+	// A raw-point ephemeral key is the v0.2 encoding (proposal 029):
+	// refused by default, and a bad point under WithLegacyECDHES.
+	if _, err := k.UnwrapKey(nil, h, KeyUnwrapOpts{CEKAlgorithm: AlgA128GCM}); !errors.Is(err, ErrUnsupportedAlgorithm) {
+		t.Fatalf("UnwrapKey(raw ephemeral): %v", err)
+	}
+	legacy := KeyUnwrapOpts{CEKAlgorithm: AlgA128GCM, legacy: legacyEncoding{ecdh: true}}
+	if _, err := k.UnwrapKey(nil, h, legacy); !errors.Is(err, ErrDecryption) {
+		t.Fatalf("UnwrapKey(bad legacy ephemeral): %v", err)
 	}
 }
 

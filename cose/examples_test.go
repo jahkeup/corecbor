@@ -220,7 +220,10 @@ func TestExample_MultiRecipient_AnyUnlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating ECDH key: %v", err)
 	}
-	ecdhRecipient := &cose.ECDHESKey{PeerPublic: ecdhPriv.PublicKey()}
+	// Among several recipients ECDH-ES must wrap the shared content key
+	// (ECDH-ES + A128KW, RFC 9053 §6.4); direct ECDH-ES (-25) only works
+	// as the sole recipient.
+	ecdhRecipient := &cose.ECDHESKey{PeerPublic: ecdhPriv.PublicKey(), Alg: cose.AlgECDH_ES_A128KW}
 
 	// Recipient 1: AES-KW (e.g., a symmetric backup key stored in a vault)
 	aeskwKey := make([]byte, 16)
@@ -246,7 +249,7 @@ func TestExample_MultiRecipient_AnyUnlocks(t *testing.T) {
 	// --- Each recipient can independently decrypt ---
 
 	// Recipient 0: ECDH-ES decryption
-	ecdhDecryptor := &cose.ECDHESKey{PrivateKey: ecdhPriv}
+	ecdhDecryptor := &cose.ECDHESKey{PrivateKey: ecdhPriv, Alg: cose.AlgECDH_ES_A128KW}
 	got0, err := cose.DecryptMulti(msg, ecdhDecryptor, 0)
 	if err != nil {
 		t.Fatalf("DecryptMulti recipient 0 (ECDH-ES): %v", err)

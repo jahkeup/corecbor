@@ -45,6 +45,17 @@ func WithUnprotectedHeaders(h Headers) SignerOption {
 	return func(s *Signer) { s.unprotected = maps.Clone(h.params) }
 }
 
+// WithFullySpecifiedAlgorithms makes the Signer emit RFC 9864
+// fully-specified identifiers: ESP256/ESP384/ESP512 for P-256/384/521
+// keys and Ed25519 for Ed25519 keys, instead of the polymorphic
+// ES256/ES384/ES512/EdDSA that NewSigner emits by default. This is the
+// recommended setting for new deployments; keep the default when peers
+// (for example WebAuthn or mDL verifiers) only accept -7/-8. Verifiers
+// accept both forms either way.
+func WithFullySpecifiedAlgorithms() SignerOption {
+	return func(s *Signer) { s.fullySpecified = true }
+}
+
 // ContextSigner is a crypto.Signer that can be cancelled, as remote KMS
 // and HSM signers often are. When a Signer's key implements it,
 // SignContext passes its ctx through; plain crypto.Signer keys are
@@ -64,12 +75,21 @@ type Signer struct {
 	protected      map[any]any // includes alg after NewSigner
 	unprotected    map[any]any
 	protectedBytes []byte
+	fullySpecified bool
 }
 
 // NewSigner returns a Signer for key. The algorithm follows from the key
-// type. Any crypto.Signer whose Public() is an ed25519.PublicKey or a
-// P-256/384/521 *ecdsa.PublicKey works, including KMS- and HSM-backed
-// signers.
+// type. Any crypto.Signer whose Public() is an ed25519.PublicKey, a
+// P-256/384/521 *ecdsa.PublicKey, an *rsa.PublicKey of at least 2048
+// bits, or (with a Go 1.27+ toolchain) an *mldsa.PublicKey works,
+// including KMS- and HSM-backed signers.
+//
+// ECDSA and Ed25519 keys sign with the polymorphic ES256/ES384/ES512 and
+// EdDSA identifiers unless WithFullySpecifiedAlgorithms is set or the
+// protected headers name the fully-specified form (RFC 9864; recommended
+// for new deployments). RSA keys sign with PS256 unless the protected
+// headers name another RSA algorithm (PS384, PS512, or the
+// not-recommended RS256/RS384/RS512).
 func NewSigner(key crypto.Signer, opts ...SignerOption) (*Signer, error) {
 	alg, err := algForKey(key)
 	if err != nil {
@@ -83,10 +103,16 @@ func NewSigner(key crypto.Signer, opts ...SignerOption) (*Signer, error) {
 	for _, o := range opts {
 		o(s)
 	}
-	prot, err := protectedWithAlg(s.protected, s.alg)
+	if s.fullySpecified {
+		if fs := fullySpecifiedFor(s.alg); fs != 0 {
+			s.alg = fs
+		}
+	}
+	prot, chosen, err := protectedWithAlg(s.protected, s.alg)
 	if err != nil {
 		return nil, err
 	}
+	s.alg = chosen
 	if err := checkBucketOverlap(prot, s.unprotected); err != nil {
 		return nil, err
 	}
@@ -102,24 +128,37 @@ func NewSigner(key crypto.Signer, opts ...SignerOption) (*Signer, error) {
 	return s, nil
 }
 
-// protectedWithAlg returns a copy of params with alg set, or
-// ErrAlgorithmMismatch if params already holds a different alg.
-func protectedWithAlg(params map[any]any, alg Algorithm) (map[any]any, error) {
+// protectedWithAlg returns a copy of params with alg set, and the
+// algorithm to sign with. An alg already in params selects that
+// algorithm when it signs with the same key as alg: the fully-specified
+// or polymorphic form of the same operation (RFC 9864), or another RSA
+// algorithm for an RSA key. Any other alg is ErrAlgorithmMismatch.
+func protectedWithAlg(params map[any]any, alg Algorithm) (map[any]any, Algorithm, error) {
 	if v, ok := params[headerLabelAlgorithm]; ok {
 		a, err := algValue(v)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		if a != alg {
-			return nil, fmt.Errorf("%w: protected header alg %s, key implies %s", ErrAlgorithmMismatch, a, alg)
+		if !sameSignatureFamily(a, alg) && !(isRSAAlg(a) && isRSAAlg(alg)) {
+			return nil, 0, fmt.Errorf("%w: protected header alg %s, key implies %s", ErrAlgorithmMismatch, a, alg)
 		}
+		alg = a
 	}
 	out := maps.Clone(params)
 	if out == nil {
 		out = make(map[any]any, 1)
 	}
 	out[headerLabelAlgorithm] = int64(alg)
-	return out, nil
+	return out, alg, nil
+}
+
+// isRSAAlg reports whether a is an RSA signature algorithm.
+func isRSAAlg(a Algorithm) bool {
+	switch a {
+	case AlgPS256, AlgPS384, AlgPS512, AlgRS256, AlgRS384, AlgRS512:
+		return true
+	}
+	return false
 }
 
 // checkBucketOverlap rejects a label set in both buckets (RFC 9052 §3).
@@ -151,7 +190,7 @@ func (s *Signer) SignContext(ctx context.Context, payload []byte) (*Sign1, error
 		return nil, err
 	}
 
-	sig, err := s.signBytes(ctx, toBeSigned)
+	sig, err := s.signBytes(ctx, s.alg, toBeSigned)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +228,7 @@ func (s *Signer) Sign1Context(ctx context.Context, msg *Sign1) error {
 	prot := maps.Clone(s.protected)
 	delete(prot, headerLabelAlgorithm)
 	maps.Copy(prot, msg.Protected.params)
-	prot, err := protectedWithAlg(prot, s.alg)
+	prot, alg, err := protectedWithAlg(prot, s.alg)
 	if err != nil {
 		return err
 	}
@@ -212,7 +251,7 @@ func (s *Signer) Sign1Context(ctx context.Context, msg *Sign1) error {
 	if err != nil {
 		return err
 	}
-	sig, err := s.signBytes(ctx, toBeSigned)
+	sig, err := s.signBytes(ctx, alg, toBeSigned)
 	if err != nil {
 		return err
 	}
@@ -222,9 +261,16 @@ func (s *Signer) Sign1Context(ctx context.Context, msg *Sign1) error {
 	return nil
 }
 
-func (s *Signer) signBytes(ctx context.Context, data []byte) ([]byte, error) {
-	switch s.alg {
-	case AlgEdDSA:
+func (s *Signer) signBytes(ctx context.Context, alg Algorithm, data []byte) ([]byte, error) {
+	switch alg {
+	case AlgPS256, AlgPS384, AlgPS512, AlgRS256, AlgRS384, AlgRS512:
+		return s.rsaSign(ctx, alg, data)
+	case AlgMLDSA44, AlgMLDSA65, AlgMLDSA87:
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return mldsaSign(s.key, alg, data)
+	case AlgEdDSA, AlgEd25519:
 		if edKey, ok := s.key.(ed25519.PrivateKey); ok {
 			if err := ctx.Err(); err != nil {
 				return nil, err
@@ -244,16 +290,43 @@ func (s *Signer) signBytes(ctx context.Context, data []byte) ([]byte, error) {
 		}
 		return sig, nil
 
-	case AlgES256:
+	case AlgES256, AlgESP256:
 		return s.ecdsaSign(ctx, data, crypto.SHA256, elliptic.P256())
-	case AlgES384:
+	case AlgES384, AlgESP384:
 		return s.ecdsaSign(ctx, data, crypto.SHA384, elliptic.P384())
-	case AlgES512:
+	case AlgES512, AlgESP512:
 		return s.ecdsaSign(ctx, data, crypto.SHA512, elliptic.P521())
 
 	default:
 		return nil, ErrUnsupportedAlgorithm
 	}
+}
+
+// rsaHash returns the hash an RSA signature algorithm uses.
+func rsaHash(alg Algorithm) crypto.Hash {
+	switch alg {
+	case AlgPS256, AlgRS256:
+		return crypto.SHA256
+	case AlgPS384, AlgRS384:
+		return crypto.SHA384
+	default:
+		return crypto.SHA512
+	}
+}
+
+// rsaSign signs with RSASSA-PSS (RFC 8230 §2: salt length equals the
+// hash length, MGF1 with the same hash) or RSASSA-PKCS1-v1_5 (RFC 8812).
+func (s *Signer) rsaSign(ctx context.Context, alg Algorithm, data []byte) ([]byte, error) {
+	hash := rsaHash(alg)
+	digest, err := hashData(hash, data)
+	if err != nil {
+		return nil, err
+	}
+	var opts crypto.SignerOpts = hash
+	if alg == AlgPS256 || alg == AlgPS384 || alg == AlgPS512 {
+		opts = &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthEqualsHash, Hash: hash}
+	}
+	return s.keySign(ctx, digest, opts)
 }
 
 // keySign calls the key, forwarding ctx when it is a ContextSigner.
@@ -405,14 +478,25 @@ func (v *Verifier) checkLayer(prot, unprot *Headers) (Algorithm, error) {
 	if v.alg == algRSAFamily {
 		return multiAlg(prot, unprot, &v.policy, rsaDefaultAlgs)
 	}
-	return v.alg, bindAlg(prot, unprot, v.alg, &v.policy)
+	// The key implies a signature operation; the header may name it in
+	// either its polymorphic or its fully-specified form (RFC 9864), and
+	// the header's form is the one bound and allow-listed.
+	want := v.alg
+	if !v.policy.legacyAlg {
+		if a, loc, err := headerAlg(prot, unprot); err == nil && loc != algAbsent && sameSignatureFamily(a, v.alg) {
+			want = a
+		}
+	}
+	return want, bindAlg(prot, unprot, want, &v.policy)
 }
 
 func (v *Verifier) verifyBytes(alg Algorithm, data, sig []byte) error {
 	switch alg {
 	case AlgPS256, AlgPS384, AlgPS512, AlgRS256, AlgRS384, AlgRS512:
 		return v.rsaVerify(alg, data, sig)
-	case AlgEdDSA:
+	case AlgMLDSA44, AlgMLDSA65, AlgMLDSA87:
+		return mldsaVerify(v.key, alg, data, sig)
+	case AlgEdDSA, AlgEd25519:
 		edKey, ok := v.key.(ed25519.PublicKey)
 		if !ok {
 			return fmt.Errorf("%w: expected ed25519.PublicKey", ErrInvalidKey)
@@ -422,11 +506,11 @@ func (v *Verifier) verifyBytes(alg Algorithm, data, sig []byte) error {
 		}
 		return nil
 
-	case AlgES256:
+	case AlgES256, AlgESP256:
 		return v.ecdsaVerify(data, sig, crypto.SHA256, elliptic.P256())
-	case AlgES384:
+	case AlgES384, AlgESP384:
 		return v.ecdsaVerify(data, sig, crypto.SHA384, elliptic.P384())
-	case AlgES512:
+	case AlgES512, AlgESP512:
 		return v.ecdsaVerify(data, sig, crypto.SHA512, elliptic.P521())
 
 	default:
@@ -441,15 +525,7 @@ func (v *Verifier) rsaVerify(alg Algorithm, data, sig []byte) error {
 	if !ok {
 		return fmt.Errorf("%w: %s needs an RSA key", ErrAlgorithmMismatch, alg)
 	}
-	var hash crypto.Hash
-	switch alg {
-	case AlgPS256, AlgRS256:
-		hash = crypto.SHA256
-	case AlgPS384, AlgRS384:
-		hash = crypto.SHA384
-	default:
-		hash = crypto.SHA512
-	}
+	hash := rsaHash(alg)
 	digest, err := hashData(hash, data)
 	if err != nil {
 		return err
@@ -513,13 +589,20 @@ const algRSAFamily Algorithm = 0
 const minRSABits = 2048
 
 func algForKey(key crypto.Signer) (Algorithm, error) {
-	if _, ok := key.Public().(*rsa.PublicKey); ok {
-		return 0, fmt.Errorf("%w: RSA signing is not supported", ErrUnsupportedAlgorithm)
+	alg, err := algForPublicKey(key.Public())
+	if err != nil {
+		return 0, err
 	}
-	return algForPublicKey(key.Public())
+	if alg == algRSAFamily {
+		return AlgPS256, nil // RFC 8230; another RSA alg via protected headers
+	}
+	return alg, nil
 }
 
 func algForPublicKey(pub crypto.PublicKey) (Algorithm, error) {
+	if a, ok := mldsaAlgForPublic(pub); ok {
+		return a, nil
+	}
 	switch p := pub.(type) {
 	case *rsa.PublicKey:
 		if p.N == nil || p.N.BitLen() < minRSABits {

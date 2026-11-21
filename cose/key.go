@@ -38,8 +38,33 @@ func NewKeyFromPublic(pub crypto.PublicKey) (*Key, error) {
 		y := padLeft(raw[1+size:], size)
 		k.set(keyLabelX, x)
 		k.set(keyLabelY, y)
+	case *ecdh.PublicKey:
+		if p.Curve() != ecdh.X25519() {
+			ec, err := ecdsa.ParseUncompressedPublicKey(ecdhToElliptic(p.Curve()), p.Bytes())
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
+			}
+			return NewKeyFromPublic(ec)
+		}
+		k.set(keyLabelKty, int64(KeyTypeOKP))
+		k.set(keyLabelCrv, int64(CurveX25519))
+		k.set(keyLabelX, p.Bytes())
+	case *rsa.PublicKey:
+		if p.N == nil {
+			return nil, fmt.Errorf("%w: RSA key has no modulus", ErrInvalidKey)
+		}
+		k.set(keyLabelKty, int64(KeyTypeRSA))
+		k.set(keyLabelRSAN, p.N.Bytes())
+		k.set(keyLabelRSAE, big.NewInt(int64(p.E)).Bytes())
 	default:
-		return nil, fmt.Errorf("%w: unsupported public key type %T", ErrInvalidKey, pub)
+		alg, raw, _, ok := mldsaAKPParams(pub)
+		if !ok {
+			return nil, fmt.Errorf("%w: unsupported public key type %T", ErrInvalidKey, pub)
+		}
+		// RFC 9964 §3: AKP keys always carry alg.
+		k.set(keyLabelKty, int64(KeyTypeAKP))
+		k.set(keyLabelAlg, int64(alg))
+		k.set(keyLabelAKPPub, raw)
 	}
 	return k, nil
 }
@@ -59,15 +84,24 @@ func NewKeyFromSigner(s crypto.Signer) (*Key, error) {
 			return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
 		}
 		k.set(keyLabelD, padLeft(d, size))
+	case *rsa.PrivateKey:
+		if err := k.setRSAPrivate(p); err != nil {
+			return nil, err
+		}
 	default:
-		return nil, fmt.Errorf("%w: unsupported signer type %T", ErrInvalidKey, s)
+		_, _, seed, ok := mldsaAKPParams(s)
+		if !ok || seed == nil {
+			return nil, fmt.Errorf("%w: unsupported signer type %T", ErrInvalidKey, s)
+		}
+		k.set(keyLabelAKPPriv, seed)
 	}
 	return k, nil
 }
 
 // PublicKey returns the key's public part as a Go key:
 // ed25519.PublicKey (OKP Ed25519), *ecdh.PublicKey (OKP X25519),
-// *ecdsa.PublicKey (EC2) or *rsa.PublicKey (RSA). EC2 coordinates
+// *ecdsa.PublicKey (EC2), *rsa.PublicKey (RSA) or, with a Go 1.27+
+// toolchain, *mldsa.PublicKey (AKP with an ML-DSA alg). EC2 coordinates
 // shorter than the curve size are left-padded, as in v0.2.2; longer ones
 // are ErrInvalidKey (v0.2.2 silently truncated them into a different
 // point).
@@ -95,6 +129,14 @@ func (k *Key) PublicKey() (crypto.PublicKey, error) {
 		default:
 			return nil, fmt.Errorf("%w: unsupported OKP curve %d", ErrInvalidKey, crv)
 		}
+
+	case KeyTypeAKP:
+		alg, _ := k.Algorithm()
+		pub, ok := k.get(keyLabelAKPPub).([]byte)
+		if !ok {
+			return nil, fmt.Errorf("%w: AKP key has no pub", ErrInvalidKey)
+		}
+		return mldsaPublicFromAKP(alg, pub)
 
 	case KeyTypeRSA:
 		n, okN := k.get(keyLabelRSAN).([]byte)
@@ -150,7 +192,25 @@ func ed25519PublicFromSeed(seed []byte) []byte {
 	return ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
 }
 
+// Signer returns the key's private part as a crypto.Signer:
+// ed25519.PrivateKey (OKP Ed25519), *ecdsa.PrivateKey (EC2),
+// *rsa.PrivateKey (RSA, two-prime) or, with a Go 1.27+ toolchain,
+// *mldsa.PrivateKey (AKP, from the 32-byte seed; a present pub must
+// match).
 func (k *Key) Signer() (crypto.Signer, error) {
+	switch k.KeyType() {
+	case KeyTypeAKP:
+		seed, ok := k.get(keyLabelAKPPriv).([]byte)
+		if !ok {
+			return nil, fmt.Errorf("%w: no private key material", ErrInvalidKey)
+		}
+		alg, _ := k.Algorithm()
+		pub, _ := k.get(keyLabelAKPPub).([]byte)
+		return mldsaSignerFromAKP(alg, seed, pub)
+	case KeyTypeRSA:
+		return k.rsaSigner()
+	}
+
 	d, ok := k.get(keyLabelD).([]byte)
 	if !ok {
 		return nil, fmt.Errorf("%w: no private key material", ErrInvalidKey)

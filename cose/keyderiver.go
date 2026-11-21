@@ -14,11 +14,24 @@ type KeyDeriver interface {
 type KeyWrapOpts struct {
 	CEKAlgorithm Algorithm
 	CEKLength    int
+
+	protected []byte // recipient protected bucket, for KDF contexts
+	legacy    legacyEncoding
 }
 
 type KeyUnwrapOpts struct {
 	CEKAlgorithm Algorithm
 	CEKLength    int
+
+	protected []byte // recipient protected bucket, for KDF contexts
+	legacy    legacyEncoding
+}
+
+// legacyEncoding carries the deprecated v0.2 wire-format selectors from
+// EncryptOption to the KeyDeriver implementations in this package.
+type legacyEncoding struct {
+	pbes2 bool // WithLegacyPBES2Labels
+	ecdh  bool // WithLegacyECDHES
 }
 
 type DirectKey struct {

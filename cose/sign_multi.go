@@ -197,7 +197,7 @@ func computeSignature(signer *Signer, bodyProtectedBytes, payload, external []by
 		return nil, err
 	}
 
-	raw, err := signer.signBytes(context.Background(), toBeSigned)
+	raw, err := signer.signBytes(context.Background(), signer.alg, toBeSigned)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,90 @@
+# IANA COSE Algorithms registry, https://www.iana.org/assignments/cose/cose.xml (updated 2026-11-13).
+# Columns: value,name,recommended. Regenerate only from the registry, never by hand.
+-65536,Unassigned,
+-65535,RS1,Deprecated
+-65534,A128CTR,Deprecated
+-65533,A192CTR,Deprecated
+-65532,A256CTR,Deprecated
+-65531,A128CBC,Deprecated
+-65530,A192CBC,Deprecated
+-65529,A256CBC,Deprecated
+-268,ESB512,No
+-267,ESB384,No
+-266,ESB320,No
+-265,ESB256,No
+-264,KT256,No
+-263,KT128,No
+-262,TurboSHAKE256,No
+-261,TurboSHAKE128,No
+-260,WalnutDSA,No
+-259,RS512,No
+-258,RS384,No
+-257,RS256,No
+-53,Ed448,Yes
+-52,ESP512,Yes
+-51,ESP384,Yes
+-50,ML-DSA-87,Yes
+-49,ML-DSA-65,Yes
+-48,ML-DSA-44,Yes
+-47,ES256K,No
+-46,HSS-LMS,Yes
+-45,SHAKE256,Yes
+-44,SHA-512,Yes
+-43,SHA-384,Yes
+-42,RSAES-OAEP w/ SHA-512,Yes
+-41,RSAES-OAEP w/ SHA-256,Yes
+-40,RSAES-OAEP w/ RFC 8017 default parameters,Yes
+-39,PS512,Yes
+-38,PS384,Yes
+-37,PS256,Yes
+-36,ES512,Deprecated
+-35,ES384,Deprecated
+-34,ECDH-SS + A256KW,Yes
+-33,ECDH-SS + A192KW,Yes
+-32,ECDH-SS + A128KW,Yes
+-31,ECDH-ES + A256KW,Yes
+-30,ECDH-ES + A192KW,Yes
+-29,ECDH-ES + A128KW,Yes
+-28,ECDH-SS + HKDF-512,Yes
+-27,ECDH-SS + HKDF-256,Yes
+-26,ECDH-ES + HKDF-512,Yes
+-25,ECDH-ES + HKDF-256,Yes
+-19,Ed25519,Yes
+-18,SHAKE128,Yes
+-17,SHA-512/256,Yes
+-16,SHA-256,Yes
+-15,SHA-256/64,Filter Only
+-14,SHA-1,Filter Only
+-13,direct+HKDF-AES-256,Yes
+-12,direct+HKDF-AES-128,Yes
+-11,direct+HKDF-SHA-512,Yes
+-10,direct+HKDF-SHA-256,Yes
+-9,ESP256,Yes
+-8,EdDSA,Deprecated
+-7,ES256,Deprecated
+-6,direct,Yes
+-5,A256KW,Yes
+-4,A192KW,Yes
+-3,A128KW,Yes
+0,Reserved,No
+1,A128GCM,Yes
+2,A192GCM,Yes
+3,A256GCM,Yes
+4,HMAC 256/64,Yes
+5,HMAC 256/256,Yes
+6,HMAC 384/384,Yes
+7,HMAC 512/512,Yes
+10,AES-CCM-16-64-128,Yes
+11,AES-CCM-16-64-256,Yes
+12,AES-CCM-64-64-128,Yes
+13,AES-CCM-64-64-256,Yes
+14,AES-MAC 128/64,Yes
+15,AES-MAC 256/64,Yes
+24,ChaCha20/Poly1305,Yes
+25,AES-MAC 128/128,Yes
+26,AES-MAC 256/128,Yes
+30,AES-CCM-16-128-128,Yes
+31,AES-CCM-16-128-256,Yes
+32,AES-CCM-64-128-128,Yes
+33,AES-CCM-64-128-256,Yes
+34,IV-GENERATION,No

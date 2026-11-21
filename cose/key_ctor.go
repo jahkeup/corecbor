@@ -6,9 +6,11 @@ package cose
 import "fmt"
 
 // NewSignerFromKey returns a Signer for a private COSE_Key. The key's
-// key_ops must permit sign, and its alg, when set, must be the algorithm
-// the key implies; otherwise it is ErrInvalidKey. NewSigner is unchanged
-// and does not look at key_ops.
+// key_ops must permit sign. Its alg, when set, selects the algorithm the
+// Signer emits and must be one the key can sign with: the polymorphic or
+// fully-specified form of the key's algorithm (RFC 9864), or any RSA
+// algorithm for an RSA key; otherwise it is ErrInvalidKey. NewSigner is
+// unchanged and does not look at key_ops.
 func NewSignerFromKey(k *Key, opts ...SignerOption) (*Signer, error) {
 	if !k.Permits(KeyOpSign) {
 		return nil, fmt.Errorf("%w: key_ops do not permit sign", ErrInvalidKey)
@@ -17,14 +19,30 @@ func NewSignerFromKey(k *Key, opts ...SignerOption) (*Signer, error) {
 	if err != nil {
 		return nil, err
 	}
+	if a, ok := k.Algorithm(); ok {
+		implied, err := algForKey(priv)
+		if err != nil {
+			return nil, err
+		}
+		if !sameSignatureFamily(a, implied) && !(isRSAAlg(a) && isRSAAlg(implied)) {
+			return nil, fmt.Errorf("%w: key alg %s, key type implies %s", ErrInvalidKey, a, implied)
+		}
+		opts = append([]SignerOption{withKeyAlgorithm(a)}, opts...)
+	}
 	s, err := NewSigner(priv, opts...)
 	if err != nil {
 		return nil, err
 	}
 	if a, ok := k.Algorithm(); ok && a != s.alg {
-		return nil, fmt.Errorf("%w: key alg %s, key type implies %s", ErrInvalidKey, a, s.alg)
+		return nil, fmt.Errorf("%w: key alg %s, signer would emit %s", ErrInvalidKey, a, s.alg)
 	}
 	return s, nil
+}
+
+// withKeyAlgorithm selects the COSE_Key's alg as the Signer's algorithm.
+// NewSignerFromKey has already checked that the key can sign with it.
+func withKeyAlgorithm(a Algorithm) SignerOption {
+	return func(s *Signer) { s.alg = a }
 }
 
 // NewVerifierFromKey returns a Verifier for a COSE_Key. The key's
@@ -48,8 +66,13 @@ func NewVerifierFromKey(k *Key, opts ...VerifierOption) (*Verifier, error) {
 		return v, nil
 	}
 	if v.alg != algRSAFamily {
-		if a != v.alg {
+		if !sameSignatureFamily(a, v.alg) {
 			return nil, fmt.Errorf("%w: key alg %s, key type implies %s", ErrInvalidKey, a, v.alg)
+		}
+		// A key restricted to one form (RFC 9052 §7.1 alg) only verifies
+		// messages using it.
+		if v.policy.allowed == nil {
+			v.policy.allowed = []Algorithm{a}
 		}
 		return v, nil
 	}

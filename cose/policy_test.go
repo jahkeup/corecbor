@@ -111,7 +111,7 @@ func signWithHeaders(t *testing.T, s *Signer, prot, unprot Headers, payload []by
 	if err != nil {
 		t.Fatal(err)
 	}
-	sig, err := s.signBytes(context.Background(), tbs)
+	sig, err := s.signBytes(context.Background(), s.alg, tbs)
 	if err != nil {
 		t.Fatal(err)
 	}

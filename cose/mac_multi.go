@@ -7,6 +7,7 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 
 	"github.com/jahkeup/corecbor"
@@ -29,20 +30,36 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 
 	cekLen := hmacKeyLen(alg)
 
+	ka, direct, err := directAgreement(recipients, legacyEncoding{})
+	if err != nil {
+		return nil, err
+	}
+	msg := &Mac{Payload: payload}
 	var cek []byte
-	if key != nil {
+	switch {
+	case direct:
+		// RFC 9052 §8.5.4: the agreed key is the MAC key.
+		if key != nil {
+			return nil, fmt.Errorf("%w: a direct key agreement recipient derives the MAC key; pass a nil key", ErrInvalidKey)
+		}
+		var r Recipient
+		cek, r, err = agreeRecipient(ka, alg, cekLen)
+		if err != nil {
+			return nil, err
+		}
+		msg.Recipients = []Recipient{r}
+	case key != nil:
 		if err := o.checkMACKey(key, alg); err != nil {
 			return nil, err
 		}
 		cek = key
-	} else {
+	default:
 		cek = make([]byte, cekLen)
 		if _, err := rand.Read(cek); err != nil {
 			return nil, fmt.Errorf("generating MAC key: %w", err)
 		}
 	}
 
-	msg := &Mac{Payload: payload}
 	msg.Protected.SetAlgorithm(alg)
 
 	protectedBytes, err := msg.Protected.encodeProtected()
@@ -63,20 +80,12 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 	}
 	msg.Tag = tag
 
-	wrapOpts := KeyWrapOpts{CEKAlgorithm: alg, CEKLength: cekLen}
-	msg.Recipients = make([]Recipient, len(recipients))
-	for i, r := range recipients {
-		ciphertext, headers, err := r.WrapKey(cek, wrapOpts)
+	if !direct {
+		msg.Recipients, err = sealRecipients(cek, alg, recipients, legacyEncoding{})
 		if err != nil {
-			return nil, fmt.Errorf("recipient %d: %w", i, err)
+			return nil, err
 		}
-		msg.Recipients[i] = Recipient{
-			Unprotected: headers,
-			Ciphertext:  ciphertext,
-		}
-		msg.Recipients[i].Protected.SetAlgorithm(r.Algorithm())
 	}
-
 	return msg, nil
 }
 
@@ -120,9 +129,11 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...
 	}
 
 	cekLen := hmacKeyLen(alg)
-	unwrapOpts := KeyUnwrapOpts{CEKAlgorithm: alg, CEKLength: cekLen}
-	cek, err := recipient.UnwrapKey(r.Ciphertext, r.Unprotected, unwrapOpts)
+	cek, err := openRecipient(&r, recipient, alg, cekLen, &encryptOpts{policy: o.policy})
 	if err != nil {
+		if errors.Is(err, ErrAlgorithmMismatch) || errors.Is(err, ErrCriticalHeader) {
+			return err
+		}
 		return fmt.Errorf("%w: key unwrap failed", ErrMACVerification)
 	}
 	if err := o.checkMACKey(cek, alg); err != nil {

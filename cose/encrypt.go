@@ -17,6 +17,65 @@ type EncryptOption func(*encryptOpts)
 type encryptOpts struct {
 	externalAAD []byte
 	policy      headerPolicy
+	legacy      legacyEncoding
+
+	nonce             []byte // WithNonce
+	baseIV, partialIV []byte // WithPartialIV
+	draftHPKE27       bool   // WithDraftHPKE27
+}
+
+// WithLegacyPBES2Labels uses the v0.2 PBES2 identifiers, alg -11 and
+// iteration-count label -21, for both sealing and opening. IANA
+// registers -11 as direct+HKDF-SHA-512 and -21 as PartyU identity, so
+// no other implementation reads these messages as PBES2.
+//
+// Deprecated: colliding code points (proposal 029); removed no earlier
+// than v0.32.0.
+func WithLegacyPBES2Labels() EncryptOption {
+	return func(o *encryptOpts) { o.legacy.pbes2 = true }
+}
+
+// WithLegacyECDHES uses the v0.2 ECDH-ES encoding for ECDHESKey
+// recipients with the default algorithm: -25 carrying AES-KW (-29)
+// semantics, a v0.2 key-derivation context, and a raw-point ephemeral
+// key. Messages produced this way only interoperate with corecbor v0.2.
+//
+// Deprecated: non-conformant to RFC 9053 §6.3 (proposal 029); removed
+// no earlier than v0.32.0.
+func WithLegacyECDHES() EncryptOption {
+	return func(o *encryptOpts) { o.legacy.ecdh = true }
+}
+
+// CompatV02Encryption bundles WithLegacyPBES2Labels and
+// WithLegacyECDHES, the interop-only selectors needed to read or write
+// v0.2 encrypted messages. It weakens no verification.
+//
+// Deprecated: migrate to explicit selectors; removed no earlier than
+// v0.32.0.
+func CompatV02Encryption() EncryptOption {
+	return func(o *encryptOpts) {
+		o.legacy.pbes2 = true
+		o.legacy.ecdh = true
+	}
+}
+
+// WithNonce makes Encrypt0Seal use nonce as the IV instead of a random
+// one. For test vectors and deterministic fixtures only: reusing a nonce
+// with the same key breaks AES-GCM and AES-CCM.
+func WithNonce(nonce []byte) EncryptOption {
+	return func(o *encryptOpts) { o.nonce = nonce }
+}
+
+// WithPartialIV uses RFC 9052 §3.1 nonce construction: the IV is the
+// Base IV XORed with the Partial IV left-padded to the IV length.
+// Encrypt0Seal writes partialIV to the Partial IV header (6) instead of
+// writing an IV (5); Encrypt0Open uses baseIV with the message's
+// Partial IV. OSCORE (RFC 8613) builds its nonces this way.
+func WithPartialIV(baseIV, partialIV []byte) EncryptOption {
+	return func(o *encryptOpts) {
+		o.baseIV = baseIV
+		o.partialIV = partialIV
+	}
 }
 
 func WithEncryptExternalAAD(aad []byte) EncryptOption {

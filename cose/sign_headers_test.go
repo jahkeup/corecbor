@@ -494,7 +494,8 @@ func TestVerifyRSA(t *testing.T) {
 	if _, err := NewVerifier(&small.PublicKey); !errors.Is(err, ErrInvalidKey) {
 		t.Fatalf("1024-bit RSA = %v, want ErrInvalidKey", err)
 	}
-	if _, err := NewSigner(key); !errors.Is(err, ErrUnsupportedAlgorithm) {
-		t.Fatalf("RSA signer = %v", err)
+	// Proposal 029 adds RSA signing (PS256 by default); see TestRSASign.
+	if s, err := NewSigner(key); err != nil || s.alg != AlgPS256 {
+		t.Fatalf("RSA signer = %v, %v; want PS256", s, err)
 	}
 }

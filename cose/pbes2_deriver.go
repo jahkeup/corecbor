@@ -14,14 +14,27 @@ import (
 )
 
 const (
-	headerLabelPBES2Count int64 = -21
+	// headerLabelPBES2Count carries the PBKDF2 iteration count. PBES2 is
+	// not registered for COSE, so it lives in the private-use range
+	// (< -65536), like AlgPrivatePBES2_HS256_A128KW.
+	headerLabelPBES2Count int64 = -65602
+
+	// headerLabelLegacyPBES2Count is v0.2's iteration-count label. IANA
+	// registers -21 as PartyU identity; used only under
+	// WithLegacyPBES2Labels.
+	headerLabelLegacyPBES2Count int64 = -21
 
 	defaultPBES2Count    = 10000
 	defaultPBES2SaltLen  = 16
 	defaultPBES2MaxCount = 1_000_000
 )
 
-// PBES2Key derives a key-encryption key from a password with PBKDF2.
+// PBES2Key derives a key-encryption key from a password with PBKDF2
+// (PBES2-HS256+A128KW). PBES2 is a JOSE algorithm that COSE doesn't
+// register, so it uses the private-use identifier
+// AlgPrivatePBES2_HS256_A128KW and a private-use iteration-count label;
+// only corecbor peers understand it. v0.2 used -11 and -21, which IANA
+// registers for other algorithms; WithLegacyPBES2Labels restores them.
 type PBES2Key struct {
 	Password []byte
 	Salt     []byte
@@ -33,9 +46,16 @@ type PBES2Key struct {
 	MaxCount int
 }
 
-func (p *PBES2Key) Algorithm() Algorithm { return AlgPBES2_HS256_A128KW }
+func (p *PBES2Key) Algorithm() Algorithm { return AlgPrivatePBES2_HS256_A128KW }
 
-func (p *PBES2Key) WrapKey(cek []byte, _ KeyWrapOpts) ([]byte, Headers, error) {
+func pbes2CountLabel(legacy bool) int64 {
+	if legacy {
+		return headerLabelLegacyPBES2Count
+	}
+	return headerLabelPBES2Count
+}
+
+func (p *PBES2Key) WrapKey(cek []byte, opts KeyWrapOpts) ([]byte, Headers, error) {
 	salt := p.Salt
 	if salt == nil {
 		salt = make([]byte, defaultPBES2SaltLen)
@@ -60,18 +80,20 @@ func (p *PBES2Key) WrapKey(cek []byte, _ KeyWrapOpts) ([]byte, Headers, error) {
 	}
 
 	var h Headers
-	h.Set(headerLabelSalt, salt)
-	h.Set(headerLabelPBES2Count, int64(count))
+	h.params = map[any]any{
+		headerLabelSalt:                    salt,
+		pbes2CountLabel(opts.legacy.pbes2): int64(count),
+	}
 	return wrapped, h, nil
 }
 
-func (p *PBES2Key) UnwrapKey(ciphertext []byte, h Headers, _ KeyUnwrapOpts) ([]byte, error) {
+func (p *PBES2Key) UnwrapKey(ciphertext []byte, h Headers, opts KeyUnwrapOpts) ([]byte, error) {
 	salt, ok := h.Get(headerLabelSalt).([]byte)
 	if !ok || len(salt) == 0 {
 		return nil, fmt.Errorf("%w: missing PBES2 salt in headers", ErrDecryption)
 	}
 
-	countVal := h.Get(headerLabelPBES2Count)
+	countVal := h.Get(pbes2CountLabel(opts.legacy.pbes2))
 	var count int64
 	switch c := countVal.(type) {
 	case int64:

@@ -10,6 +10,12 @@ import (
 	"github.com/jahkeup/corecbor"
 )
 
+// EncryptMulti encrypts plaintext into a COSE_Encrypt for recipients.
+// contentAlg is AES-GCM or AES-CCM. A random content key is wrapped for
+// each recipient, except with a single direct key agreement recipient
+// (ECDH-ES + HKDF, -25/-26), whose agreed key is the content key
+// (RFC 9052 §8.5.4); a direct recipient alongside others is
+// ErrInvalidKey. The IV is random and carried in header 5.
 func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDeriver, opts ...EncryptOption) (*Encrypt, error) {
 	if len(recipients) == 0 {
 		return nil, fmt.Errorf("%w: at least one recipient required", ErrInvalidKey)
@@ -25,79 +31,61 @@ func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDerive
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, contentAlg)
 	}
 
-	cek := make([]byte, cekLen)
-	if _, err := rand.Read(cek); err != nil {
-		return nil, fmt.Errorf("generating CEK: %w", err)
+	ka, direct, err := directAgreement(recipients, o.legacy)
+	if err != nil {
+		return nil, err
+	}
+	msg := &Encrypt{}
+	var cek []byte
+	if direct {
+		var r Recipient
+		cek, r, err = agreeRecipient(ka, contentAlg, cekLen)
+		if err != nil {
+			return nil, err
+		}
+		msg.Recipients = []Recipient{r}
+	} else {
+		cek = make([]byte, cekLen)
+		if _, err := rand.Read(cek); err != nil {
+			return nil, fmt.Errorf("generating CEK: %w", err)
+		}
 	}
 
-	msg := &Encrypt{}
 	msg.Protected.SetAlgorithm(contentAlg)
-
 	protectedBytes, err := msg.Protected.encodeProtected()
 	if err != nil {
 		return nil, err
 	}
-
 	aad, err := buildEncStructureMulti(protectedBytes, o.externalAAD)
 	if err != nil {
 		return nil, err
 	}
 
-	nonce := make([]byte, 12)
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("generating nonce: %w", err)
-	}
-	msg.Unprotected.Set(int64(5), nonce)
-
-	gcm, err := newGCM(cek)
+	aead, err := contentAEAD(contentAlg, cek)
 	if err != nil {
 		return nil, err
 	}
-	msg.Ciphertext = gcm.Seal(nil, nonce, plaintext, aad)
+	nonce, err := sealNonce(aead, &msg.Unprotected, &encryptOpts{nonce: o.nonce, baseIV: o.baseIV, partialIV: o.partialIV})
+	if err != nil {
+		return nil, err
+	}
+	msg.Ciphertext = aead.Seal(nil, nonce, plaintext, aad)
 
-	wrapOpts := KeyWrapOpts{CEKAlgorithm: contentAlg, CEKLength: cekLen}
-	msg.Recipients = make([]Recipient, len(recipients))
-
-	for i, r := range recipients {
-		var recipCek []byte
-		if _, ok := r.(*ECDHESKey); ok {
-			ek := r.(*ECDHESKey)
-			derived, headers, err := ek.DeriveKey(wrapOpts)
-			if err != nil {
-				return nil, fmt.Errorf("recipient %d: %w", i, err)
-			}
-			_ = derived
-			wrappedCek, wrapErr := aeskwWrapWithDerived(derived, cek)
-			if wrapErr != nil {
-				return nil, fmt.Errorf("recipient %d: %w", i, wrapErr)
-			}
-			msg.Recipients[i] = Recipient{
-				Unprotected: headers,
-				Ciphertext:  wrappedCek,
-			}
-			msg.Recipients[i].Protected.SetAlgorithm(r.Algorithm())
-		} else {
-			recipCek = cek
-			ciphertext, headers, err := r.WrapKey(recipCek, wrapOpts)
-			if err != nil {
-				return nil, fmt.Errorf("recipient %d: %w", i, err)
-			}
-			msg.Recipients[i] = Recipient{
-				Unprotected: headers,
-				Ciphertext:  ciphertext,
-			}
-			msg.Recipients[i].Protected.SetAlgorithm(r.Algorithm())
+	if !direct {
+		msg.Recipients, err = sealRecipients(cek, contentAlg, recipients, o.legacy)
+		if err != nil {
+			return nil, err
 		}
 	}
-
 	return msg, nil
 }
 
 // DecryptMulti decrypts a COSE_Encrypt message with the key recovered by
 // recipient. The content algorithm comes from the protected header and
 // must be in the allowed set (AES-GCM 128/192/256 unless
-// WithEncryptAlgorithms says otherwise). WithEncryptExternalAAD
-// supplies the external AAD the sender used.
+// WithEncryptAlgorithms says otherwise, for example to allow AES-CCM).
+// The recipient's alg must match recipient's algorithm.
+// WithEncryptExternalAAD supplies the external AAD the sender used.
 func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts ...EncryptOption) ([]byte, error) {
 	if recipientIndex < 0 || recipientIndex >= len(msg.Recipients) {
 		return nil, fmt.Errorf("%w: recipient index out of range", ErrDecryption)
@@ -107,11 +95,8 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts .
 		opt(&o)
 	}
 
-	r := msg.Recipients[recipientIndex]
+	r := &msg.Recipients[recipientIndex]
 	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
-		return nil, err
-	}
-	if err := checkCrit(&r.Protected, &r.Unprotected, &o.policy); err != nil {
 		return nil, err
 	}
 	contentAlg, err := multiAlg(&msg.Protected, &msg.Unprotected, &o.policy, defaultEncryptMultiAlgs)
@@ -123,66 +108,34 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts .
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, contentAlg)
 	}
 
-	unwrapOpts := KeyUnwrapOpts{CEKAlgorithm: contentAlg, CEKLength: cekLen}
-
-	var cek []byte
-
-	if ek, ok := recipient.(*ECDHESKey); ok {
-		derived, derr := ek.UnderiveKey(r.Unprotected, unwrapOpts)
-		if derr != nil {
-			return nil, derr
-		}
-		cek, err = aeskwUnwrapWithDerived(derived, r.Ciphertext)
-		if err != nil {
-			return nil, ErrDecryption
-		}
-	} else {
-		cek, err = recipient.UnwrapKey(r.Ciphertext, r.Unprotected, unwrapOpts)
-		if err != nil {
-			return nil, err
-		}
+	cek, err := openRecipient(r, recipient, contentAlg, cekLen, &o)
+	if err != nil {
+		return nil, err
 	}
 
-	nonce, ok := msg.Unprotected.Get(int64(5)).([]byte)
-	if !ok {
-		return nil, fmt.Errorf("%w: missing IV in message", ErrDecryption)
+	aead, err := contentAEAD(contentAlg, cek)
+	if err != nil {
+		return nil, ErrDecryption
+	}
+	nonce, err := openNonce(aead, &msg.Protected, &msg.Unprotected, &o)
+	if err != nil {
+		return nil, err
 	}
 
 	protectedBytes, err := msg.Protected.encodeProtected()
 	if err != nil {
 		return nil, err
 	}
-
 	aad, err := buildEncStructureMulti(protectedBytes, o.externalAAD)
 	if err != nil {
 		return nil, err
 	}
 
-	gcm, err := newGCM(cek)
-	if err != nil {
-		return nil, ErrDecryption
-	}
-	// The IV comes from the message; gcm.Open panics on a wrong size.
-	if len(nonce) != gcm.NonceSize() {
-		return nil, fmt.Errorf("%w: IV must be %d bytes", ErrDecryption, gcm.NonceSize())
-	}
-
-	plaintext, err := gcm.Open(nil, nonce, msg.Ciphertext, aad)
+	plaintext, err := aead.Open(nil, nonce, msg.Ciphertext, aad)
 	if err != nil {
 		return nil, ErrDecryption
 	}
 	return plaintext, nil
-}
-
-func aeskwWrapWithDerived(derived, cek []byte) ([]byte, error) {
-	kw := &AESKWKey{Key: derived}
-	wrapped, _, err := kw.WrapKey(cek, KeyWrapOpts{})
-	return wrapped, err
-}
-
-func aeskwUnwrapWithDerived(derived, ciphertext []byte) ([]byte, error) {
-	kw := &AESKWKey{Key: derived}
-	return kw.UnwrapKey(ciphertext, Headers{}, KeyUnwrapOpts{})
 }
 
 func buildEncStructureMulti(protectedBytes, externalAAD []byte) ([]byte, error) {

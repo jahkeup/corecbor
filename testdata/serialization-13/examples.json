@@ -1,0 +1,483 @@
+{
+ "source": "draft-ietf-cbor-serialization-13 Appendix K.2 (https://datatracker.ietf.org/doc/draft-ietf-cbor-serialization/13/)",
+ "examples": [
+  {
+   "description": "The integer 0",
+   "edn-representations": [
+    "0"
+   ],
+   "general-serializations": [
+    "00",
+    "1800",
+    "190000",
+    "1a00000000",
+    "1b0000000000000000",
+    "c2420000",
+    "c240"
+   ],
+   "preferred-plus-serializations": [
+    "00"
+   ],
+   "deterministic-serialization": [
+    "00"
+   ],
+   "file": "zero.edn"
+  },
+  {
+   "description": "The integer 3",
+   "edn-representations": [
+    "3"
+   ],
+   "general-serializations": [
+    "03",
+    "1803",
+    "190003",
+    "1a00000003",
+    "1b0000000000000003",
+    "c2420003"
+   ],
+   "preferred-plus-serializations": [
+    "03"
+   ],
+   "deterministic-serialization": [
+    "03"
+   ],
+   "file": "three.edn"
+  },
+  {
+   "description": "The integer -25",
+   "edn-representations": [
+    "-25"
+   ],
+   "general-serializations": [
+    "3818",
+    "390018",
+    "3a00000018",
+    "3b0000000000000018",
+    "c3420018"
+   ],
+   "preferred-plus-serializations": [
+    "3818"
+   ],
+   "deterministic-serialization": [
+    "3818"
+   ],
+   "file": "minus_twenty_five.edn"
+  },
+  {
+   "description": "Largest negative integer",
+   "edn-representations": [
+    "-18446744073709551616"
+   ],
+   "general-serializations": [
+    "3bffffffffffffffff",
+    "c348ffffffffffffffff"
+   ],
+   "preferred-plus-serializations": [
+    "3bffffffffffffffff"
+   ],
+   "deterministic-serialization": [
+    "3bffffffffffffffff"
+   ],
+   "file": "65_bit_neg.edn"
+  },
+  {
+   "description": "The byte string of length 3: 0x010203",
+   "edn-representations": [
+    "h'010203'"
+   ],
+   "general-serializations": [
+    "43010203",
+    "5f4101420203ff",
+    "5f5801015a000000020203ff"
+   ],
+   "preferred-plus-serializations": [
+    "43010203"
+   ],
+   "deterministic-serialization": [
+    "43010203"
+   ],
+   "file": "byte_string.edn"
+  },
+  {
+   "description": "The text string 'hi there'",
+   "edn-representations": [
+    "\"hi there\""
+   ],
+   "general-serializations": [
+    "686869207468657265",
+    "7f686869207468657265ff",
+    "7f64686920746468657265ff",
+    "7f790004686920747b000000000000000468657265ff"
+   ],
+   "preferred-plus-serializations": [
+    "686869207468657265"
+   ],
+   "deterministic-serialization": [
+    "686869207468657265"
+   ],
+   "file": "text_string.edn"
+  },
+  {
+   "description": "The array [1, 2, 3]",
+   "edn-representations": [
+    "[1, 2, 3]"
+   ],
+   "general-serializations": [
+    "83010203",
+    "9f010203ff"
+   ],
+   "preferred-plus-serializations": [
+    "83010203"
+   ],
+   "deterministic-serialization": [
+    "83010203"
+   ],
+   "file": "array.edn"
+  },
+  {
+   "description": "Map with three items using integer map keys",
+   "edn-representations": [
+    "{1:\"x\", 2:\"y\", 3:\"z\"}",
+    "{1:\"x\", 3:\"z\", 2:\"y\"}",
+    "{2:\"y\", 3:\"z\", 1:\"x\"}",
+    "{2:\"y\", 1:\"x\", 3:\"z\"}",
+    "{3:\"z\", 1:\"x\", 2:\"y\"}",
+    "{3:\"z\", 2:\"y\", 1:\"x\"}"
+   ],
+   "general-serializations": [
+    "a301617802617903617a",
+    "a301617803617a026179",
+    "a302617903617a016178",
+    "a302617901617803617a",
+    "a303617a016178026179",
+    "a303617a026179016178",
+    "bf03617a026179016178ff",
+    "a31a00000003617a19000261791b00000000000000016178"
+   ],
+   "preferred-plus-serializations": [
+    "a301617802617903617a",
+    "a301617803617a026179",
+    "a302617903617a016178",
+    "a302617901617803617a",
+    "a303617a016178026179",
+    "a303617a026179016178"
+   ],
+   "deterministic-serialization": [
+    "a301617802617903617a"
+   ],
+   "file": "map.edn"
+  },
+  {
+   "description": "Three item map with string keys",
+   "edn-representations": [
+    "{\"abc\": 1, \"def\": 2, \"ghi\": 3}",
+    "{\"abc\": 1, \"ghi\": 3, \"def\": 2}",
+    "{\"def\": 2, \"abc\": 1, \"ghi\": 3}",
+    "{\"def\": 2, \"ghi\": 3, \"abc\": 1}",
+    "{\"ghi\": 3, \"abc\": 1, \"def\": 2}",
+    "{\"ghi\": 3, \"def\": 2, \"abc\": 1}"
+   ],
+   "general-serializations": [
+    "a3636162630163646566026367686903",
+    "a3636162630163676869036364656602",
+    "a3636465660263616263016367686903",
+    "a3636465660263676869036361626301",
+    "a3636768690363616263016364656602",
+    "a3636768690363646566026361626301",
+    "bf636162630163646566026367686903ff",
+    "bf7f6161626263ff017f6264656166ff027f63676869ff03ff"
+   ],
+   "preferred-plus-serializations": [
+    "a3636162630163646566026367686903",
+    "a3636162630163676869036364656602",
+    "a3636465660263616263016367686903",
+    "a3636465660263676869036361626301",
+    "a3636768690363616263016364656602",
+    "a3636768690363646566026361626301"
+   ],
+   "deterministic-serialization": [
+    "a3636162630163646566026367686903"
+   ],
+   "file": "map_strings.edn"
+  },
+  {
+   "description": "A positive bignum",
+   "edn-representations": [
+    "79228162514264337593543950335"
+   ],
+   "general-serializations": [
+    "c24cffffffffffffffffffffffff",
+    "c24e0000ffffffffffffffffffffffff"
+   ],
+   "preferred-plus-serializations": [
+    "c24cffffffffffffffffffffffff"
+   ],
+   "deterministic-serialization": [
+    "c24cffffffffffffffffffffffff"
+   ],
+   "file": "positive_bignum.edn"
+  },
+  {
+   "description": "Negative bignum on boundary with type 1 integer",
+   "edn-representations": [
+    "-18446744073709551617"
+   ],
+   "general-serializations": [
+    "c349010000000000000000",
+    "c34c000000010000000000000000",
+    "c35f450000000001480000000000000000ff"
+   ],
+   "preferred-plus-serializations": [
+    "c349010000000000000000"
+   ],
+   "deterministic-serialization": [
+    "c349010000000000000000"
+   ],
+   "file": "negative_bignum.edn"
+  },
+  {
+   "description": "An epoch date tag",
+   "edn-representations": [
+    "1(1776614355)"
+   ],
+   "general-serializations": [
+    "c11a69e4fbd3",
+    "d8011a69e4fbd3",
+    "d900011a69e4fbd3",
+    "da000000011a69e4fbd3",
+    "db00000000000000011a69e4fbd3",
+    "c11b0000000069e4fbd3"
+   ],
+   "preferred-plus-serializations": [
+    "c11a69e4fbd3"
+   ],
+   "deterministic-serialization": [
+    "c11a69e4fbd3"
+   ],
+   "file": "date_epoch_tag.edn"
+  },
+  {
+   "description": "A date string tag",
+   "edn-representations": [
+    "0(\"2026-04-19T03:59:15Z\")"
+   ],
+   "general-serializations": [
+    "c074323032362d30342d31395430333a35393a31355a",
+    "d80074323032362d30342d31395430333a35393a31355a",
+    "d9000074323032362d30342d31395430333a35393a31355a",
+    "da0000000074323032362d30342d31395430333a35393a31355a",
+    "db000000000000000074323032362d30342d31395430333a35393a31355a",
+    "c07f74323032362d30342d31395430333a35393a31355aff",
+    "c07f6232307232362d30342d31395430333a35393a31355aff"
+   ],
+   "preferred-plus-serializations": [
+    "c074323032362d30342d31395430333a35393a31355a"
+   ],
+   "deterministic-serialization": [
+    "c074323032362d30342d31395430333a35393a31355a"
+   ],
+   "file": "date_string_tag.edn"
+  },
+  {
+   "description": "The simple value 'true'",
+   "edn-representations": [
+    "true"
+   ],
+   "general-serializations": [
+    "f5"
+   ],
+   "preferred-plus-serializations": [
+    "f5"
+   ],
+   "deterministic-serialization": [
+    "f5"
+   ],
+   "file": "true.edn"
+  },
+  {
+   "description": "The simple value 111",
+   "edn-representations": [
+    "simple(111)"
+   ],
+   "general-serializations": [
+    "f86f"
+   ],
+   "preferred-plus-serializations": [
+    "f86f"
+   ],
+   "deterministic-serialization": [
+    "f86f"
+   ],
+   "file": "simple111.edn"
+  },
+  {
+   "description": "Floating-point positive zero",
+   "edn-representations": [
+    "0.0"
+   ],
+   "general-serializations": [
+    "f90000",
+    "fa00000000",
+    "fb0000000000000000"
+   ],
+   "preferred-plus-serializations": [
+    "f90000"
+   ],
+   "deterministic-serialization": [
+    "f90000"
+   ],
+   "file": "float_zero.edn"
+  },
+  {
+   "description": "Double-precision normal float",
+   "edn-representations": [
+    "1.7976931348623157e+308"
+   ],
+   "general-serializations": [
+    "fb7fefffffffffffff"
+   ],
+   "preferred-plus-serializations": [
+    "fb7fefffffffffffff"
+   ],
+   "deterministic-serialization": [
+    "fb7fefffffffffffff"
+   ],
+   "file": "float_double.edn"
+  },
+  {
+   "description": "Double-precision negative subnormal float",
+   "edn-representations": [
+    "-5.0e-324"
+   ],
+   "general-serializations": [
+    "fb8000000000000001"
+   ],
+   "preferred-plus-serializations": [
+    "fb8000000000000001"
+   ],
+   "deterministic-serialization": [
+    "fb8000000000000001"
+   ],
+   "file": "float_double_subnormal.edn"
+  },
+  {
+   "description": "Single-precision normal float",
+   "edn-representations": [
+    "-16777216.0"
+   ],
+   "general-serializations": [
+    "fbc170000000000000",
+    "facb800000"
+   ],
+   "preferred-plus-serializations": [
+    "facb800000"
+   ],
+   "deterministic-serialization": [
+    "facb800000"
+   ],
+   "file": "float_single.edn"
+  },
+  {
+   "description": "Single-precision subnormal float",
+   "edn-representations": [
+    "5.8774717541114375E-39"
+   ],
+   "general-serializations": [
+    "fb3800000000000000",
+    "fa00400000"
+   ],
+   "preferred-plus-serializations": [
+    "fa00400000"
+   ],
+   "deterministic-serialization": [
+    "fa00400000"
+   ],
+   "file": "float_single_subnormal.edn"
+  },
+  {
+   "description": "half-precision normal float",
+   "edn-representations": [
+    "65504.0"
+   ],
+   "general-serializations": [
+    "fb40effc0000000000",
+    "fa477fe000",
+    "f97bff"
+   ],
+   "preferred-plus-serializations": [
+    "f97bff"
+   ],
+   "deterministic-serialization": [
+    "f97bff"
+   ],
+   "file": "float_half.edn"
+  },
+  {
+   "description": "Half-precision subnormal float",
+   "edn-representations": [
+    "3.0517578125E-5"
+   ],
+   "general-serializations": [
+    "fb3f00000000000000",
+    "fa38000000",
+    "f90200"
+   ],
+   "preferred-plus-serializations": [
+    "f90200"
+   ],
+   "deterministic-serialization": [
+    "f90200"
+   ],
+   "file": "float_half_subnormal.edn"
+  },
+  {
+   "description": "Negative Infinity",
+   "edn-representations": [
+    "-Infinity"
+   ],
+   "general-serializations": [
+    "f9fc00",
+    "faff800000",
+    "fbfff0000000000000"
+   ],
+   "preferred-plus-serializations": [
+    "f9fc00"
+   ],
+   "deterministic-serialization": [
+    "f9fc00"
+   ],
+   "file": "float_neg_infinity.edn"
+  },
+  {
+   "description": "Floating-point quiet NaN",
+   "edn-representations": [
+    "NaN"
+   ],
+   "general-serializations": [
+    "f97e00",
+    "fa7fc00000",
+    "fb7ff8000000000000"
+   ],
+   "preferred-plus-serializations": [
+    "f97e00"
+   ],
+   "deterministic-serialization": [
+    "f97e00"
+   ],
+   "file": "float_quiet_nan.edn"
+  },
+  {
+   "description": " Floating-point NaN payload/significand is 0x1ff",
+   "edn-representations": [],
+   "general-serializations": [
+    "f97dff",
+    "fa7fbfe000",
+    "fb7ff7fc0000000000"
+   ],
+   "preferred-plus-serializations": [],
+   "deterministic-serialization": [],
+   "file": "float_nan_payload.edn"
+  }
+ ]
+}

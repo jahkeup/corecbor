@@ -246,11 +246,11 @@ func rootGoldenCases() []g.Case {
 	}
 	add("root/decode/forgiving/depth-256", func() string {
 		v, err := cc.NewDecoder().Decode(deepArray(256))
-		return strOf(fmt.Sprint(v.Kind), err)
+		return strOf(fmt.Sprintf("%d", v.Kind), err) // %d: Kind has a String method since 025
 	})
 	add("root/decode/forgiving/depth-257", func() string {
 		v, err := cc.NewDecoder().Decode(deepArray(257))
-		return strOf(fmt.Sprint(v.Kind), err)
+		return strOf(fmt.Sprintf("%d", v.Kind), err) // %d: Kind has a String method since 025
 	})
 	add("root/decode/max-array-2", func() string {
 		_, err := cc.NewDecoder(cc.WithMaxArrayLength(2)).Decode(g.MustHex("83010203"))

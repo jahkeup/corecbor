@@ -9,10 +9,9 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/diagfmt"
 	"github.com/jahkeup/corecbor/wire"
 )
 
@@ -70,180 +69,8 @@ func DiagnosticValue(v Value, opts ...DiagnosticOption) string {
 		fn(o)
 	}
 	var b strings.Builder
-	diagWrite(&b, v, o)
+	diagfmt.WriteValue(&b, v, o.compact)
 	return b.String()
-}
-
-func diagWrite(b *strings.Builder, v Value, o *diagOpts) {
-	switch v.Kind {
-	case cbor.KindUint:
-		b.WriteString(strconv.FormatUint(v.UintVal(), 10))
-
-	case cbor.KindNegInt:
-		diagWriteNegInt(b, v.NegIntVal())
-
-	case cbor.KindBytes:
-		b.WriteString("h'")
-		b.WriteString(hex.EncodeToString(v.BytesVal()))
-		b.WriteByte('\'')
-
-	case cbor.KindText:
-		diagWriteTextItem(b, v.TextVal(), "")
-
-	case cbor.KindArray:
-		b.WriteByte('[')
-		for i, item := range v.Array() {
-			if i > 0 {
-				if o.compact {
-					b.WriteByte(',')
-				} else {
-					b.WriteString(", ")
-				}
-			}
-			diagWrite(b, item, o)
-		}
-		b.WriteByte(']')
-
-	case cbor.KindMap:
-		b.WriteByte('{')
-		for i, entry := range v.Map() {
-			if i > 0 {
-				if o.compact {
-					b.WriteByte(',')
-				} else {
-					b.WriteString(", ")
-				}
-			}
-			diagWrite(b, entry.Key, o)
-			if o.compact {
-				b.WriteByte(':')
-			} else {
-				b.WriteString(": ")
-			}
-			diagWrite(b, entry.Value, o)
-		}
-		b.WriteByte('}')
-
-	case cbor.KindTag:
-		b.WriteString(strconv.FormatUint(v.TagID(), 10))
-		b.WriteByte('(')
-		diagWrite(b, v.TagInner(), o)
-		b.WriteByte(')')
-
-	case cbor.KindBool:
-		if v.BoolVal() {
-			b.WriteString("true")
-		} else {
-			b.WriteString("false")
-		}
-
-	case cbor.KindNull:
-		b.WriteString("null")
-
-	case cbor.KindUndefined:
-		b.WriteString("undefined")
-
-	case cbor.KindFloat32:
-		diagWriteFloat(b, float64(v.Float32Val()), 32)
-
-	case cbor.KindFloat64:
-		diagWriteFloat(b, v.Float64Val(), 64)
-
-	case cbor.KindSimple:
-		fmt.Fprintf(b, "simple(%d)", v.SimpleVal())
-
-	default:
-		b.WriteString("?")
-	}
-}
-
-// diagWriteNegInt writes the CBOR negative integer -1-n. The arithmetic
-// is unsigned: for n = 2^64-1 the value is -2^64, which overflows both
-// int64 and n+1.
-func diagWriteNegInt(b *strings.Builder, n uint64) {
-	b.WriteByte('-')
-	if n == math.MaxUint64 {
-		b.WriteString("18446744073709551616")
-		return
-	}
-	b.WriteString(strconv.FormatUint(n+1, 10))
-}
-
-// diagWriteTextItem writes a text string followed by indicator.
-// Diagnostic notation has no text form for invalid UTF-8, so such a
-// string is written as its bytes with a comment saying what they are,
-// instead of as text that would read as different, valid characters.
-func diagWriteTextItem(b *strings.Builder, s, indicator string) {
-	if !utf8.ValidString(s) {
-		b.WriteString("/ text, invalid UTF-8 / h'")
-		b.WriteString(hex.EncodeToString([]byte(s)))
-		b.WriteByte('\'')
-		b.WriteString(indicator)
-		return
-	}
-	b.WriteByte('"')
-	diagWriteText(b, s)
-	b.WriteByte('"')
-	b.WriteString(indicator)
-}
-
-func diagWriteFloat(b *strings.Builder, f float64, bits int) {
-	switch {
-	case math.IsInf(f, 1):
-		b.WriteString("Infinity")
-	case math.IsInf(f, -1):
-		b.WriteString("-Infinity")
-	case math.IsNaN(f):
-		b.WriteString("NaN")
-	case f == 0:
-		if math.Signbit(f) {
-			b.WriteString("-0.0")
-		} else {
-			b.WriteString("0.0")
-		}
-	default:
-		s := strconv.FormatFloat(f, 'f', -1, bits)
-		if !strings.Contains(s, ".") {
-			s += ".0"
-		}
-		b.WriteString(s)
-	}
-}
-
-// diagWriteText writes the escaped body of a valid UTF-8 text string.
-func diagWriteText(b *strings.Builder, s string) {
-	for i := 0; i < len(s); {
-		r, size := utf8.DecodeRuneInString(s[i:])
-		switch {
-		case r == '"':
-			b.WriteString(`\"`)
-		case r == '\\':
-			b.WriteString(`\\`)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r < 0x20:
-			fmt.Fprintf(b, "\\u%04x", r)
-		case !unicode.IsPrint(r):
-			if r <= 0xFFFF {
-				fmt.Fprintf(b, "\\u%04x", r)
-			} else {
-				r1, r2 := utf16Surrogates(r)
-				fmt.Fprintf(b, "\\u%04x\\u%04x", r1, r2)
-			}
-		default:
-			b.WriteRune(r)
-		}
-		i += size
-	}
-}
-
-func utf16Surrogates(r rune) (uint16, uint16) {
-	r -= 0x10000
-	return uint16(0xD800 + (r>>10)&0x3FF), uint16(0xDC00 + r&0x3FF)
 }
 
 // argIndicator returns the RFC 8949 §8.1 encoding indicator for a head
@@ -324,7 +151,7 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 		if indef {
 			return off, false
 		}
-		diagWriteNegInt(b, h.Arg)
+		diagfmt.WriteNegInt(b, h.Arg)
 		b.WriteString(o.arg(h))
 		return pos, true
 
@@ -356,7 +183,7 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 				b.WriteString(hex.EncodeToString(chunks))
 				b.WriteByte('\'')
 			} else {
-				diagWriteTextItem(b, string(chunks), "")
+				diagfmt.WriteTextItem(b, string(chunks), "")
 			}
 			return pos, true
 		}
@@ -393,7 +220,7 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 			b.WriteByte('\'')
 			b.WriteString(o.arg(h))
 		} else {
-			diagWriteTextItem(b, string(src[pos:end]), o.arg(h))
+			diagfmt.WriteTextItem(b, string(src[pos:end]), o.arg(h))
 		}
 		return end, true
 
@@ -492,14 +319,14 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 		case h.AI == wire.AI1Byte:
 			fmt.Fprintf(b, "simple(%d)", h.Arg)
 		case h.AI == wire.AI2Bytes:
-			diagWriteFloat(b, wire.DecodeFloat16(uint16(h.Arg)), 64)
+			diagfmt.WriteFloat(b, wire.DecodeFloat16(uint16(h.Arg)), 64)
 		case h.AI == wire.AI4Bytes:
 			f := float64(math.Float32frombits(uint32(h.Arg)))
-			diagWriteFloat(b, f, 32)
+			diagfmt.WriteFloat(b, f, 32)
 			b.WriteString(o.float(h.AI, f))
 		case h.AI == wire.AI8Bytes:
 			f := math.Float64frombits(h.Arg)
-			diagWriteFloat(b, f, 64)
+			diagfmt.WriteFloat(b, f, 64)
 			b.WriteString(o.float(h.AI, f))
 		default:
 			return off, false

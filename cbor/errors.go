@@ -122,3 +122,11 @@ var (
 	// with RejectDuplicateMapKeys).
 	ErrInvalidOption = errors.New("cbor: conflicting options")
 )
+
+// Proposal 025.
+var (
+	// ErrOverflow indicates that a CBOR integer value overflows the
+	// target Go type. The root package's corecbor.ErrOverflow is the
+	// same value.
+	ErrOverflow = errors.New("cbor: integer overflow for target type")
+)

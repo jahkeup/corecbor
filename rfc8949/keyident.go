@@ -31,6 +31,9 @@ const (
 // compare as v0.2.2 did: same Kind and ==, so NaN never equals NaN and
 // half/double never equal single.
 func keysEqual(a, b cbor.Value, legacyFloat bool) bool {
+	if !legacyFloat {
+		return a.Equal(b) // the data-model rule, shared with cbor.Value.Equal
+	}
 	af, bf := isFloat(a.Kind), isFloat(b.Kind)
 	if af || bf {
 		if !af || !bf {

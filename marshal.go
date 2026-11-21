@@ -7,6 +7,8 @@ import (
 	"errors"
 	"reflect"
 	"sync"
+
+	"github.com/jahkeup/corecbor/cbor"
 )
 
 // Marshaler is the interface implemented by types that can marshal
@@ -23,7 +25,7 @@ type Unmarshaler interface {
 
 // ErrOverflow indicates that a CBOR integer value overflows the target
 // Go type (e.g., uint64 max into int64, or negint into uint).
-var ErrOverflow = errors.New("cbor: integer overflow for target type")
+var ErrOverflow = cbor.ErrOverflow
 
 // ErrNotPointer indicates Unmarshal was called with a non-pointer target.
 var ErrNotPointer = errors.New("cbor: unmarshal requires a pointer argument")

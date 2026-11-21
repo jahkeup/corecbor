@@ -28,6 +28,11 @@ The files are checked in for three reasons:
 | `rfc9052.txt` | CBOR Object Signing and Encryption (COSE) | Internet Standard | Downstream consumer; not in scope but referenced for tag-preservation requirements. |
 | `rfc9528.txt` | Ephemeral Diffie-Hellman Over COSE (EDHOC) | Proposed Standard | The `edhoc` module's protocol (proposal 033). |
 | `rfc9529.txt` | Traces of Ephemeral Diffie-Hellman Over COSE (EDHOC) | Informational | Golden test vectors; `edhoc/rfc9529_test.go` parses this file directly (proposal 033). |
+| `rfc9360.txt` | COSE: Header Parameters for Carrying and Referencing X.509 Certificates | Proposed Standard | x5bag/x5chain/x5t/x5u accessors (proposal 028). |
+| `rfc9596.txt` | COSE "typ" (type) Header Parameter | Proposed Standard | `typ` accessor (028). |
+| `rfc9597.txt` | CBOR Web Token (CWT) Claims in COSE Headers | Proposed Standard | CWT Claims header label 15 (028, 031). |
+| `rfc9679.txt` | COSE Key Thumbprint | Proposed Standard | `(*Key).Thumbprint` and its test vector (028). |
+| `rfc9921.txt` | COSE Header Parameter for Timestamp Tokens as Defined in RFC 3161 | Proposed Standard | 3161-ttc / 3161-ctt accessors (028). |
 
 ## Refresh procedure
 
@@ -36,7 +41,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052 9528 9529; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

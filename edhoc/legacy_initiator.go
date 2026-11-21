@@ -126,7 +126,10 @@ func (i *legacyInitiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: ECDH failed: %v", ErrAuthentication, err)
 	}
 
-	i.prk2e = extractPRK2e(sharedSecret)
+	i.prk2e, err = extractPRK2e(sharedSecret)
+	if err != nil {
+		return nil, fmt.Errorf("%w: PRK_2e: %w", ErrAuthentication, err)
+	}
 	i.prk3e2m = i.prk2e
 	i.prk4e3m = i.prk2e
 

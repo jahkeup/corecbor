@@ -15,6 +15,7 @@ import (
 
 	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/cose"
 )
 
 // COSE key parameters (RFC 9053).
@@ -88,48 +89,59 @@ func intVal(n int64) cbor.Value {
 	return cbor.NegInt(uint64(-1 - n))
 }
 
+// coseKeyOf returns pub as a COSE_Key, built with cose's key API so the
+// encoding is the one cose produces and parses (deterministic: kty, crv,
+// x, y). P-curve ECDH keys go through their ECDSA form. cose has no
+// constructor for X25519 keys, so that OKP map is built here and then
+// validated by cose.ParseKey.
 func coseKeyOf(pub crypto.PublicKey) (cbor.Value, error) {
-	okp := func(crv int64, x []byte) cbor.Value {
-		return cbor.MakeMap(
-			cbor.MapEntry{Key: intVal(coseKeyKty), Value: intVal(ktyOKP)},
-			cbor.MapEntry{Key: intVal(coseKeyCrv), Value: intVal(crv)},
-			cbor.MapEntry{Key: intVal(coseKeyX), Value: cbor.Bytes(x)},
-		)
-	}
-	ec2 := func(e *ecdh.PublicKey) (cbor.Value, error) {
-		b := e.Bytes()
-		size := (len(b) - 1) / 2
-		crv := int64(crvP256)
+	if e, ok := pub.(*ecdh.PublicKey); ok {
 		switch e.Curve() {
+		case ecdh.X25519():
+			return x25519COSEKey(e.Bytes())
 		case ecdh.P256():
+			p, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), e.Bytes())
+			if err != nil {
+				return cbor.Value{}, fmt.Errorf("%w: %w", ErrUnsupportedSuite, err)
+			}
+			pub = p
 		case ecdh.P384():
-			crv = crvP384
+			p, err := ecdsa.ParseUncompressedPublicKey(elliptic.P384(), e.Bytes())
+			if err != nil {
+				return cbor.Value{}, fmt.Errorf("%w: %w", ErrUnsupportedSuite, err)
+			}
+			pub = p
 		default:
 			return cbor.Value{}, fmt.Errorf("%w: unsupported EC2 curve", ErrUnsupportedSuite)
 		}
-		return cbor.MakeMap(
-			cbor.MapEntry{Key: intVal(coseKeyKty), Value: intVal(ktyEC2)},
-			cbor.MapEntry{Key: intVal(coseKeyCrv), Value: intVal(crv)},
-			cbor.MapEntry{Key: intVal(coseKeyX), Value: cbor.Bytes(b[1 : 1+size])},
-			cbor.MapEntry{Key: intVal(coseKeyY), Value: cbor.Bytes(b[1+size:])},
-		), nil
 	}
-	switch k := pub.(type) {
-	case ed25519.PublicKey:
-		return okp(crvEd25519, k), nil
-	case *ecdh.PublicKey:
-		if k.Curve() == ecdh.X25519() {
-			return okp(crvX25519, k.Bytes()), nil
-		}
-		return ec2(k)
-	case *ecdsa.PublicKey:
-		e, err := k.ECDH()
-		if err != nil {
-			return cbor.Value{}, fmt.Errorf("%w: %w", ErrUnsupportedSuite, err)
-		}
-		return ec2(e)
+	k, err := cose.NewKeyFromPublic(pub)
+	if err != nil {
+		return cbor.Value{}, fmt.Errorf("%w: cannot build a COSE_Key for %T: %w", ErrUnsupportedSuite, pub, err)
 	}
-	return cbor.Value{}, fmt.Errorf("%w: cannot build a COSE_Key for %T", ErrUnsupportedSuite, pub)
+	enc, err := k.MarshalCBOR()
+	if err != nil {
+		return cbor.Value{}, fmt.Errorf("%w: COSE_Key: %w", ErrUnsupportedSuite, err)
+	}
+	v, err := corecbor.NewDecoder(seqDecOpts...).Decode(enc)
+	if err != nil {
+		return cbor.Value{}, fmt.Errorf("%w: COSE_Key: %w", ErrUnsupportedSuite, err)
+	}
+	return v, nil
+}
+
+// x25519COSEKey builds an OKP X25519 COSE_Key and checks it with
+// cose.ParseKey.
+func x25519COSEKey(x []byte) (cbor.Value, error) {
+	v := cbor.MakeMap(
+		cbor.MapEntry{Key: intVal(coseKeyKty), Value: intVal(ktyOKP)},
+		cbor.MapEntry{Key: intVal(coseKeyCrv), Value: intVal(crvX25519)},
+		cbor.MapEntry{Key: intVal(coseKeyX), Value: cbor.Bytes(x)},
+	)
+	if _, err := cose.ParseKey(item(v)); err != nil {
+		return cbor.Value{}, fmt.Errorf("%w: X25519 COSE_Key: %w", ErrUnsupportedSuite, err)
+	}
+	return v, nil
 }
 
 // publicFromCCS returns the key in a CCS's cnf claim.
@@ -161,56 +173,25 @@ func mapGet(m cbor.Value, label int64) (cbor.Value, bool) {
 	return cbor.Value{}, false
 }
 
-func mapInt(m cbor.Value, label int64) (int64, bool) {
-	v, ok := mapGet(m, label)
-	if !ok {
-		return 0, false
-	}
-	n, err := valueInt(v, "COSE_Key parameter")
-	return n, err == nil
-}
-
-func mapBytes(m cbor.Value, label int64) ([]byte, bool) {
-	v, ok := mapGet(m, label)
-	if !ok || v.Kind != cbor.KindBytes {
-		return nil, false
-	}
-	return v.Bstr, true
-}
-
+// publicFromCOSEKey returns the public key in COSE_Key k, parsed and
+// validated (exact coordinate sizes, on-curve points) by cose.ParseKey.
 func publicFromCOSEKey(k cbor.Value) (crypto.PublicKey, error) {
-	kty, _ := mapInt(k, coseKeyKty)
-	crv, _ := mapInt(k, coseKeyCrv)
-	x, okx := mapBytes(k, coseKeyX)
-	if !okx {
-		return nil, fmt.Errorf("%w: COSE_Key without x", ErrAuthentication)
+	if k.Kind != cbor.KindMap {
+		return nil, fmt.Errorf("%w: COSE_Key must be a map", ErrAuthentication)
 	}
-	switch {
-	case kty == ktyOKP && crv == crvEd25519 && len(x) == ed25519.PublicKeySize:
-		return ed25519.PublicKey(append([]byte{}, x...)), nil
-	case kty == ktyOKP && crv == crvX25519:
-		pub, err := ecdh.X25519().NewPublicKey(x)
-		if err != nil {
-			return nil, fmt.Errorf("%w: COSE_Key: %w", ErrAuthentication, err)
-		}
-		return pub, nil
-	case kty == ktyEC2 && (crv == crvP256 || crv == crvP384):
-		y, oky := mapBytes(k, coseKeyY)
-		curve := elliptic.P256()
-		if crv == crvP384 {
-			curve = elliptic.P384()
-		}
-		size := (curve.Params().BitSize + 7) / 8
-		if !oky || len(x) != size || len(y) != size {
-			return nil, fmt.Errorf("%w: EC2 COSE_Key coordinates", ErrAuthentication)
-		}
-		pub, err := ecdsa.ParseUncompressedPublicKey(curve, append(append([]byte{4}, x...), y...))
-		if err != nil {
-			return nil, fmt.Errorf("%w: COSE_Key: %w", ErrAuthentication, err)
-		}
+	key, err := cose.ParseKey(item(k))
+	if err != nil {
+		return nil, fmt.Errorf("%w: COSE_Key: %w", ErrAuthentication, err)
+	}
+	pub, err := key.PublicKey()
+	if err != nil {
+		return nil, fmt.Errorf("%w: COSE_Key: %w", ErrAuthentication, err)
+	}
+	switch pub.(type) {
+	case ed25519.PublicKey, *ecdh.PublicKey, *ecdsa.PublicKey:
 		return pub, nil
 	}
-	return nil, fmt.Errorf("%w: unsupported COSE_Key (kty %d, crv %d)", ErrAuthentication, kty, crv)
+	return nil, fmt.Errorf("%w: unsupported COSE_Key key type %T", ErrAuthentication, pub)
 }
 
 // samePublic reports whether two public keys are the same key,

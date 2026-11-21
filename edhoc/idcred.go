@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/cose"
 )
 
 // COSE header labels used in ID_CRED_x (RFC 9528 §3.5.3).
@@ -19,12 +20,8 @@ const (
 )
 
 // X5T is a COSE x5t value (RFC 9360): a hash of an X.509 certificate.
-//
-// Proposal 033: replace with cose's X5T once proposal 028 adds it.
-type X5T struct {
-	Alg  int64 // COSE hash algorithm, e.g. -15 (SHA-256/64)
-	Hash []byte
-}
+// It is cose.CertHash, so Matches checks a candidate certificate.
+type X5T = cose.CertHash
 
 // IDCred is a parsed ID_CRED_x (RFC 9528 §3.5.3). Exactly one field is
 // set. A KID is sent in the compact form when it is the only parameter.
@@ -67,7 +64,7 @@ func (id IDCred) full() ([]byte, error) {
 	case id.KID != nil:
 		return encSeq([]byte{0xa1}, intItem(labelKID), bstrItem(id.KID)), nil
 	case id.X5T != nil:
-		return encSeq([]byte{0xa1}, intItem(labelX5T), []byte{0x82}, intItem(id.X5T.Alg), bstrItem(id.X5T.Hash)), nil
+		return encSeq([]byte{0xa1}, intItem(labelX5T), []byte{0x82}, intItem(int64(id.X5T.Alg)), bstrItem(id.X5T.Hash)), nil
 	case id.X5Chain != nil:
 		if len(id.X5Chain) == 1 {
 			return encSeq([]byte{0xa1}, intItem(labelX5Chain), bstrItem(id.X5Chain[0])), nil
@@ -136,7 +133,7 @@ func parseIDCred(v cbor.Value, raw []byte) (IDCred, error) {
 		if err != nil {
 			return IDCred{}, err
 		}
-		return IDCred{X5T: &X5T{Alg: alg, Hash: append([]byte{}, val.Items[1].Bstr...)}}, nil
+		return IDCred{X5T: &X5T{Alg: cose.Algorithm(alg), Hash: append([]byte{}, val.Items[1].Bstr...)}}, nil
 	case labelX5Chain:
 		switch val.Kind {
 		case cbor.KindBytes:

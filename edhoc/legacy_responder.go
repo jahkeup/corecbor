@@ -114,7 +114,10 @@ func (r *legacyResponder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: ECDH failed: %v", ErrAuthentication, err)
 	}
 
-	r.prk2e = extractPRK2e(sharedSecret)
+	r.prk2e, err = extractPRK2e(sharedSecret)
+	if err != nil {
+		return nil, fmt.Errorf("%w: PRK_2e: %w", ErrAuthentication, err)
+	}
 	r.prk3e2m = r.prk2e
 	r.prk4e3m = r.prk2e
 

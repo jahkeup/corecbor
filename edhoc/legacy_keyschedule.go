@@ -5,12 +5,10 @@ package edhoc
 
 import (
 	"crypto/ecdh"
+	"crypto/hkdf"
 	"crypto/sha256"
-	"io"
 
 	"github.com/jahkeup/corecbor/cbor"
-
-	"golang.org/x/crypto/hkdf"
 )
 
 func computeSharedSecret(privKey *ecdh.PrivateKey, peerPub *ecdh.PublicKey) ([]byte, error) {
@@ -51,9 +49,8 @@ func computeTH4(th3, ciphertext3 []byte) []byte {
 }
 
 // PRK_2e = HKDF-Extract(salt="", IKM=ECDH shared secret)
-func extractPRK2e(sharedSecret []byte) []byte {
-	prk := hkdf.Extract(sha256.New, sharedSecret, nil)
-	return prk
+func extractPRK2e(sharedSecret []byte) ([]byte, error) {
+	return hkdf.Extract(sha256.New, sharedSecret, nil)
 }
 
 // EDHOC-KDF: info = CBOR array [transcript_hash, label, length]
@@ -67,12 +64,7 @@ func edhocKDF(prk, transcriptHash []byte, label string, length int) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	r := hkdf.Expand(sha256.New, prk, info)
-	out := make([]byte, length)
-	if _, err := io.ReadFull(r, out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return hkdf.Expand(sha256.New, prk, string(info), length)
 }
 
 func encodeExporterInfo(th4 []byte, label string, context []byte, length int) ([]byte, error) {
@@ -85,10 +77,5 @@ func encodeExporterInfo(th4 []byte, label string, context []byte, length int) ([
 }
 
 func hkdfExpand(prk, info []byte, length int) ([]byte, error) {
-	r := hkdf.Expand(sha256.New, prk, info)
-	out := make([]byte, length)
-	if _, err := io.ReadFull(r, out); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return hkdf.Expand(sha256.New, prk, string(info), length)
 }

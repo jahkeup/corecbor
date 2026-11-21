@@ -21,7 +21,6 @@ proposal lifecycle.
 | [024](024-serialization-profiles-alignment.md) | 1 | Draft | Align encoder modes and checking decoders with CBOR Serialization | corecbor maintainers | 001, 021, 023 | 2026-11-20 |
 | [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
 | [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
-| [027](027-cose-verification-hardening.md) | 3 | In-Progress | COSE verification hardening (Phase 1 done) | corecbor maintainers | 002, 011, 021, 022, 034 | 2026-11-20 |
 | [028](028-cose-signing-and-key-api.md) | 3 | Draft | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 002, 011, 027 | 2026-11-20 |
 | [029](029-cose-algorithms-and-encryption-conformance.md) | 3 | Draft | COSE algorithm registry alignment and encryption conformance | corecbor maintainers | 002, 027, 028 | 2026-11-20 |
 | [030](030-cose-hash-envelope-and-receipts.md) | 3 | Draft | COSE Hash Envelope, COSE Receipts, and SCITT signed statements | corecbor maintainers | 027, 028, 029, 031 | 2026-11-20 |
@@ -34,6 +33,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [027](027-cose-verification-hardening.md) | 3 | Closed | COSE verification hardening | corecbor maintainers | 2026-11-21 | Verify over received protected bytes; fail-closed multi-verify; alg binding, crit, duplicate labels; typed headers, decode limits; cose fuzz in CI. |
 | [022](022-raw-byte-preservation.md) | 1 | Closed | Raw byte preservation through decode | corecbor maintainers | 2026-11-20 | DecodePrefix/DecodeRaw/Cursor; every Unmarshaler gets original bytes; Permissive RawMessage/RawTag splice; Cursor rejects what Decode rejects. apicheck clean. |
 | [021](021-core-codec-safety-fixes.md) | 1 | Closed | Core codec safety fixes | corecbor maintainers | 2026-11-20 | D1–D19: concurrency, arena aliasing, panics on untrusted input, embedded structs, time/bignum, stream encoder, DecodeFrom, wire well-formedness, diagnostics. apicheck clean; golden changes allowlisted. |
 | [001](001-phase-1-foundational-primitives.md) | 1 | Closed | Phase 1: Foundational primitives | corecbor maintainers | 2026-05-20 | All acceptance criteria met. Phases 1-4 implemented. §9 perf targets exceeded. |

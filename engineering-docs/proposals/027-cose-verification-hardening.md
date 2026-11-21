@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 027 |
 | **Tier** | 3 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002 (COSE), 011 (multi-signer), 021 (core codec safety), 022 (raw-byte preservation), 034 (compatibility policy) |
@@ -705,3 +705,4 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 | 2026-11-20 | Decisions: H2 unprotected-alg rule; nil payload = detached; runnable payload examples | corecbor maintainers |
 | 2026-11-20 | Phase 2 done: alg binding (decided rule), crit, duplicate labels, multi external AAD and alg allow-lists, HMAC key checks; implementation notes | corecbor maintainers |
 | 2026-11-20 | Phase 3 done: SetChecked + typed Set, copy-safe headers, error chains, Unmarshal*With/DecodeLimits; Phase 4 targets complete locally | corecbor maintainers |
+| 2026-11-21 | Status: Closed (Phases 1–4 on main; CI green incl. cose fuzz, run 44880682829) | corecbor maintainers |

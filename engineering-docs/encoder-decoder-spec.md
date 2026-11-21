@@ -357,8 +357,16 @@ forbidden.
 | `ErrMaxByteStringLength` | byte/text string length exceeds limit | decoder (always) |
 | `ErrNonStringKey` | `Map.AsMap()` called on map with non-Text keys | helper |
 | `ErrInvalidMode` | encoder constructed with unknown mode | encoder |
+| `ErrTypeMismatch` | CBOR value can't be stored in the Go target type; Cursor read of the wrong major type | reflection / cursor (proposal 023) |
+| `ErrInvalidKind` | `Value` with a Kind the encoder doesn't support | encoder (proposal 023) |
 
-Wrapped errors carry context: `fmt.Errorf("%w at offset %d", ErrTruncated, off)`.
+Decoder errors for malformed or rejected input are `*DecodeError`
+(`Offset`, optional `Path` via `WithErrorPath()`, `Err` = the sentinel);
+read the offset with `errors.As` rather than from the message, whose text
+stays `"<sentinel> at offset N"`. Reflection errors are
+`*UnmarshalTypeError` (`CBORKind`, `GoType`, `Field`, `Err`). The rule
+above is enforced for the root module's library packages by the `err113`
+linter in `make lint` (proposal 023).
 
 ---
 

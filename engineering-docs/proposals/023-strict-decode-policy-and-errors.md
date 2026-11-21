@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 023 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001, 034 (compatibility policy) |
@@ -216,6 +216,62 @@ New sentinels:
 
 New concrete types: `*DecodeError` and `*UnmarshalTypeError`.
 
+### Implementation notes (2026-11-20)
+
+- **`AllowedTags` is `*rfc8949.TagSet`, not a map.** A map field made
+  `rfc8949.DecodeOpts`, and through it `Decoder`, non-comparable;
+  `apidiff` reported that as an incompatible change. `TagSet` is an
+  immutable set (`NewTagSet`, `Contains`, `IDs`) held by pointer.
+  `WithAllowedTags` also turns on `RejectUnknownTags` (so it can be used
+  alone) and accumulates across options.
+- **`Cursor.Skip` applies the tag policy**, the same as `Decode` (it
+  skipped tags unchecked before).
+- **`DecodeError` lives in `internal/decerr`** and is re-exported as the
+  alias `cbor.DecodeError` (and `corecbor.DecodeError`). Callers use the
+  exported `Offset`, `Path` and `Err`; the formatting fields that keep
+  each message byte-identical to v0.2.2 (an appended detail, or a fixed
+  text for the few sites that didn't use "<sentinel> at offset N") can
+  only be set inside the module. Every rfc8949 site goes through
+  `decodeErr`/`decodeErrDetail`/`decodeErrf` in `rfc8949/errors.go`.
+- **Coverage.** `Decode`, `DecodePrefix`/`DecodeRaw`, `DecodeFrom`,
+  sequences, `Cursor` reads and skips, the homogeneous array helpers,
+  memory-budget errors (offset of the item being charged) and `Decode`'s
+  trailing-bytes error (offset of the first trailing byte). Cursor
+  *state* errors (`ErrNotInContainer`) are API misuse, not input errors,
+  and stay plain wrapped sentinels.
+- **`WithErrorPath` needs no frame stack.** Segments are prepended while
+  an error unwinds, so the success path pays nothing; `rfc8949.DecodeOpts`
+  gains `ErrorPath bool`. Syntax is RFC 9535: `.name` for identifier-like
+  text keys, `["text"]` otherwise, `[n]` for integer keys and array
+  indices, `[?]` for other key kinds, `$` at the root. Trailing-bytes
+  errors have no path (they follow the item). Open question 2 is
+  answered RFC 9535.
+- **Reflection.** `*UnmarshalTypeError.Field` is the Go field path built
+  while the error unwinds through struct decodes (`Header.Alg`); for a
+  promoted embedded field it is the promoted field's own name. Its
+  message excludes `Field`, so text is unchanged. Unsettable targets and
+  nil `RawMessage`/`RawTag` receivers wrap `ErrUnsupportedType`;
+  `RawTag` on a non-tag wraps `ErrTypeMismatch`.
+- **Tag helpers** (`AsTime`, `AsBigInt`, `AsNestedCBOR`) now wrap
+  `ErrTypeMismatch` with unchanged messages.
+- **Lint.** `err113` is enabled for the root module's library packages
+  (root, `cbor`, `rfc8949`, `wire`, `internal`). Tests, `cmd/`, `tools/`
+  and the sub-modules are excluded until their own error proposals
+  (027, 031, 032, 033); `relative-path-mode: cfg` keeps the path rules
+  stable when sub-modules are linted from their own directories.
+- **Golden vectors.** `ErrTypeMismatch` and `ErrInvalidKind` are
+  registered for the harness (`golden_sentinels_test.go`), which turns 11
+  vectors from `err:unclassified` into `err:ErrTypeMismatch`
+  (allowlisted). The tag-policy fixes change 7 vectors (allowlisted).
+- **Performance.** Decode benchmarks are flat against `main`. Building
+  the encoder's unsupported-kind error inline cost `EncodeScalars` ~21%
+  (code generation of the hot `encode` switch); it is now built out of
+  line and the benchmark is at parity.
+- **Downstream consumers** using the forgiving pooled decoder and
+  `NewShared(ModeCoreDeterministic, AllowInvalidUTF8())` see no change:
+  no encode output changed, and forgiving-decoder acceptance didn't
+  narrow (only `RejectUnknownTags`/`StrictDecoder` behavior changed).
+
 ---
 
 ## Compatibility selection
@@ -352,3 +408,4 @@ that can decode COSE and CWT.
 | 2026-11-20 | Initial draft from the 2026-11-20 codebase review | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-20 | Status: In-Progress — Phases 1–3 implemented; implementation notes added | corecbor maintainers |

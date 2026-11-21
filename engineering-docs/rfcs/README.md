@@ -46,6 +46,10 @@ The files are checked in for three reasons:
 | `rfc9053.txt` | CBOR Object Signing and Encryption (COSE): Initial Algorithms | Informational | Algorithm definitions: ECDH-ES modes, COSE_KDF_Context, AES-CCM, RSA key parameters (proposal 029). |
 | `rfc9864.txt` | Fully-Specified Algorithms for JSON Object Signing and Encryption (JOSE) and CBOR Object Signing and Encryption (COSE) | Proposed Standard | ESP256/384/512, Ed25519, Ed448 and the deprecation of ES*/EdDSA (029). |
 | `rfc9964.txt` | ML-DSA for JSON Object Signing and Encryption (JOSE) and CBOR Object Signing and Encryption (COSE) | Proposed Standard | ML-DSA-44/65/87 and AKP keys; `cose/mldsa_go127_test.go` parses its Appendix A examples (029). |
+| `rfc9711.txt` | The Entity Attestation Token (EAT) | Proposed Standard | `eat` claim numbering, value constraints, submods, detached bundle (032). |
+| `rfc9782.txt` | Entity Attestation Token (EAT) Media Types | Proposed Standard | EAT media-type constants (032). |
+| `rfc9783.txt` | Arm's Platform Security Architecture (PSA) Attestation Token | Informational | `eat/psa` claims 2394–2400 (032). |
+| `rfc10013.txt` | Entity Attestation Token (EAT) Measured Component | Proposed Standard | Measured-component content carried in `measurements` (032 Phase D). |
 
 ## Refresh procedure
 
@@ -54,7 +58,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200 9668 9053 9864 9964; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200 9668 9053 9864 9964 9711 9782 9783 10013; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

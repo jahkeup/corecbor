@@ -179,13 +179,19 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	}
 }
 
-// encodeOther writes the internal raw kind: a pre-encoded, validated
-// item from Permissive-mode RawMessage/RawTag. It is kept out of line;
-// handling it inside encode's switch cost ~20% on scalar encoding
-// (code generation of that recursive hot function, not extra work).
+// encodeOther splices a raw Value made by rawvalue.Make: a pre-encoded,
+// validated item from Permissive-mode RawMessage/RawTag. A Value that
+// merely carries the raw kind gets the same error as any other
+// unsupported kind. It is kept out of line, marker check included:
+// handling the raw kind inside encode's switch, or inlining the check,
+// cost ~20% on scalar encoding (code generation of that recursive hot
+// function, not extra work).
 //
 //go:noinline
 func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
+	if !rawvalue.Is(v) {
+		return dst, fmt.Errorf("encode: unsupported Value kind %d", v.Kind)
+	}
 	return append(dst, v.Bstr...), nil
 }
 

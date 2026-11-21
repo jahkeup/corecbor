@@ -14,7 +14,7 @@ func EstimateSize(v cbor.Value) int {
 	if v.IsZero() {
 		return 0
 	}
-	if v.Kind == rawvalue.Kind {
+	if rawvalue.Is(&v) {
 		return len(v.Bstr)
 	}
 	switch v.Kind {

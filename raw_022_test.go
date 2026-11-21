@@ -303,3 +303,26 @@ func TestUnmarshalerLargeMapMisalignedDuplicates(t *testing.T) {
 		t.Fatalf("R=%x K=%d, want R=02 K=2", s.R.got, s.K)
 	}
 }
+
+// A Value built by hand with the internal raw kind must not splice
+// bytes: Encode rejects it as an unsupported kind, as v0.2.2 did. Only
+// Marshal's own RawMessage/RawTag handling produces spliceable values.
+func TestRawKindNotForgeable(t *testing.T) {
+	forged := Value{Kind: 0xff, Bstr: []byte{0xff, 0xff}}
+	for _, mode := range []Mode{ModePermissive, ModeCoreDeterministic} {
+		if out, err := New(mode).Encode(nil, forged); err == nil {
+			t.Fatalf("mode %d: Encode(forged raw) = %x, want error", mode, out)
+		}
+	}
+	type S struct {
+		R RawMessage `cbor:"r"`
+	}
+	raw := RawMessage{0xa2, 0x61, 'b', 0x01, 0x61, 'a', 0x02} // {"b": 1, "a": 2}
+	got, err := New(ModePermissive).Marshal(S{R: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := append([]byte{0xa1, 0x61, 'r'}, raw...); !bytes.Equal(got, want) {
+		t.Fatalf("Marshal = %x, want %x", got, want)
+	}
+}

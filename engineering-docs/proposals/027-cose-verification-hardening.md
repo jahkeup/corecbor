@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 027 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002 (COSE), 011 (multi-signer), 021 (core codec safety), 022 (raw-byte preservation), 034 (compatibility policy) |
@@ -392,6 +392,52 @@ cases:
 
 ---
 
+### Implementation notes (Phase 1, 2026-11-20)
+
+- **H1 and the empty protected map.** Decoded headers keep the
+  protected bstr (`Headers.raw`, exposed as `Headers.Raw()`), and every
+  verify/decrypt path uses it. The encoded cache is gone, so
+  `encodeProtected` no longer writes and concurrent verification of one
+  message is race-free (`TestConcurrentVerify`). One exception, from
+  RFC 9052 §3 and §4.4: when the protected map is empty, the
+  Sig/MAC/Enc structures use a zero-length bstr even if the sender
+  encoded `h'a0'`. cose-wg `sign1-tests/sign-pass-01` depends on this,
+  and re-marshaling such a message emits `h''`. `Set` clears `Raw()`.
+  Copies of a `Headers` value still share `params`, so a `Set` through
+  one copy leaves another copy's `Raw()` stale; that aliasing predates
+  this change and stays with H10 in Phase 3.
+- **H11 scope.** Applied to every verifier that takes a payload:
+  `Verify`, `VerifyMulti`, `VerifyMAC0`, `VerifyMACMulti`. A nil payload
+  returns `ErrMissingPayload`; an empty non-nil payload verifies as
+  `h''`, and the decoder keeps `h''` non-nil (`TestVerifyEmptyPayload`).
+  `Signer.Sign(nil)` still yields `Payload: nil`, which marshals as
+  `null` (detached), so verifying that message now needs
+  `VerifyDetached(msg, nil)`; `Sign([]byte{})` produces an attached
+  empty payload.
+- **H6.** `VerifyMulti` returns `ErrVerification` for zero verified
+  signatures, for an empty `Signatures` array, and under `RequireAll`
+  when any signature fails. More than one policy argument is
+  `ErrInvalidKey`.
+- **Extra panic found:** `DecryptMulti` passed the message's IV
+  straight to `gcm.Open`, which panics on a wrong-size nonce. It now
+  returns `ErrDecryption` (`TestDecryptMultiBadIV`). Same class as H5.
+- **DER.** `derToRawECDSA` also rejects zero or negative R/S.
+- **H8.** Counts are also capped at `math.MaxInt32` so the `int`
+  conversion can't wrap on 32-bit platforms.
+- **`make fuzz`** now runs each target from its own package directory,
+  so sub-module targets (cose) run, and it skips hidden directories.
+- **Interop vectors** from cose-wg/Examples (public domain) are embedded
+  in `TestCOSEWGExamples`: `eddsa-sig-01`, `sign-pass-01`,
+  `sign-pass-02`, `HMac-01`, `aes-gcm-enc-01`.
+
+Open issue for Phase 2: cose-wg `sign-pass-01` carries `alg` only in
+the **unprotected** bucket and is a *pass* vector. H2's "alg from the
+protected bucket only" would reject it. RFC 9052 §3.1 requires `alg`
+to be authenticated only "where the ability to change the algorithm
+identifier would provide an attack vector". Phase 2 needs to decide
+whether an unprotected `alg` that matches the key (and allow-list) is
+accepted.
+
 ## Compatibility selection
 
 Classified per [034](034-standards-currency-and-legacy-compatibility.md).
@@ -464,10 +510,10 @@ entries):** `VerifyMulti(msg, verifiers, policy ...VerifyPolicy)`,
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Panics and fail-open: H5, H6, H8, nil guards, DER bounds, H11, H1 (protected bstr retention) | Pending | first nine panic/fail-open rows green |
+| 1 | Panics and fail-open: H5, H6, H8, nil guards, DER bounds, H11, H1 (protected bstr retention) | Done | first nine panic/fail-open rows green |
 | 2 | Policy: H2 alg binding, H3 crit, H4 duplicates, H7 external AAD, HMAC key length | Pending | policy rows green |
 | 3 | Hygiene: H9 Set typing, H10 concurrency docs and race test, H13 error chains, decode limits | Pending | remaining rows green |
-| 4 | Fuzz targets wired into `make fuzz` | Pending | CI 60s clean |
+| 4 | Fuzz targets wired into `make fuzz` | Active (Phase 1 surfaces done) | CI 60s clean |
 
 ---
 
@@ -550,3 +596,4 @@ path, because verify uses `raw`. Signing pre-encodes once in `NewSigner`
 | 2026-11-20 | Initial draft from code review and probe findings | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-20 | Phase 1 implemented (H1, H5, H6, H8, H11, nil guards, DER bounds, DecryptMulti IV); fuzz targets for Phase 1 surfaces; status In-Progress | corecbor maintainers |

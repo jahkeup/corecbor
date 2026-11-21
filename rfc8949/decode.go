@@ -33,6 +33,10 @@ type DecodeOpts struct {
 	RejectUnknownTags      bool
 	RejectNonFiniteFloats  bool
 	RejectNullMapKeys      bool
+	// ReplaceInvalidUTF8 substitutes U+FFFD per invalid byte in decoded
+	// text strings (InvalidUTF8Replace, proposal 035). Ignored when
+	// RejectInvalidUTF8 is set.
+	ReplaceInvalidUTF8 bool
 
 	MaxNestingDepth     int
 	MaxArrayLength      int
@@ -382,7 +386,7 @@ func decodeText(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.V
 	} else {
 		s = string(src[start:end])
 	}
-	return cbor.Text(s), end, nil
+	return cbor.Text(replaceInvalidText(s, &opts)), end, nil
 }
 
 func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int, error) {
@@ -396,7 +400,7 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 			if opts.RejectInvalidUTF8 && !utf8.ValidString(s) {
 				return cbor.Value{}, off, decodeErr(cbor.ErrInvalidUTF8, off)
 			}
-			return cbor.Text(s), off + 1, nil
+			return cbor.Text(replaceInvalidText(s, &opts)), off + 1, nil
 		}
 		h := wire.ParseHead(src[off:])
 		if h.N == 0 {
@@ -553,6 +557,9 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 				} else {
 					s = string(src[pos+1 : end])
 				}
+				if opts.ReplaceInvalidUTF8 {
+					s = replaceInvalidText(s, &opts)
+				}
 				arr[i] = cbor.Text(s)
 				pos = end
 				continue
@@ -699,6 +706,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 					s = zeroCopyString(src, pos+1, end)
 				} else {
 					s = string(src[pos+1 : end])
+				}
+				if opts.ReplaceInvalidUTF8 {
+					s = replaceInvalidText(s, &opts)
 				}
 				k = cbor.Text(s)
 				encodedKey = raw

@@ -18,6 +18,11 @@ const (
 	TagEncodedCBOR    uint64 = 24
 	TagURI            uint64 = 32
 	TagSelfDescribe   uint64 = 55799
+
+	// Non-UTF-8 text in a byte string (IANA): CESU-8, WTF-8, MUTF-8.
+	TagCESU8 uint64 = 272
+	TagWTF8  uint64 = 273
+	TagMUTF8 uint64 = 274
 )
 
 // AsTime interprets a Tag Value with ID 0 or 1 as a time.Time. It

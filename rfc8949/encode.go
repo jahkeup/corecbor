@@ -77,6 +77,10 @@ type EncodeOpts struct {
 	AllowNonFiniteFloats bool
 	AllowInvalidUTF8     bool
 	SkipUTF8Validation   bool
+	// InvalidUTF8 selects how text that is not valid UTF-8 is written
+	// (proposal 035). It applies when neither AllowInvalidUTF8 nor
+	// SkipUTF8Validation is set; the zero value rejects.
+	InvalidUTF8 InvalidUTF8
 	// LegacyBignumPassthrough emits tag 2/3 contents as supplied in
 	// deterministic modes, as v0.2.2 did, instead of stripping leading
 	// zeros and reducing values that fit major type 0/1 (RFC 8949
@@ -114,7 +118,7 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	case cbor.KindText:
 		s := v.Str
 		if !opts.AllowInvalidUTF8 && !opts.SkipUTF8Validation && !utf8.ValidString(s) {
-			return dst, fmt.Errorf("encode text: %w", cbor.ErrInvalidUTF8)
+			return encodeInvalidText(dst, s, opts)
 		}
 		dst = wire.AppendHead(dst, wire.MajorText, uint64(len(s)))
 		return append(dst, s...), nil
@@ -141,6 +145,12 @@ func encode(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 				dst = wire.AppendHead(dst, wire.MajorBytes, uint64(len(elem.Bstr)))
 				dst = append(dst, elem.Bstr...)
 			case cbor.KindText:
+				if textNeedsPolicy(elem.Str, opts) {
+					if dst, err = encodeInvalidText(dst, elem.Str, opts); err != nil {
+						return dst, err
+					}
+					continue
+				}
 				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(elem.Str)))
 				dst = append(dst, elem.Str...)
 			default:
@@ -306,6 +316,12 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 			key := &m[i].Key
 			switch key.Kind {
 			case cbor.KindText:
+				if textNeedsPolicy(key.Str, opts) {
+					if dst, err = encodeInvalidText(dst, key.Str, opts); err != nil {
+						return dst, err
+					}
+					break
+				}
 				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(key.Str)))
 				dst = append(dst, key.Str...)
 			case cbor.KindUint:
@@ -321,6 +337,12 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 			case cbor.KindUint:
 				dst = wire.AppendHead(dst, wire.MajorUint, val.Num)
 			case cbor.KindText:
+				if textNeedsPolicy(val.Str, opts) {
+					if dst, err = encodeInvalidText(dst, val.Str, opts); err != nil {
+						return dst, err
+					}
+					break
+				}
 				dst = wire.AppendHead(dst, wire.MajorText, uint64(len(val.Str)))
 				dst = append(dst, val.Str...)
 			case cbor.KindBytes:

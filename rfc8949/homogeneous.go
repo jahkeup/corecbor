@@ -5,6 +5,7 @@ package rfc8949
 
 import (
 	"math"
+	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/wire"
@@ -197,7 +198,10 @@ func DecodeTextArray(src []byte, opts DecodeOpts) ([]string, int, error) {
 		if end > len(src) {
 			return nil, pos, decodeErr(cbor.ErrTruncated, pos)
 		}
-		result[i] = string(src[start:end])
+		if opts.RejectInvalidUTF8 && !utf8.Valid(src[start:end]) {
+			return nil, pos, decodeErr(cbor.ErrInvalidUTF8, pos)
+		}
+		result[i] = replaceInvalidText(string(src[start:end]), &opts)
 		pos = end
 	}
 	return result, pos, nil

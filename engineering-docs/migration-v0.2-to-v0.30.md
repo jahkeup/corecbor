@@ -257,6 +257,22 @@ peer does not interoperate with a v0.2 peer** unless one side passes
   `OSCORE`, `Close`.
 - **State:** any error is terminal for the session and zeroizes its
   secrets.
+- **X.509 credentials:** set `Peers: edhoc.X509Resolver(policy)` to
+  accept x5chain (by value) and x5t (by reference, via
+  `X509Policy.Certificates`) verified against `X509Policy.Roots` (required;
+  system roots are never used implicitly). Build your own with
+  `X509Credential(chain, byReference)`. CRED_x is the DER leaf as a CBOR
+  byte string. `edhoc.X5T` is now `cose.CertHash`.
+- **CoAP transport (RFC 9528 Appendix A.2, RFC 9668):** `CoAPMessage1`,
+  `CoAPMessageWithCID` and `SplitCoAPPrefix` frame and dispatch requests;
+  `CombinedPayload` / `SplitCombinedPayload` handle the EDHOC + OSCORE
+  request (C_R is the OSCORE 'kid'); `ConnectionID` / `PeerConnectionID`
+  on both endpoints. Constants for the well-known path, media types,
+  Content-Formats 64/65 and the EDHOC option 21.
+- **New sentinels:** `ErrCredentialRejected` (resolver errors),
+  `ErrConnectionIDCollision` (C_I == C_R), `ErrCriticalEAD`. Each also
+  matches the sentinel returned before (`ErrAuthentication`,
+  `ErrMessageFormat` or `ErrStateViolation`).
 
 `NewInitiator(cfg, ...Option)` and `NewResponder(cfg, ...Option)` gain
 optional parameters; existing calls compile unchanged.

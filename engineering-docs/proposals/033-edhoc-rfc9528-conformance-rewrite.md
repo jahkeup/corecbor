@@ -438,10 +438,62 @@ suites 0–6 and 24 (25 needs X448, which neither std nor x/crypto has).
   defect fix; multi-suite v0.2 configs that relied on "first" need
   reordering (migration guide).
 
-**Not yet done (033 stays In-Progress):** RFC 9668 CoAP transport
-helpers; x5chain path validation and x5t lookup beyond a resolver or a
-pinned `PeerCredential`; the README module row still needs the
-"experimental" label (outside the protocol-core change).
+## Implementation notes (follow-ups, 2026-11-21)
+
+- **cose key API (028).** `edhoc.X5T` is an alias of `cose.CertHash`.
+  COSE_Key building and parsing use `cose.NewKeyFromPublic`,
+  `MarshalCBOR`, `ParseKey` and `(*Key).PublicKey`, so credential keys
+  get cose's validation (exact coordinate sizes, on-curve). cose has no
+  constructor for X25519 keys (`*ecdh.PublicKey`), so that OKP map is
+  built in edhoc and validated with `cose.ParseKey`; P-curve ECDH keys
+  go through their ECDSA form. Suggested follow-up for cose:
+  `NewKeyFromPublic` accepting `*ecdh.PublicKey`.
+- **CWT credentials** read `cnf` only through cwt's typed
+  `Confirmation`; the unreachable `ClaimsSet.Private` fallback is gone
+  (031 deprecates `Private`).
+- **Transport (RFC 9528 Appendix A.2, RFC 9668), `edhoc/coap.go`:**
+  `CoAPMessage1`, `CoAPMessageWithCID` (named for both C_R in the
+  forward flow and C_I in the reverse flow, instead of the sketch's
+  `CoAPMessageWithCR`), `SplitCoAPPrefix` (deterministic prefixes
+  only: shortest, definite heads), `CombinedPayload` /
+  `SplitCombinedPayload` for the EDHOC + OSCORE request,
+  `ConnectionID` / `PeerConnectionID` accessors, and constants (path,
+  media types, Content-Formats 64/65, EDHOC option 21). RFC 9668 §3.4
+  Figure 4 is a test vector. The OSCORE layer itself stays out of
+  scope, as planned.
+- **X.509 (`edhoc/x509.go`):** `X509Resolver(X509Policy)` plugs into
+  `Peers` and verifies x5chain / x5t (x5t resolved through
+  `X509Policy.Certificates`, leaf checked against the hash) with
+  `crypto/x509` against required caller-supplied `Roots`;
+  `X509Credential` builds a party's own credential. No config changes.
+- **Sentinels:** `ErrCredentialRejected`, `ErrConnectionIDCollision`,
+  `ErrCriticalEAD`, each wrapped alongside the sentinel the site
+  returned before.
+- **HKDF** in the legacy key schedule moved to `crypto/hkdf`.
+
+### Acceptance status
+
+All gating criteria are met except one:
+
+| Criterion | Status |
+|---|---|
+| `golang.org/x/crypto` removed from `edhoc/go.mod` | **Not met.** Only ChaCha20-Poly1305 remains (suites 4 and 5), which the standard library lacks (Go 1.27). The criterion was written for suites 0 and 2 only; the protocol core added suites 3–6 and 24. **Maintainer decision:** drop suites 4/5 (criterion met) or amend the criterion to "x/crypto only for ChaCha20-Poly1305". |
+| Interop smoke test against an external implementation | Not done (non-gating). |
+
+Tests for the other rows: `TestRFC9529Trace1/2`, `TestSuiteNegotiation_*`,
+`TestRFC_RetrySuites`, `TestRFC_ConnectionIDEncoding`,
+`TestConnectionID_Collision`, `TestRFC_OffCurveP256Rejected`,
+`TestOSCORE` values in the traces, `TestRFC_FailureIsTerminal`,
+`TestRFC_CloseZeroizes`, `TestIDCred_*`, `TestCredential_NoIssuerFallback`,
+`TestCredential_OffCurve`, `TestRFC_UnknownCriticalEADAborts` /
+`TestEAD_UnknownCritical`, `TestPrivateKey_GenericSigner`,
+`TestConfigV022Shape`, `FuzzProcessMessage1–4NeverPanic`,
+`TestCompatDefaultRejectsLegacyPeer`, `TestCompatLegacyPreRFCTranscript`
+with `TestGoldenLegacyReproducesV022`, `TestLegacySelectorDeprecated`,
+apicheck and the golden vectors in `make check`.
+
+**Status stays In-Progress** until the x/crypto decision; the module
+stays marked experimental until 033 closes.
 
 ## Compatibility selection
 
@@ -619,3 +671,4 @@ Phase A doesn't land in a reasonable window, mark the module
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | In-Progress: protocol core per RFC 9528, gated on RFC 9529 traces (both pass); implementation notes | corecbor maintainers |
+| 2026-11-21 | Follow-ups: cose key API, CoAP/RFC 9668 helpers, X.509 resolver, acceptance tests and sentinels; all gating criteria met except x/crypto removal (maintainer decision) | corecbor maintainers |

@@ -72,6 +72,11 @@ func NewAppraiser() *Appraiser {
 }
 
 // Appraise checks the claims against all configured policy requirements.
+//
+// Submodules are appraised only when SubmodPolicy is set; then a nested
+// token that cannot be verified is rejected. Without a SubmodPolicy,
+// claims.Submods is left unexamined: do not treat its contents as
+// verified after Appraise returns.
 func (a *Appraiser) Appraise(claims *Claims) error {
 	return a.AppraiseContext(context.Background(), claims)
 }

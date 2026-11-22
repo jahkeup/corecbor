@@ -98,7 +98,9 @@ type Claims struct {
 	Uptime       *uint64
 	Profile      string // eat_profile, URI form
 	SWComponents []SWComponent
-	// Submods holds submodule attestation evidence. Keys are submodule names.
+	// Submods holds submodule attestation evidence. Keys are submodule
+	// names. Decoding does not verify nested tokens; they are verified
+	// only by an Appraiser with a SubmodPolicy (see Appraiser.Appraise).
 	Submods map[string]Submod
 
 	// DbgStat is dbgstat with explicit presence. On decode it is set

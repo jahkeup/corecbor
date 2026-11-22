@@ -50,6 +50,10 @@ The files are checked in for three reasons:
 | `rfc9782.txt` | Entity Attestation Token (EAT) Media Types | Proposed Standard | EAT media-type constants (032). |
 | `rfc9783.txt` | Arm's Platform Security Architecture (PSA) Attestation Token | Informational | `eat/psa` claims 2394–2400 (032). |
 | `rfc10013.txt` | Entity Attestation Token (EAT) Measured Component | Proposed Standard | Measured-component content carried in `measurements` (032 Phase D). |
+| `rfc9162.txt` | Certificate Transparency Version 2.0 | Experimental | §2.1 Merkle Tree Hash, inclusion and consistency proof verification used by RFC9162_SHA256 receipts (030). |
+| `rfc9942.txt` | CBOR Object Signing and Encryption (COSE) Receipts | Proposed Standard | `cose/receipt`: receipts (394), vds (395), vdp (396), RFC9162_SHA256 proofs (030). |
+| `rfc9943.txt` | An Architecture for Trustworthy and Transparent Digital Supply Chains | Proposed Standard | `scitt` module: signed and transparent statements (030). |
+| `rfc9995.txt` | CBOR Object Signing and Encryption (COSE) Hash Envelope | Proposed Standard | `cose` hash envelope: labels 258/259/260 and their bucket rules (030). |
 
 ## Refresh procedure
 
@@ -58,7 +62,7 @@ These files SHOULD NOT be edited. To refresh from the canonical source
 
 ```bash
 cd engineering-docs/rfcs
-for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200 9668 9053 9864 9964 9711 9782 9783 10013; do
+for rfc in 8949 8742 9562 7049 9052 9528 9529 9360 9596 9597 9679 9921 8943 9090 9164 9277 9581 9781 8392 8747 9200 9668 9053 9864 9964 9711 9782 9783 10013 9162 9942 9943 9995; do
   curl -sSL -o "rfc${rfc}.txt" "https://www.rfc-editor.org/rfc/rfc${rfc}.txt"
 done
 ```

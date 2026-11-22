@@ -6,7 +6,6 @@ package cose
 import (
 	"bytes"
 	"crypto/ecdh"
-	"crypto/ecdsa"
 	"crypto/hpke"
 	"fmt"
 	"slices"
@@ -488,26 +487,12 @@ func hpkePrivateKey(k *Key, p hpkeSuiteParams, want Algorithm) (hpke.PrivateKey,
 
 // ecdhPublic returns k's public key as an *ecdh.PublicKey on curve.
 func ecdhPublic(k *Key, curve ecdh.Curve) (*ecdh.PublicKey, error) {
-	pk, err := k.PublicKey()
+	pub, err := k.ECDHPublicKey()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: not a KEM key: %w", ErrInvalidKey, err)
 	}
-	switch pub := pk.(type) {
-	case *ecdh.PublicKey:
-		if pub.Curve() != curve {
-			return nil, fmt.Errorf("%w: wrong curve for suite", ErrInvalidKey)
-		}
-		return pub, nil
-	case *ecdsa.PublicKey:
-		e, err := pub.ECDH()
-		if err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidKey, err)
-		}
-		if e.Curve() != curve {
-			return nil, fmt.Errorf("%w: wrong curve for suite", ErrInvalidKey)
-		}
-		return e, nil
-	default:
-		return nil, fmt.Errorf("%w: %T is not a KEM key", ErrInvalidKey, pk)
+	if pub.Curve() != curve {
+		return nil, fmt.Errorf("%w: wrong curve for suite", ErrInvalidKey)
 	}
+	return pub, nil
 }

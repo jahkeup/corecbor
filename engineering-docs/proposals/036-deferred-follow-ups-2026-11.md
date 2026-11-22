@@ -43,6 +43,7 @@ none blocks a release.
 | 14 | Add `scitt` to `apicheck` | 030 | after the first release that contains `scitt` | No v0.2.2 baseline exists |
 | 15 | Inline EAT submodules keep original bytes; JSON submods | 032 | consumer request | Re-encoded deterministically today |
 | 16 | `TestMarshalerVerbatimPermissive`-style splice for non-raw Marshalers in Permissive mode | 022 | consumer request | Raw types only today |
+| 17 | Benchmark coverage: every decode/encode path the default options exercise (forgiving maps were uncovered until 2026-11-22) | release check | — | `BenchmarkDecodeItemMapForgiving` added; audit for other gaps |
 
 ## Changelog
 

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 036 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-22 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 018, 021–035 |
@@ -54,3 +54,4 @@ none blocks a release.
 |---|---|---|
 | 2026-11-22 | Filed from the deferred items of 020–035 | corecbor maintainers |
 | 2026-11-22 | Add items 18–20 from 018's closure | corecbor maintainers |
+| 2026-11-22 | Status: In-Progress (streams for items 1–3, 7, 9, 17–20 started) | corecbor maintainers |

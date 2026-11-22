@@ -244,8 +244,19 @@ AES-CCM content algorithms (10–13, 30–33), `AlgChaCha20Poly1305`
 `WithFullySpecifiedAlgorithms`; `ECDHESKey.Alg`, `ECDHESKey.KDF`
 (`ECDHKDFContext`, `PartyInfo`), `KeyAgreer`; `Encrypt0Seal` and
 `Encrypt0Open` (random IV carried in header 5, or `WithPartialIV`; AES-GCM
-and, via `WithEncryptAlgorithms`, AES-CCM), `WithNonce`. Prefer
-`Encrypt0Seal` to `EncryptEncrypt0`, which never transmits its nonce.
+and, via `WithEncryptAlgorithms`, AES-CCM), `WithNonce`.
+
+Deprecated in 029 (behavior unchanged for the v0.x line):
+`EncryptEncrypt0`/`DecryptEncrypt0` (use `Encrypt0Seal`/`Encrypt0Open`,
+which carry the IV in the message) and `HPKEKey` (corecbor's pre-draft
+HPKE format; use `HPKERecipient`).
+
+Experimental in 029 (draft-ietf-cose-hpke-27, behind `WithDraftHPKE27()`;
+code points are the draft's assumed values and will change when IANA
+assigns them): `HPKESeal`/`HPKEOpen` (integrated encryption,
+`WithHPKEInfo`), `HPKERecipient` (key encryption for
+`EncryptMulti`/`DecryptMulti`), `HPKESuite` (`HPKE0`…`HPKE7`). mode_psk
+and the X448 suites return `ErrUnsupportedAlgorithm`.
 
 ## cwt
 

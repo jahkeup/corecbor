@@ -575,10 +575,70 @@ appended to existing functions.
 
 ## Implementation notes
 
-Phases 1, 2 and 4 and most of phase 3 landed on `feat/029-cose-algs`.
-HPKE draft-27 (phase 5) has not started: `HPKEKey` and alg 35 are
-unchanged, are not yet marked deprecated, and there is no
-`WithDraftHPKE27`.
+Phases 1, 2 and 4 and most of phase 3 landed on `feat/029-cose-algs`;
+phase 5 (HPKE), the Encrypt0 deprecations and the AES-CCM move landed
+on `feat/029-remainder`.
+
+**Acceptance status.** Every gating row is met except two, which need a
+maintainer decision (amend the row or change the code):
+
+1. *ESP256 with a P-384 key → `ErrInvalidKey`.* The implementation
+   returns `ErrAlgorithmMismatch`, matching the existing ES256 mismatch
+   error (see RFC 9864 below).
+2. *Partial IV + Base IV reconstructs the OSCORE nonce (RFC 8613 §5.2
+   vector).* `WithPartialIV` implements the RFC 9052 §3.1 construction
+   (Partial IV left-padded and XORed with the Base IV), and
+   `TestEncrypt0PartialIV` checks that. The OSCORE nonce of RFC 8613
+   §5.2 also folds in the sender ID, which is an OSCORE-layer input
+   outside COSE's construction, so no RFC 8613 vector reproduces with
+   this API alone. Suggested amendment: "reconstructs the RFC 9052
+   §3.1 nonce".
+
+**HPKE (phase 5).**
+
+- **API.** `WithDraftHPKE27()` gates everything; it and the rest of
+  the HPKE surface are documented Experimental, naming
+  draft-ietf-cose-hpke-27:
+  - `HPKESeal`/`HPKEOpen` handle integrated encryption on COSE_Encrypt0;
+  - `WithHPKEInfo` sets the integrated-mode HPKE info;
+  - `HPKERecipient` is a key-encryption `KeyDeriver` for
+    `EncryptMulti`/`DecryptMulti`;
+  - `HPKESuite` (`HPKE0`…`HPKE7`) has `IntegratedAlgorithm` and
+    `KeyEncryptionAlgorithm`.
+- **Code points.** The draft's assumed values are used: HPKE-0..7 =
+  35/37/39/41/42/43/44/45, -KE = 46–53, `ek` = −4, `psk_id` = −5. They
+  are deliberately not exported as `Algorithm` constants: exported
+  constants can never change value (034), and IANA hasn't assigned
+  these. `Algorithm(35).String()` keeps the v0.2.2 name.
+- **Structures.** The integrated HPKE AAD is the "Encrypt0"
+  Enc_structure. Key encryption uses the deterministically encoded
+  Recipient_structure as info, which binds `next_layer_alg`
+  (`TestHPKENextLayerAlgBound`). `HPKERecipient.KeyID` is written to
+  the recipient's protected bucket, through an internal
+  `recipientLayerer` hook in `sealRecipients`. `ExtraInfo` is
+  recipient_extra_info, and `AAD` is the optional HPKE AAD.
+- **Unsupported.** mode_psk (`psk_id`, or `PSK`/`PSKID` set) and the
+  X448 suites HPKE-5/6 return `ErrUnsupportedAlgorithm`: Go's
+  `crypto/hpke` implements mode_base only, and Go has no X448.
+  `crypto/hpke` is in Go 1.26, so no build tags are needed
+  (`GOTOOLCHAIN=go1.26.0 go vet` passes in every module).
+- **Vectors.** All 160 draft-27 Appendix C vectors are in
+  `cose/hpke_draft27_vectors_test.go`, generated from the draft text.
+  - 24 integrated vectors decrypt directly.
+  - The 40 AES-GCM key-encryption vectors use 16-byte layer-0 IVs,
+    against RFC 9053 §4.1's 96 bits. `DecryptMulti` rightly rejects
+    them, so `TestHPKEDraft27` verifies them by unwrapping the CEK with
+    `HPKERecipient` and decrypting layer 0 with a 16-byte nonce. This
+    looks like an upstream vector defect worth reporting to the draft
+    authors.
+  - For the 8 HPKE-4-KE vectors, the HPKE layer (ChaCha20-Poly1305
+    inside HPKE) is verified; their layer-0 ChaCha20-Poly1305 content
+    can't be, because it isn't in Go's standard library.
+  - The remaining 88 (64 mode_psk, 24 X448) return
+    `ErrUnsupportedAlgorithm`.
+- **Fuzzing.** `FuzzHPKEOpen` ran 60 s clean.
+- **HPKEKey.** Deprecated, with unchanged behavior for the v0.x line.
+  The v0.2.2 HPKE fixture still decrypts with no selector.
 
 Interpretations and deviations:
 
@@ -631,13 +691,21 @@ Interpretations and deviations:
   COSE_Mac messages never verified (the v0.2.2 fixture shows this).
   `DeriveKey` and `UnderiveKey` keep their v0.2 behavior.
 - **Encrypt0.** The new `Encrypt0Seal` and `Encrypt0Open` carry the IV.
-  `EncryptEncrypt0` and `DecryptEncrypt0` are unchanged and not yet
-  deprecated, because `cwt` (031) still calls them. They should be
-  deprecated once `cwt` moves to the new functions. A message carrying
-  both IV (5) and Partial IV (6) is `ErrMalformed`.
-- **AES-CCM.** AES-CCM is a copy of `edhoc/internal/aesccm` at
-  `cose/internal/aesccm`. `edhoc` still uses its own copy, so the "move"
-  in phase 3 is a copy until a change in `edhoc/` drops it.
+  A message carrying both IV (5) and Partial IV (6) is `ErrMalformed`.
+  - `EncryptEncrypt0` and `DecryptEncrypt0` are now deprecated, with
+    unchanged behavior for the v0.x line.
+  - `cwt.Encrypt`, `cwt.Seal` and `cwt.OpenToken` use the new
+    functions. `cwt.Encrypt` drops the IV header to keep v0.2's "nonce
+    not transmitted" output, which is byte-identical (cwt golden vectors
+    unchanged).
+  - The deprecated `cwt.Decrypt`, which uses the caller's nonce and alg,
+    and the v0.2.2 golden harness keep calling `DecryptEncrypt0`/
+    `EncryptEncrypt0` with a targeted `nolint`, since they pin v0.2
+    semantics.
+- **AES-CCM.** cose and edhoc share one implementation in the root
+  module's `internal/aesccm`. Both sub-modules' import paths are under
+  `github.com/jahkeup/corecbor`, so they may import it, and both copies
+  were removed. RFC 9529 traces still reproduce byte-for-byte.
 - **Tests.** The v0.2.2 compatibility fixtures are in
   `cose/testdata/legacy-v0.2.2/encryption.json`, generated by running
   `EncryptMulti`/`ComputeMACMulti` from the v0.2.2 tag. The interop
@@ -670,3 +738,4 @@ Interpretations and deviations:
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Status In-Progress; phases 1, 2, 4 and most of 3 implemented; implementation notes | corecbor maintainers |
+| 2026-11-22 | Phase 5 HPKE (draft-27) implemented; EncryptEncrypt0/DecryptEncrypt0 and HPKEKey deprecated; cwt migrated; shared internal/aesccm. Two gating rows await a maintainer decision (ESP256/P-384 error class; RFC 8613 Partial IV vector) | corecbor maintainers |

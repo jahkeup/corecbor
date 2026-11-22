@@ -114,6 +114,9 @@ func TestInternCapacityBound(t *testing.T) {
 // Steady state: a decoder with an interner and its internal arena decodes
 // a repeated-key map with no allocations.
 func TestInternSteadyStateZeroAlloc(t *testing.T) {
+	if raceEnabled {
+		t.Skip("sync.Pool drops items under -race")
+	}
 	data := repeatedKeysMap(20)
 	dec := NewDecoder(WithStringIntern(rfc8949.NewStringInterner(64)))
 	if _, err := dec.Decode(data); err != nil { // warm interner and arena

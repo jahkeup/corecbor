@@ -269,19 +269,9 @@ func (u unmarshalState) decodeArray(arr []cbor.Value, target reflect.Value) erro
 		} else {
 			target.SetLen(len(arr))
 		}
-		for i, elem := range arr {
-			if err := u.valueToGo(elem, target.Index(i)); err != nil {
-				return err
-			}
-		}
-		return nil
+		return u.decodeElems(arr, target, len(arr))
 	case reflect.Array:
-		for i := range min(len(arr), target.Len()) {
-			if err := u.valueToGo(arr[i], target.Index(i)); err != nil {
-				return err
-			}
-		}
-		return nil
+		return u.decodeElems(arr, target, min(len(arr), target.Len()))
 	case reflect.Struct:
 		sf := getStructFields(target.Type())
 		if !sf.toArray {
@@ -347,6 +337,122 @@ func untagField(fi *fieldInfo, val cbor.Value, ft reflect.Type) (cbor.Value, err
 // types and structs (which can promote methods from embedded fields).
 // Predeclared and other unnamed types such as string or []byte can't,
 // so the interface checks are skipped for them.
+// decodeElems decodes arr[:n] into the first n elements of a slice or
+// array target. For built-in scalar element types (see plainScalar) the
+// common kinds are set directly, skipping valueToGo's per-element
+// Unmarshaler and special-type checks, which can't apply; the setters
+// are the ones valueToGo calls, so results and errors are identical.
+// Every other kind, and every other element type, goes through
+// valueToGo.
+func (u unmarshalState) decodeElems(arr []cbor.Value, target reflect.Value, n int) error {
+	if !plainScalar(target.Type().Elem()) {
+		for i := range n {
+			if err := u.valueToGo(arr[i], target.Index(i)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if target.Kind() == reflect.Slice && u.decodeTypedSlice(arr[:n], target) {
+		return nil
+	}
+	for i := range n {
+		elem := &arr[i]
+		ev := target.Index(i)
+		var err error
+		switch {
+		case elem.Kind == cbor.KindUint:
+			err = setUint(elem.Num, ev)
+		case elem.Kind == cbor.KindNegInt:
+			err = setNegInt(elem.Num, ev)
+		case elem.Kind == cbor.KindFloat64:
+			err = setFloat(elem.Float64Val(), cbor.KindFloat64, ev)
+		case elem.Kind == cbor.KindFloat32:
+			err = setFloat(float64(elem.Float32Val()), cbor.KindFloat32, ev)
+		case elem.Kind == cbor.KindBool && ev.Kind() == reflect.Bool:
+			ev.SetBool(elem.Num != 0)
+		case elem.Kind == cbor.KindText && ev.Kind() == reflect.String:
+			ev.SetString(elem.Str)
+		default:
+			err = u.valueToGo(*elem, ev)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// decodeTypedSlice fills the most common unnamed scalar slices without
+// per-element reflection when every element is of the one CBOR kind
+// that maps to the element type without conversion or range checks. It
+// reports false, having written nothing observable beyond elements the
+// generic path would also write, when any element needs the generic
+// path; the caller then decodes every element generically.
+func (u unmarshalState) decodeTypedSlice(arr []cbor.Value, target reflect.Value) bool {
+	if !target.CanAddr() {
+		return false
+	}
+	// A pointer in an interface doesn't allocate; the slice header would.
+	switch p := target.Addr().Interface().(type) {
+	case *[]uint64:
+		s := *p
+		for i := range arr {
+			if arr[i].Kind != cbor.KindUint {
+				return false
+			}
+			s[i] = arr[i].Num
+		}
+		return true
+	case *[]string:
+		s := *p
+		for i := range arr {
+			if arr[i].Kind != cbor.KindText {
+				return false
+			}
+			s[i] = arr[i].Str
+		}
+		return true
+	case *[]float64:
+		s := *p
+		for i := range arr {
+			if arr[i].Kind != cbor.KindFloat64 {
+				return false
+			}
+			s[i] = arr[i].Float64Val()
+		}
+		return true
+	case *[]bool:
+		s := *p
+		for i := range arr {
+			if arr[i].Kind != cbor.KindBool {
+				return false
+			}
+			s[i] = arr[i].Num != 0
+		}
+		return true
+	}
+	return false
+}
+
+// plainScalar reports whether t is a predeclared bool, integer, float or
+// string type. Such a type has no methods (so no Unmarshaler,
+// TextUnmarshaler or BinaryUnmarshaler) and is none of the special
+// targets (time.Time, big.Int, cbor.Value, interfaces, pointers).
+func plainScalar(t reflect.Type) bool {
+	if t.PkgPath() != "" {
+		return false
+	}
+	switch t.Kind() {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
+}
+
 func mayHaveMethods(t reflect.Type) bool {
 	if t == stringType || t == bytesType { // the common targets, compared by identity
 		return false

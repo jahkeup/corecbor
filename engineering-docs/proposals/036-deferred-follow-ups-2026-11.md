@@ -52,8 +52,8 @@ none blocks a release.
 | 20 | `Cursor.FindMapKey` on a 50-key map: 2 allocs vs target ≤1 — **done 2026-11-22** | 018 | — | Frames are stored inline: 2 → 1 alloc (the decoded value). Fixed a defect found on the way: `EnterArray`/`EnterMap` didn't count the nested container as an item of its parent, so leaving the parent afterwards failed with `ErrTruncated` or skipped the next sibling (`TestCursorSiblingAfterNested`) |
 | 21 | `Unmarshal` of a 1000-item `[]uint64`: ~23 µs vs ~1.9 µs to `Decode` the same array | 036 item 17 | perf work | `BenchmarkUnmarshalSlice`; per-element reflection |
 | 22 | `DecodeTags`: ~500 allocs for 300 tags | 036 item 17 | perf work | Each tag's one-item `Items` slice is its own allocation, arena or not |
-| 23 | `DecodeFrom`: 28 allocs vs 10 for `Decode` of the same item | 036 item 17 | perf work | Reader buffering |
-| 24 | Stream decode: ~7.8 µs per item vs ~0.7 µs for `Decode` | 036 item 17 | perf work | `BenchmarkStreamDecodeSequence` |
+| 23 | `DecodeFrom`: 28 allocs vs 10 for `Decode` of the same item — **done 2026-11-22** | 036 item 17 | — | 28 → 20 allocs, 4928 → 4352 B, 1.83 → 1.71 µs (−7%). The item reader's buffer and frame stack are pooled; the buffer is reused only after a successful non-`ZeroCopy` decode, when no Value can alias it. The 20 that remain are the decoded value (10 strings, 9 heap container slices) plus the benchmark's `bytes.Reader`, so the reader adds none. `Decode`'s 10 come from the root decoder's internal arena, which `DecodeFrom` doesn't use: its Values outlive the call (034) |
+| 24 | Stream decode: ~7.8 µs per item vs ~0.7 µs for `Decode` — **done 2026-11-22** | 036 item 17 | — | 1.83 → 1.31 µs per item (−28%), 27 → 19 allocs per item. On this machine the gap was 1.8 vs 0.7 µs, not 7.8. `Stream.Next` decodes an item in place from the `BufferedReader` buffer when the whole item is there. It falls back to the item reader, with identical errors, limits and consumption, when the item straddles a refill, the decode fails, or `ZeroCopy`, `Budget` or `Arena` is set. Per item it now matches `rfc8949.Decode` with heap containers (1.23 µs, 19 allocs); the rest of the gap to `Decode` is the arena, as in item 23. `FuzzDecodeFromMatchesDecode` now covers `BufferedReader` and `ZeroCopy`. Adding `ZeroCopy` coverage exposed a panic in `Decode`: a zero-copy empty text string at the end of the input. It is fixed |
 
 ## Results (2026-11-22)
 
@@ -79,6 +79,19 @@ changes are listed; every other benchmark was unchanged within noise.
 (not significant, p=0.06) on a 10-round re-run; the encoder is
 unchanged on this branch, so this is code layout, not a regression.
 
+### Items 23–24
+
+Base `01b8bb0`. Base and head binaries ran interleaved at `-cpu 1`,
+alternating which went first each round. Figures are the min of 10
+rounds at load ~2.5. Every other benchmark was within 2% of base on a
+focused re-run of anything a full run flagged; the full runs drifted
+±5% both ways, including on encoder benchmarks with identical code.
+
+| Benchmark | Before | After | Item |
+|---|---|---|---|
+| `DecodeFrom` | 1.83 µs, 4928 B, 28 allocs | 1.71 µs (−7%), 4352 B, 20 allocs | 23 |
+| `StreamDecodeSequence` (100 items) | 183 µs, 492 KB, 2703 allocs | 131 µs (−28%), 437 KB, 1918 allocs | 24 |
+
 ## Changelog
 
 | Date | Change | Author |
@@ -88,3 +101,4 @@ unchanged on this branch, so this is code layout, not a regression.
 | 2026-11-22 | Status: In-Progress (streams for items 1–3, 7, 9, 17–20 started) | corecbor maintainers |
 | 2026-11-22 | Item 3 done for cwt and eat (behavior-identical accessor adoption) | corecbor maintainers |
 | 2026-11-22 | Items 17, 18, 20 done; 19 criterion amended; 1 partly recovered; 2 measured and deferred; items 21–24 filed from 17 | corecbor maintainers |
+| 2026-11-22 | Items 23, 24 done; zero-copy empty-text panic fixed on the way | corecbor maintainers |

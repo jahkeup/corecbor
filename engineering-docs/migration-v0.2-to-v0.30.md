@@ -1,9 +1,8 @@
 # Migrating from corecbor v0.2.x to v0.30
 
-**Status: draft.** Covers what is on `main` as of proposals 021, 022,
-023, 024 and 027. Sections are added as the remaining proposals
-(025–026, 028–033) land. See `release-notes-v0.30-maintainers.md` for
-the release checklist.
+Covers proposals 020–035, the v0.30 release line. Deferred follow-ups
+are tracked in proposal 036 and are not part of v0.30. See
+`release-notes-v0.30-maintainers.md` for the release checklist.
 
 ## Summary
 

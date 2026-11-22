@@ -185,3 +185,37 @@ func TestClonePreservesValueAcrossDecodes(t *testing.T) {
 		t.Fatalf("cloned[1] = %d, want 99", cloned.Items[1].Num)
 	}
 }
+
+// itemMapFixture is a storage-item-shaped map: 12 text-keyed attributes,
+// each a single-entry variant-tag map, as written by deterministic
+// storage consumers.
+func itemMapFixture() []byte {
+	pairs := make([]MapEntry, 0, 12)
+	for i := range 12 {
+		inner := MakeMap(MapEntry{Key: Text("s"), Value: Text(fmt.Sprintf("value-%d-abcdefgh", i))})
+		if i%3 == 0 {
+			inner = MakeMap(MapEntry{Key: Text("n"), Value: Text(fmt.Sprint(i * 1234))})
+		}
+		pairs = append(pairs, MapEntry{Key: Text(fmt.Sprintf("attr_%02d", i)), Value: inner})
+	}
+	b, err := New(ModeCoreDeterministic).Encode(nil, MakeMap(pairs...))
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+// BenchmarkDecodeItemMapForgiving covers the default (forgiving)
+// decoder on small text-keyed maps, where duplicate detection is a
+// linear scan. The strict map benchmarks don't exercise this path.
+func BenchmarkDecodeItemMapForgiving(b *testing.B) {
+	data := itemMapFixture()
+	dec := NewDecoder()
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	for b.Loop() {
+		if _, err := dec.Decode(data); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

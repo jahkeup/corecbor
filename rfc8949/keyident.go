@@ -321,7 +321,24 @@ func mapInsert(m []cbor.MapEntry, key, val cbor.Value, keyOff int, encodedKey []
 	if opts.KeepDuplicateMapKeys {
 		return append(m, cbor.MapEntry{Key: key, Value: val}), len(m), nil
 	}
-	idx, h := ks.find(m, key, encodedKey, opts)
+	var idx int
+	var h uint64
+	if ks == nil && (key.Kind == cbor.KindText || key.Kind == cbor.KindUint || key.Kind == cbor.KindNegInt) {
+		// Small map with a text or integer key: in the data model such a
+		// key equals another key only if both have the same kind and the
+		// same string or number, so compare directly instead of going
+		// through keysEqual (the forgiving decode hot path).
+		idx = -1
+		for i := range m {
+			k := &m[i].Key
+			if k.Kind == key.Kind && k.Num == key.Num && k.Str == key.Str {
+				idx = i
+				break
+			}
+		}
+	} else {
+		idx, h = ks.find(m, key, encodedKey, opts)
+	}
 	if idx >= 0 {
 		if opts.RejectDuplicateMapKeys {
 			return m, idx, decodeErr(cbor.ErrDuplicateMapKey, keyOff)

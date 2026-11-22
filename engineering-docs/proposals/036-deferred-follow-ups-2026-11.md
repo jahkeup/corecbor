@@ -9,7 +9,7 @@
 | **Status** | Draft |
 | **Filed** | 2026-11-22 |
 | **Owner** | corecbor maintainers |
-| **Depends on** | proposals: 021–035 |
+| **Depends on** | proposals: 018, 021–035 |
 | **Supersedes** | none |
 | **Spec sections touched** | none until an item is picked up |
 
@@ -44,9 +44,13 @@ none blocks a release.
 | 15 | Inline EAT submodules keep original bytes; JSON submods | 032 | consumer request | Re-encoded deterministically today |
 | 16 | `TestMarshalerVerbatimPermissive`-style splice for non-raw Marshalers in Permissive mode | 022 | consumer request | Raw types only today |
 | 17 | Benchmark coverage: every decode/encode path the default options exercise (forgiving maps were uncovered until 2026-11-22) | release check | — | `BenchmarkDecodeItemMapForgiving` added; audit for other gaps |
+| 18 | String interning (`WithStringIntern`) has no tests or benchmark | 018 | next perf pass | Add correctness tests and `BenchmarkDecodeRepeatedKeysIntern` (target: steady-state 0 allocs for repeated keys) |
+| 19 | Arena-only nested-map decode: 10 allocs vs target ≤2 | 018 | perf work | 0 allocs with zero-copy + arena; the remaining allocs are text strings |
+| 20 | `Cursor.FindMapKey` on a 50-key map: 2 allocs vs target ≤1 | 018 | perf work | `BenchmarkCursorFindMapKey` |
 
 ## Changelog
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-11-22 | Filed from the deferred items of 020–035 | corecbor maintainers |
+| 2026-11-22 | Add items 18–20 from 018's closure | corecbor maintainers |

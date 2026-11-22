@@ -12,13 +12,13 @@ proposal lifecycle.
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
 | [036](036-deferred-follow-ups-2026-11.md) | 2 | Draft | Deferred follow-ups from the 2026-11 batch | corecbor maintainers | 021–035 | 2026-11-22 |
-| [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling | corecbor maintainers | 001 | 2026-05-21 |
-| [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
+| [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling (root module only) | corecbor maintainers | 001 | 2026-11-22 |
 
 ## Closed proposals
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [018](018-opt-in-performance-extensions.md) | 2 | Closed | Opt-in performance extensions | corecbor maintainers | 2026-11-22 | All ten extensions implemented and opt-in; three perf/test gaps moved to 036 (items 18–20). |
 | [019](019-encode-throughput-recovery.md) | 2 | Closed | Encode path throughput recovery | corecbor maintainers | 2026-11-22 | EncodeScalars ≈2.4 GiB/s (target ≥850 MB/s); deterministic EncodeNestedMap ≈300 MiB/s (target ≥200 MB/s); no API or unsafe changes. |
 | [017](017-cose-encoder-reuse.md) | 2 | Closed | COSE encoder reuse strategy | corecbor maintainers | 2026-11-22 | Package-level NewShared encoder (concurrency-safe); MarshalSign1 3 allocs/op (target ≤9). |
 | [016](016-value-tagged-union-struct.md) | 1 | Closed | Replace Value interface with tagged-union struct | corecbor maintainers | 2026-11-22 | Value is a struct with a Kind discriminator (v0.2.0); strict nested-map decode ≈124 MiB/s vs ≥80 MB/s target; sub-modules migrated. |

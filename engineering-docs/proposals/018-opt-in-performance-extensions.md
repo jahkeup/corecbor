@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 018 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-05-23 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001, 016 (tagged-union struct) |
@@ -994,3 +994,20 @@ the gap, and only for amd64 (largest deployment target).
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-23 | Initial draft | corecbor maintainers |
+
+## Closure (2026-11-22)
+
+All ten extensions are implemented and opt-in (zero-copy, arena, string
+interning, hashed duplicate detection, presized encode, precomputed map
+order, Cursor, direct stream writes, memory budget, homogeneous
+arrays). Re-verified: hash dedup scales linearly (1000 vs 100 keys ≈10×
+time); `EncodePresized` 1 alloc; `EncodeMapPreordered` 0 allocs;
+`DecodeZeroCopyArena` 0 allocs; `StreamWriteUint` 0 allocs; memory-budget
+tests pass; several acceptance benchmarks exist under different names
+(e.g. `BenchmarkDecodeZeroCopy`, `BenchmarkCursorFindMapKey`,
+`BenchmarkEncodeMapPreordered`).
+
+Closed with three gaps moved to proposal 036 (items 18–20): string
+interning has no tests or benchmark; arena-only nested-map decode makes
+10 allocs (target ≤2; 0 with zero-copy + arena); `Cursor.FindMapKey`
+makes 2 allocs (target ≤1).

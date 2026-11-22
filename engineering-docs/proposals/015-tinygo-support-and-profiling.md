@@ -17,14 +17,21 @@
 
 ## TL;DR
 
-Ensure corecbor compiles and passes tests under TinyGo (targeting
-WASM and ARM Cortex-M), establish a performance baseline on those
-targets, and fix any compatibility issues that surface. "Latent
-support" means TinyGo compatibility is maintained going forward via CI
-gating, not that TinyGo becomes the primary development target.
-Acceptance: `tinygo test ./...` passes for the root module and all
-sub-modules on `wasm` and `thumbv7em` targets; benchmark numbers are
-recorded and tracked.
+**Rescoped 2026-11-22 (maintainer decision): the root module only.**
+Ensure the root `github.com/jahkeup/corecbor` module (packages `.`,
+`cbor`, `rfc8949`, `wire`, `registry`, `internal/...`) compiles and
+passes tests under TinyGo on `wasm` and `thumbv7em`, record a
+performance baseline, and gate it in CI. "Latent support" means TinyGo
+compatibility is maintained via CI, not that TinyGo becomes the primary
+target.
+
+Out of scope: the sibling modules (`cose`, `cwt`, `eat`, `edhoc`,
+`scitt`). Since this proposal was filed they adopted `crypto/mldsa`,
+`crypto/hpke` and `golang.org/x/crypto`, whose TinyGo support is
+uncertain; TinyGo for them would need its own proposal.
+
+Acceptance: `tinygo test ./...` passes for the root module on `wasm` and
+`thumbv7em`; benchmark numbers are recorded and tracked.
 
 ---
 
@@ -130,7 +137,6 @@ reflect support is insufficient.
 | Criterion | Test mechanism | Gating? |
 |---|---|---|
 | `tinygo test -target=wasm ./...` passes (root module) | CI job | Yes |
-| `tinygo test -target=wasm ./...` passes (cose, cwt sub-modules) | CI job | Yes |
 | Binary size of minimal program ≤ 150 KiB (wasm, no-debug) | `tinygo build` + `wc -c` | Yes |
 | Core benchmarks run and produce numbers under TinyGo/wasm | `tinygo test -bench` output recorded | No (informational) |
 | No `//go:build !tinygo` files unless justified in PR description | Code review | Yes |
@@ -232,3 +238,4 @@ fail the library's core audience.
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-21 | Initial draft | corecbor maintainers |
+| 2026-11-22 | Rescoped to the root module (sibling modules now depend on crypto/mldsa, crypto/hpke, x/crypto); sub-module acceptance row removed | corecbor maintainers |

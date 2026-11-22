@@ -5,7 +5,6 @@ package cwt
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"slices"
 
@@ -176,17 +175,13 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 	if err != nil {
 		return nil, err
 	}
-	iv := msg.Unprotected.IV()
-	if iv == nil {
-		iv = msg.Protected.IV()
-	}
-	if iv == nil {
+	if msg.Unprotected.IV() == nil && msg.Protected.IV() == nil {
 		return nil, fmt.Errorf("%w: missing IV header", ErrMalformedClaims)
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	plaintext, err := cose.DecryptEncrypt0(msg, key, iv, alg)
+	plaintext, err := cose.Encrypt0Open(msg, key, cose.WithEncryptAlgorithms(alg))
 	if err != nil {
 		return nil, err
 	}
@@ -205,15 +200,11 @@ func Seal(claims *ClaimsSet, key []byte, alg cose.Algorithm, opts ...cose.Encryp
 	if err != nil {
 		return nil, err
 	}
-	iv := make([]byte, 12) // AES-GCM nonce size (RFC 9053 §4.1)
-	if _, err := rand.Read(iv); err != nil {
-		return nil, err
+	if !slices.Contains(defaultEncryptAlgs, alg) {
+		return nil, fmt.Errorf("%w: %s is not an AES-GCM algorithm", cose.ErrUnsupportedAlgorithm, alg)
 	}
-	msg, err := cose.EncryptEncrypt0(payload, key, iv, alg, opts...)
+	msg, err := cose.Encrypt0Seal(payload, key, alg, opts...)
 	if err != nil {
-		return nil, err
-	}
-	if err := msg.Unprotected.SetIV(iv); err != nil {
 		return nil, err
 	}
 	return cose.MarshalEncrypt0(msg)

@@ -21,6 +21,7 @@ type encryptOpts struct {
 
 	nonce             []byte // WithNonce
 	baseIV, partialIV []byte // WithPartialIV
+	hpkeInfo          []byte // WithHPKEInfo
 }
 
 // WithLegacyPBES2Labels uses the v0.2 PBES2 identifiers, alg -11 and
@@ -108,6 +109,13 @@ func WithLegacyEncryptHeaders() EncryptOption {
 	}
 }
 
+// EncryptEncrypt0 encrypts plaintext into a COSE_Encrypt0 with AES-GCM
+// key and the caller's nonce. The nonce is not written to the message,
+// so the recipient must learn it out of band.
+//
+// Deprecated: use Encrypt0Seal, which generates the IV and carries it in
+// the IV header (label 5). EncryptEncrypt0 keeps working for the life of
+// the v0.x line.
 func EncryptEncrypt0(plaintext, key, nonce []byte, alg Algorithm, opts ...EncryptOption) (*Encrypt0, error) {
 	var o encryptOpts
 	for _, opt := range opts {
@@ -144,6 +152,11 @@ func EncryptEncrypt0(plaintext, key, nonce []byte, alg Algorithm, opts ...Encryp
 	return msg, nil
 }
 
+// DecryptEncrypt0 decrypts a COSE_Encrypt0 with AES-GCM key, the
+// caller's nonce and alg; the message's alg must match alg.
+//
+// Deprecated: use Encrypt0Open, which reads the IV from the message.
+// DecryptEncrypt0 keeps working for the life of the v0.x line.
 func DecryptEncrypt0(msg *Encrypt0, key, nonce []byte, alg Algorithm, opts ...EncryptOption) ([]byte, error) {
 	var o encryptOpts
 	for _, opt := range opts {

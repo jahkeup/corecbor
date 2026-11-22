@@ -387,15 +387,11 @@ func TestExample_Threshold_KofN(t *testing.T) {
 	if _, err := rand.Read(cek); err != nil {
 		t.Fatalf("generating CEK: %v", err)
 	}
-	nonce := make([]byte, 12)
-	if _, err := rand.Read(nonce); err != nil {
-		t.Fatalf("generating nonce: %v", err)
-	}
-
-	// Encrypt the plaintext with the known CEK.
-	msg, err := cose.EncryptEncrypt0(plaintext, cek, nonce, cose.AlgA128GCM)
+	// Encrypt the plaintext with the known CEK. The IV travels in the
+	// message (header 5), so only the CEK has to be split.
+	msg, err := cose.Encrypt0Seal(plaintext, cek, cose.AlgA128GCM)
 	if err != nil {
-		t.Fatalf("EncryptEncrypt0 (threshold): %v", err)
+		t.Fatalf("Encrypt0Seal (threshold): %v", err)
 	}
 
 	// Split the CEK into 3 XOR shares and distribute to trustees.
@@ -422,9 +418,9 @@ func TestExample_Threshold_KofN(t *testing.T) {
 		t.Fatalf("thresholdCoordinator.UnwrapKey: %v", err)
 	}
 
-	decrypted, err := cose.DecryptEncrypt0(msg, recoveredCEK, nonce, cose.AlgA128GCM)
+	decrypted, err := cose.Encrypt0Open(msg, recoveredCEK)
 	if err != nil {
-		t.Fatalf("DecryptEncrypt0 (threshold, all 3 shares): %v", err)
+		t.Fatalf("Encrypt0Open (threshold, all 3 shares): %v", err)
 	}
 
 	if !bytes.Equal(decrypted, plaintext) {
@@ -441,7 +437,7 @@ func TestExample_Threshold_KofN(t *testing.T) {
 	if err != nil {
 		t.Fatalf("thresholdCoordinator.UnwrapKey (1 share): %v", err)
 	}
-	_, err = cose.DecryptEncrypt0(msg, wrongCEK, nonce, cose.AlgA128GCM)
+	_, err = cose.Encrypt0Open(msg, wrongCEK)
 	if err == nil {
 		t.Fatal("expected decryption failure with only 1 share, but succeeded")
 	}
@@ -459,7 +455,7 @@ func TestExample_Threshold_KofN(t *testing.T) {
 	if err != nil {
 		t.Fatalf("thresholdCoordinator.UnwrapKey (wrong share): %v", err)
 	}
-	_, err = cose.DecryptEncrypt0(msg, wrongCEK2, nonce, cose.AlgA128GCM)
+	_, err = cose.Encrypt0Open(msg, wrongCEK2)
 	if err == nil {
 		t.Fatal("expected decryption failure with wrong share, but succeeded")
 	}

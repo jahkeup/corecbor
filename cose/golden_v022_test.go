@@ -241,7 +241,7 @@ func coseGoldenCases() []g.Case {
 
 	// Encrypt0 with fixed key and nonce.
 	enc0 := func(pt, key []byte, alg cose.Algorithm, opts ...cose.EncryptOption) ([]byte, error) {
-		msg, err := cose.EncryptEncrypt0(pt, key, nonce, alg, opts...)
+		msg, err := cose.EncryptEncrypt0(pt, key, nonce, alg, opts...) //nolint:staticcheck // pins the deprecated v0.2.2 API
 		if err != nil {
 			return nil, err
 		}
@@ -252,7 +252,7 @@ func coseGoldenCases() []g.Case {
 		if err != nil {
 			return okOf(err)
 		}
-		pt, err := cose.DecryptEncrypt0(msg, key, n, alg, opts...)
+		pt, err := cose.DecryptEncrypt0(msg, key, n, alg, opts...) //nolint:staticcheck // pins the deprecated v0.2.2 API
 		return hexOf(pt, err)
 	}
 	add("cose/encrypt0/a128gcm", func() string { return hexOf(enc0([]byte("secret"), aesKey, cose.AlgA128GCM)) })

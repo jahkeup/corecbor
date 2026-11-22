@@ -15,7 +15,13 @@ const AlgHPKE_Base_P256_SHA256_AES128GCM Algorithm = 35
 
 // HPKEKey implements KeyDeriver using HPKE (RFC 9180) for key encapsulation.
 // WrapKey uses the recipient's public key to encapsulate the CEK.
-// UnwrapKey uses our private key to decapsulate.
+// UnwrapKey uses our private key to decapsulate. Its format (alg 35 as a
+// recipient algorithm, an ad-hoc info string) predates
+// draft-ietf-cose-hpke and only corecbor reads it; it is unchanged.
+//
+// Deprecated: non-interoperable; use HPKERecipient with WithDraftHPKE27
+// (and its successor once the draft is published as an RFC). HPKEKey
+// keeps working for the life of the v0.x line.
 type HPKEKey struct {
 	// PublicKey is the recipient's public key (used in WrapKey).
 	PublicKey *ecdh.PublicKey

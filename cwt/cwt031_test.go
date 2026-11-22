@@ -579,7 +579,7 @@ func TestCnf_EncryptedKey(t *testing.T) {
 		t.Fatalf("bstr form: %+v, %v", cs, err)
 	}
 	// RFC 8747 §3.3 form: a COSE_Encrypt0.
-	msg, err := cose.EncryptEncrypt0([]byte("cose-key"), aesKey, nonce, cose.AlgA128GCM)
+	msg, err := cose.Encrypt0Seal([]byte("cose-key"), aesKey, cose.AlgA128GCM, cose.WithNonce(nonce))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -594,7 +594,7 @@ func TestCnf_EncryptedKey(t *testing.T) {
 	if err != nil || cs.Confirmation.EncryptedKey == nil || cs.Confirmation.EncryptedKey.Encrypt0 == nil {
 		t.Fatalf("decode: %+v, %v", cs, err)
 	}
-	pt, err := cose.DecryptEncrypt0(cs.Confirmation.EncryptedKey.Encrypt0, aesKey, nonce, cose.AlgA128GCM)
+	pt, err := cose.Encrypt0Open(cs.Confirmation.EncryptedKey.Encrypt0, aesKey)
 	if err != nil || string(pt) != "cose-key" {
 		t.Fatalf("decrypt = %q, %v", pt, err)
 	}

@@ -5,6 +5,7 @@ package cwt
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/jahkeup/corecbor/cose"
 )
@@ -22,10 +23,16 @@ func Encrypt(claims *ClaimsSet, key []byte, nonce []byte, alg cose.Algorithm) ([
 		return nil, err
 	}
 
-	msg, err := cose.EncryptEncrypt0(payload, key, nonce, alg)
+	// v0.2 semantics: AES-GCM only, caller-supplied nonce, and the nonce
+	// is not transmitted, so the IV header Encrypt0Seal writes is dropped.
+	if !slices.Contains(defaultEncryptAlgs, alg) {
+		return nil, fmt.Errorf("%w: %s is not an AES-GCM algorithm", cose.ErrUnsupportedAlgorithm, alg)
+	}
+	msg, err := cose.Encrypt0Seal(payload, key, alg, cose.WithNonce(nonce))
 	if err != nil {
 		return nil, err
 	}
+	msg.Unprotected = cose.Headers{}
 
 	return cose.MarshalEncrypt0(msg)
 }
@@ -46,7 +53,11 @@ func Decrypt(data []byte, key []byte, nonce []byte, alg cose.Algorithm) (*Claims
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
 
-	plaintext, err := cose.DecryptEncrypt0(msg, key, nonce, alg)
+	// Kept on DecryptEncrypt0: it uses the caller's nonce and alg (and
+	// accepts an absent or unprotected alg equal to it), which is this
+	// deprecated function's documented v0.2 behavior and which
+	// Encrypt0Open deliberately doesn't offer.
+	plaintext, err := cose.DecryptEncrypt0(msg, key, nonce, alg) //nolint:staticcheck // preserves v0.2 Decrypt semantics
 	if err != nil {
 		return nil, err
 	}

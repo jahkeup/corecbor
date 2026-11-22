@@ -30,8 +30,9 @@ type KeyUnwrapOpts struct {
 // legacyEncoding carries the deprecated v0.2 wire-format selectors from
 // EncryptOption to the KeyDeriver implementations in this package.
 type legacyEncoding struct {
-	pbes2 bool // WithLegacyPBES2Labels
-	ecdh  bool // WithLegacyECDHES
+	pbes2       bool // WithLegacyPBES2Labels
+	ecdh        bool // WithLegacyECDHES
+	draftHPKE27 bool // WithDraftHPKE27 (not a legacy encoding; carried the same way)
 }
 
 type DirectKey struct {

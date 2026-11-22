@@ -27,6 +27,12 @@ func newRecipientLayer(alg Algorithm) (Headers, []byte, error) {
 	return h, b, nil
 }
 
+// recipientLayerer is implemented by derivers whose COSE_Recipient
+// protected bucket carries more than alg (HPKERecipient adds kid).
+type recipientLayerer interface {
+	recipientLayer(alg Algorithm) (Headers, []byte, error)
+}
+
 // directAgreement reports whether recipients is a single direct key
 // agreement recipient (RFC 9052 §8.5.4), whose agreed key must be used
 // as the content key. More recipients with one of them direct is an
@@ -59,7 +65,14 @@ func directAgreement(recipients []KeyDeriver, legacy legacyEncoding) (KeyAgreer,
 func sealRecipients(cek []byte, contentAlg Algorithm, recipients []KeyDeriver, legacy legacyEncoding) ([]Recipient, error) {
 	out := make([]Recipient, len(recipients))
 	for i, r := range recipients {
-		prot, protBytes, err := newRecipientLayer(recipientAlg(r, legacy))
+		var prot Headers
+		var protBytes []byte
+		var err error
+		if l, ok := r.(recipientLayerer); ok {
+			prot, protBytes, err = l.recipientLayer(recipientAlg(r, legacy))
+		} else {
+			prot, protBytes, err = newRecipientLayer(recipientAlg(r, legacy))
+		}
 		if err != nil {
 			return nil, err
 		}

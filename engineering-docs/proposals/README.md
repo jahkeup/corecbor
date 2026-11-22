@@ -19,7 +19,6 @@ proposal lifecycle.
 | [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
 | [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
 | [028](028-cose-signing-and-key-api.md) | 3 | Draft | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 002, 011, 027 | 2026-11-20 |
-| [029](029-cose-algorithms-and-encryption-conformance.md) | 3 | Draft | COSE algorithm registry alignment and encryption conformance | corecbor maintainers | 002, 027, 028 | 2026-11-20 |
 | [030](030-cose-hash-envelope-and-receipts.md) | 3 | Draft | COSE Hash Envelope, COSE Receipts, and SCITT signed statements | corecbor maintainers | 027, 028, 029, 031 | 2026-11-20 |
 | [031](031-cwt-hardening-and-integration.md) | 3 | Draft | CWT hardening and ACE / SCITT integration | corecbor maintainers | 003, 012, 021, 022, 023, 027, 028 | 2026-11-20 |
 | [032](032-eat-rfc9711-conformance.md) | 3 | Draft | EAT: RFC 9711 conformance | corecbor maintainers | 005, 022, 027, 031 | 2026-11-20 |
@@ -29,6 +28,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [029](029-cose-algorithms-and-encryption-conformance.md) | 3 | Closed | COSE algorithm registry alignment and encryption conformance | corecbor maintainers | 2026-11-22 | RFC 9864 fully-specified algs (opt-in emission), ML-DSA (RFC 9964), RSA sign, AES-CCM, conformant ECDH-ES/PBES2, Encrypt0 IVs, HPKE draft-27 (Experimental), shared internal/aesccm. |
 | [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Closed | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 2026-11-22 | RFC 9529 traces byte-for-byte; all methods, suites 0–6/24; OSCORE export; RFC 9668 CoAP helpers; X.509 credentials; legacy pre-RFC selector. x/crypto only for ChaCha20-Poly1305. |
 | [020](020-default-decode-recovery.md) | 1 | Closed | Default-path decode recovery | corecbor maintainers | 2026-11-21 | Internal auto-reset arena by default; all §9 targets met on the default path (re-verified 2026-11-21). |
 | [035](035-invalid-utf8-text-policy.md) | 1 | Closed | Caller-selected representation of text that is not valid UTF-8 | corecbor maintainers | 2026-11-21 | Reject/Allow/Replace/Lossless on encoder and decoder; TextLossless/AsText; tags 272–274; nested-text validation fixed. |

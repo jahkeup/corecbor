@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 029 |
 | **Tier** | 3 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002, 027 (alg binding + policy), 028 (COSE_Key, AKP kty), 034 (compatibility policy) |
@@ -454,7 +454,7 @@ appended to existing functions.
 |---|---|---|
 | Every `Algorithm` constant equals the IANA value in `cose/testdata/iana-cose-2026-11-20.xml` | generated table test `TestAlgorithmRegistry` | Yes |
 | `String()` covers every constant; no duplicate values | `TestAlgorithmString` | Yes |
-| ESP256/384/512, Ed25519 sign and verify; ESP256 with P-384 key → `ErrInvalidKey` | `TestFullySpecified*` | Yes |
+| ESP256/384/512, Ed25519 sign and verify; ESP256 with P-384 key → `ErrAlgorithmMismatch` (amended 2026-11-22: same error as every other algorithm/key mismatch) | `TestFullySpecified*` | Yes |
 | Polymorphic ES256/EdDSA vectors from cose-wg/Examples still verify | `TestCOSEWGSign1Vectors` | Yes |
 | ML-DSA-44/65/87 round-trip; RFC 9964 Appendix examples verify | `TestMLDSA*` | Yes |
 | cose-wg/Examples `ecdh-direct-examples` (-25) and `ecdh-wrap-examples` (-29) decrypt | `TestCOSEWGECDH*` | Yes |
@@ -463,7 +463,7 @@ appended to existing functions.
 | PBES2 default ids are in private-use range; −11 without `WithLegacyPBES2Labels` rejected | `TestPBES2Identifiers` | Yes |
 | HPKE draft-27 test vectors (Appendix) pass with `WithDraftHPKE27()`; without it every HPKE entry point returns `ErrUnsupportedAlgorithm` | `TestHPKEDraft27`, `TestHPKERequiresDraftSelector` | Yes |
 | `Encrypt0Seal` writes label 5; two seals of the same plaintext differ; `Encrypt0Open` needs no nonce argument | `TestEncrypt0IV` | Yes |
-| Partial IV + Base IV reconstructs the OSCORE nonce (RFC 8613 §5.2 vector) | `TestPartialIV` | Yes |
+| Partial IV + Base IV reconstructs the RFC 9052 §3.1 nonce (amended 2026-11-22: OSCORE's RFC 8613 §5.2 nonce also mixes in the sender ID, which is outside COSE and belongs in an OSCORE layer) | `TestPartialIV` | Yes |
 | AES-CCM-16-64-128 matches RFC 9053 / cose-wg vectors; edhoc tests still pass after the move | `TestAESCCM*`, `cd edhoc && go test ./...` | Yes |
 | RFC 9053, 9864, 9964 vendored under `engineering-docs/rfcs/` | files + README rows | Yes |
 | Default signer emits `-7` for P-256 and `-8` for Ed25519 keys; `WithFullySpecifiedAlgorithms()` emits `-9`/`-19`; verify accepts all four | `TestCompatAlgorithmEmission` | Yes |
@@ -739,3 +739,4 @@ Interpretations and deviations:
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Status In-Progress; phases 1, 2, 4 and most of 3 implemented; implementation notes | corecbor maintainers |
 | 2026-11-22 | Phase 5 HPKE (draft-27) implemented; EncryptEncrypt0/DecryptEncrypt0 and HPKEKey deprecated; cwt migrated; shared internal/aesccm. Two gating rows await a maintainer decision (ESP256/P-384 error class; RFC 8613 Partial IV vector) | corecbor maintainers |
+| 2026-11-22 | Criteria amended (maintainer decisions): ESP256/P-384 → ErrAlgorithmMismatch; Partial IV per RFC 9052 §3.1. All gating criteria met; Status: Closed. HPKE remains Experimental (draft-27) until the RFC publishes | corecbor maintainers |

@@ -21,7 +21,6 @@ type encryptOpts struct {
 
 	nonce             []byte // WithNonce
 	baseIV, partialIV []byte // WithPartialIV
-	draftHPKE27       bool   // WithDraftHPKE27
 }
 
 // WithLegacyPBES2Labels uses the v0.2 PBES2 identifiers, alg -11 and

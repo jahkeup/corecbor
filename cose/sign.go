@@ -139,7 +139,7 @@ func protectedWithAlg(params map[any]any, alg Algorithm) (map[any]any, Algorithm
 		if err != nil {
 			return nil, 0, err
 		}
-		if !sameSignatureFamily(a, alg) && !(isRSAAlg(a) && isRSAAlg(alg)) {
+		if !signerCanEmit(a, alg) {
 			return nil, 0, fmt.Errorf("%w: protected header alg %s, key implies %s", ErrAlgorithmMismatch, a, alg)
 		}
 		alg = a

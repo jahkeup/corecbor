@@ -23,7 +23,7 @@ func loadIANAAlgorithms(t *testing.T) map[Algorithm]ianaAlg {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	out := map[Algorithm]ianaAlg{}
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
@@ -140,7 +140,7 @@ func TestConstantsFrozen(t *testing.T) {
 func TestAlgorithmStringNoDuplicates(t *testing.T) {
 	seen := map[Algorithm]string{}
 	for name, alg := range algorithmConstants() {
-		if prev, ok := seen[alg]; ok && !(alg == 35) {
+		if prev, ok := seen[alg]; ok && alg != 35 {
 			t.Errorf("%s and %s share value %d", prev, name, alg)
 		}
 		seen[alg] = name

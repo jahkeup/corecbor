@@ -65,7 +65,7 @@ func sealRecipients(cek []byte, contentAlg Algorithm, recipients []KeyDeriver, l
 		}
 		ciphertext, headers, err := r.WrapKey(cek, KeyWrapOpts{
 			CEKAlgorithm: contentAlg, CEKLength: len(cek),
-			protected: protBytes, legacy: legacy,
+			protected: string(protBytes), legacy: legacy,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("recipient %d: %w", i, err)
@@ -83,7 +83,7 @@ func agreeRecipient(ka KeyAgreer, contentAlg Algorithm, keyLen int) ([]byte, Rec
 	if err != nil {
 		return nil, Recipient{}, err
 	}
-	cek, headers, err := ka.AgreeKey(KeyWrapOpts{CEKAlgorithm: contentAlg, CEKLength: keyLen, protected: protBytes})
+	cek, headers, err := ka.AgreeKey(KeyWrapOpts{CEKAlgorithm: contentAlg, CEKLength: keyLen, protected: string(protBytes)})
 	if err != nil {
 		return nil, Recipient{}, fmt.Errorf("recipient 0: %w", err)
 	}
@@ -119,6 +119,6 @@ func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLe
 	// UnwrapKey's errors pass through unchanged, as in v0.2.2.
 	return deriver.UnwrapKey(r.Ciphertext, r.Unprotected, KeyUnwrapOpts{
 		CEKAlgorithm: contentAlg, CEKLength: keyLen,
-		protected: protBytes, legacy: o.legacy,
+		protected: string(protBytes), legacy: o.legacy,
 	})
 }

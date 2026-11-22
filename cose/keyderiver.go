@@ -15,7 +15,7 @@ type KeyWrapOpts struct {
 	CEKAlgorithm Algorithm
 	CEKLength    int
 
-	protected []byte // recipient protected bucket, for KDF contexts
+	protected string // recipient protected bucket, for KDF contexts
 	legacy    legacyEncoding
 }
 
@@ -23,7 +23,7 @@ type KeyUnwrapOpts struct {
 	CEKAlgorithm Algorithm
 	CEKLength    int
 
-	protected []byte // recipient protected bucket, for KDF contexts
+	protected string // recipient protected bucket, for KDF contexts
 	legacy    legacyEncoding
 }
 

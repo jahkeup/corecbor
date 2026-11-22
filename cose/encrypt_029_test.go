@@ -184,8 +184,7 @@ func TestECDHESConformant(t *testing.T) {
 		t.Run(alg.String(), func(t *testing.T) {
 			send := &ECDHESKey{
 				PeerPublic: priv.PublicKey(), Alg: alg,
-				PartyU: PartyInfo{Identity: []byte("alice")},
-				PartyV: PartyInfo{Identity: []byte("bob")},
+				KDF: &ECDHKDFContext{PartyU: PartyInfo{Identity: []byte("alice")}, PartyV: PartyInfo{Identity: []byte("bob")}},
 			}
 			msg, err := EncryptMulti([]byte("content"), AlgA256GCM, []KeyDeriver{send})
 			if err != nil {

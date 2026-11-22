@@ -13,8 +13,6 @@ import (
 // crypto/mldsa first ships in Go 1.27. Built with an older toolchain,
 // ML-DSA algorithms and AKP keys return ErrUnsupportedAlgorithm.
 
-const mldsaSupported = false
-
 func mldsaAlgForPublic(crypto.PublicKey) (Algorithm, bool) { return 0, false }
 
 func mldsaSign(_ crypto.Signer, alg Algorithm, _ []byte) ([]byte, error) {

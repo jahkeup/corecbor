@@ -273,6 +273,13 @@ func fullySpecifiedFor(a Algorithm) Algorithm {
 	return 0
 }
 
+// signerCanEmit reports whether a signer whose key implies implied may
+// sign with a: a member of the same family, or any RSA algorithm for an
+// RSA key (PS256 is only the default).
+func signerCanEmit(a, implied Algorithm) bool {
+	return sameSignatureFamily(a, implied) || (isRSAAlg(a) && isRSAAlg(implied))
+}
+
 // sameSignatureFamily reports whether a and b select the same signature
 // operation: equal algorithms, or a polymorphic identifier and its
 // fully-specified replacement (ES256 and ESP256, EdDSA and Ed25519, …).

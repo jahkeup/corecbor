@@ -24,7 +24,7 @@ func NewSignerFromKey(k *Key, opts ...SignerOption) (*Signer, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !sameSignatureFamily(a, implied) && !(isRSAAlg(a) && isRSAAlg(implied)) {
+		if !signerCanEmit(a, implied) {
 			return nil, fmt.Errorf("%w: key alg %s, key type implies %s", ErrInvalidKey, a, implied)
 		}
 		opts = append([]SignerOption{withKeyAlgorithm(a)}, opts...)

@@ -15,8 +15,6 @@ import (
 // signature is over the COSE ToBeSigned bytes directly, with an empty
 // context (RFC 9964 §4); private keys are 32-byte seeds.
 
-const mldsaSupported = true
-
 func mldsaParams(alg Algorithm) (mldsa.Parameters, bool) {
 	switch alg {
 	case AlgMLDSA44:

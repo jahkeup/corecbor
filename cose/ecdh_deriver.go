@@ -71,10 +71,25 @@ type ECDHESKey struct {
 
 	// Alg is the ECDH-ES algorithm; zero means AlgECDH_ES_HKDF_256.
 	Alg Algorithm
-	// PartyU and PartyV feed the key-derivation context.
+	// KDF holds optional key-derivation inputs; nil means none.
+	KDF *ECDHKDFContext
+}
+
+// ECDHKDFContext holds the optional inputs to ECDH-ES key derivation
+// (RFC 9053 §5): the PartyU and PartyV context entries, and the HKDF
+// salt (header -20), where nil means none. It is a separate struct, held
+// by pointer, so that ECDHESKey stays comparable.
+type ECDHKDFContext struct {
 	PartyU, PartyV PartyInfo
-	// Salt is the HKDF salt (header -20); nil means none.
-	Salt []byte
+	Salt           []byte
+}
+
+// kdf returns e's key-derivation inputs, or the zero context.
+func (e *ECDHESKey) kdf() ECDHKDFContext {
+	if e.KDF == nil {
+		return ECDHKDFContext{}
+	}
+	return *e.KDF
 }
 
 func (e *ECDHESKey) Algorithm() Algorithm {
@@ -239,15 +254,16 @@ func (e *ECDHESKey) ephemeralAgreement() ([]byte, Headers, error) {
 	if err != nil {
 		return nil, Headers{}, err
 	}
+	c := e.kdf()
 	params := map[any]any{headerLabelEphemeralKey: epk}
 	for label, v := range map[int64][]byte{
-		headerLabelSalt:           e.Salt,
-		headerLabelPartyUIdentity: e.PartyU.Identity,
-		headerLabelPartyUNonce:    e.PartyU.Nonce,
-		headerLabelPartyUOther:    e.PartyU.Other,
-		headerLabelPartyVIdentity: e.PartyV.Identity,
-		headerLabelPartyVNonce:    e.PartyV.Nonce,
-		headerLabelPartyVOther:    e.PartyV.Other,
+		headerLabelSalt:           c.Salt,
+		headerLabelPartyUIdentity: c.PartyU.Identity,
+		headerLabelPartyUNonce:    c.PartyU.Nonce,
+		headerLabelPartyUOther:    c.PartyU.Other,
+		headerLabelPartyVIdentity: c.PartyV.Identity,
+		headerLabelPartyVNonce:    c.PartyV.Nonce,
+		headerLabelPartyVOther:    c.PartyV.Other,
 	} {
 		if len(v) > 0 {
 			params[label] = v
@@ -260,7 +276,8 @@ func (e *ECDHESKey) ephemeralAgreement() ([]byte, Headers, error) {
 // algID and keyLen bytes (RFC 9053 §5.1-5.2). protected is the
 // recipient's protected bucket. Salt and party values in h (received
 // headers) take precedence over the ECDHESKey's own.
-func (e *ECDHESKey) derive(v ecdhVariant, shared []byte, algID Algorithm, keyLen int, protected []byte, h Headers) ([]byte, error) {
+func (e *ECDHESKey) derive(v ecdhVariant, shared []byte, algID Algorithm, keyLen int, protected string, h Headers) ([]byte, error) {
+	c := e.kdf()
 	pick := func(label int64, own []byte) []byte {
 		if b, ok := h.Get(label).([]byte); ok {
 			return b
@@ -268,20 +285,20 @@ func (e *ECDHESKey) derive(v ecdhVariant, shared []byte, algID Algorithm, keyLen
 		return own
 	}
 	partyU := PartyInfo{
-		Identity: pick(headerLabelPartyUIdentity, e.PartyU.Identity),
-		Nonce:    pick(headerLabelPartyUNonce, e.PartyU.Nonce),
-		Other:    pick(headerLabelPartyUOther, e.PartyU.Other),
+		Identity: pick(headerLabelPartyUIdentity, c.PartyU.Identity),
+		Nonce:    pick(headerLabelPartyUNonce, c.PartyU.Nonce),
+		Other:    pick(headerLabelPartyUOther, c.PartyU.Other),
 	}
 	partyV := PartyInfo{
-		Identity: pick(headerLabelPartyVIdentity, e.PartyV.Identity),
-		Nonce:    pick(headerLabelPartyVNonce, e.PartyV.Nonce),
-		Other:    pick(headerLabelPartyVOther, e.PartyV.Other),
+		Identity: pick(headerLabelPartyVIdentity, c.PartyV.Identity),
+		Nonce:    pick(headerLabelPartyVNonce, c.PartyV.Nonce),
+		Other:    pick(headerLabelPartyVOther, c.PartyV.Other),
 	}
-	info, err := kdfContext(algID, keyLen, protected, partyU, partyV)
+	info, err := kdfContext(algID, keyLen, []byte(protected), partyU, partyV)
 	if err != nil {
 		return nil, err
 	}
-	salt := pick(headerLabelSalt, e.Salt)
+	salt := pick(headerLabelSalt, c.Salt)
 	key, err := hkdf.Key(v.hash, shared, salt, string(info), keyLen)
 	if err != nil {
 		return nil, fmt.Errorf("%w: HKDF: %w", ErrInvalidKey, err)

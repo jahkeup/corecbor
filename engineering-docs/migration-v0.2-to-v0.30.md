@@ -289,6 +289,10 @@ All additive; nothing existing changes.
 
 ## cwt
 
+- Integer claim handling uses corecbor's checked `Value.Int64` /
+  `Uint64` accessors (036 item 3). Behavior is unchanged from the
+  031 rules: integers beyond int64 never wrap onto other claim keys,
+  private-claim values or times.
 - `Validator.Validate` returns `ErrInvalidValidator` for a negative
   `Leeway` (021 D17); it used to tighten the validity window silently.
 
@@ -374,6 +378,10 @@ peer does not interoperate with a v0.2 peer** unless one side passes
 optional parameters; existing calls compile unchanged.
 
 ## eat (032)
+
+Integer claim handling (claim keys, oemid PEN, detached-digest
+algorithm, PSA integers) uses corecbor's checked `Value.Int64` /
+`Uint64` accessors (036 item 3); behavior is unchanged from 032.
 
 The package now uses the IANA CWT claim keys (RFC 9711). v0.2 used
 draft-era keys for four claims, so **v0.2-issued tokens carrying

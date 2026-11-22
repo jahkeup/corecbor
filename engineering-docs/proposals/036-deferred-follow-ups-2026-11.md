@@ -29,7 +29,7 @@ none blocks a release.
 |---|---|---|---|---|
 | 1 | Strict decode of maps with >16 entries is ~15% slower (`DecodeStrictLargeMap100/1000`), `DecodeNestedMapStrict` ~5% | 024 (accepted trade-off) | perf work | Per-key cost in the strict hashed path (`find`/`mapInsert`, `DecodeOpts` size) |
 | 2 | `RawMessage` struct decode +3–4% vs pre-025 main | 022, 025 | perf work | Decoder-recorded item offsets would remove the span walk |
-| 3 | Sibling modules adopt `Value.Int64`/`Uint64`/`Get*` | 025 Phase C | next behavior-change window | In cwt/eat this turns silent integer wrapping into errors, which golden vectors pin; needs a 034 classification |
+| 3 | ~~Sibling modules adopt `Value.Int64`/`Uint64`/`Get*`~~ **Done (cwt, eat) 2026-11-22** | 025 Phase C | — | Every integer narrowing site in cwt/eat was already range-checked by 031/032 (no wrapping left), so adoption is behavior-identical: `claimKeyOf`, `fromValue`, `parseNumericDate`, ACE `exi`, eat `intKey`/`parseUintClaim`, `psa.intOf` now use `Int64`/`Uint64`; boundary tests added; no golden changes. Map loops dispatch every entry, so `Get*` doesn't apply. cose/edhoc sites not in scope here |
 | 4 | RFC 8746 typed arrays | 026 Phase D | consumer request | — |
 | 5 | Concise Diagnostic Notation alignment | 026 Phase E | draft-ietf-cbor-edn-literals publishes | `DiagCDN()` reserved |
 | 6 | Ed448 / X448 sign, verify and ECDH | 028, 029, 033 | standard library support | Parse/marshal only today; EDHOC suite 25 and HPKE-5/6 blocked on it |
@@ -55,3 +55,4 @@ none blocks a release.
 | 2026-11-22 | Filed from the deferred items of 020–035 | corecbor maintainers |
 | 2026-11-22 | Add items 18–20 from 018's closure | corecbor maintainers |
 | 2026-11-22 | Status: In-Progress (streams for items 1–3, 7, 9, 17–20 started) | corecbor maintainers |
+| 2026-11-22 | Item 3 done for cwt and eat (behavior-identical accessor adoption) | corecbor maintainers |

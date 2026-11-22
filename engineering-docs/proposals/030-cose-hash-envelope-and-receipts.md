@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 030 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 027 (raw protected bytes, policy), 028 (header options, detached, typed accessors), 029 (RFC 9054 hash identifiers); CWT proposal (031) for the `scitt` module only, 034 (compatibility policy) |
@@ -299,12 +299,12 @@ parameters are appended to existing functions.
 | RFC 9995 example hash-envelope Sign1 verifies; label-3-present and 258-unprotected variants rejected | `TestHashEnvelopeRFC9995` | Yes |
 | Digest/preimage mismatch → `ErrVerification` | `TestHashEnvelopePreimage` | Yes |
 | RFC 9942 example receipt verifies for its example leaf | `TestReceiptRFC9942Example` | Yes |
-| RFC 9162 inclusion/consistency vectors (RFC 9162 test data or CT reference vectors) pass | `TestMerkleRFC9162Vectors` | Yes |
+| RFC 9162 inclusion/consistency vectors (RFC 9162 test data or CT reference vectors) pass | `TestMerkleCTVectors`, `TestMerkleRootVectors`, `TestMerkleExhaustive` | Yes |
 | Off-by-one leaf index, short path, 33-byte node → error, no panic | `TestMerkleMalformed` | Yes |
 | Untagged receipt or non-null payload rejected | `TestReceiptShape` | Yes |
 | E2E: `scitt.Issue` → local log `receipt.Issue` → `Attach` → `VerifyTransparent` | `TestSCITTEndToEnd` | Yes |
 | CWT claims in unprotected bucket → `ParseStatement` error | `TestStatementClaimsBucket` | Yes |
-| Fuzz: receipt parse and Merkle verify never panic (60s) | `FuzzReceiptParse`, `FuzzInclusionVerify` | Yes |
+| Fuzz: receipt parse and Merkle verify never panic (60s) | `FuzzReceiptParse`, `FuzzInclusionVerify`, `FuzzConsistencyVerify`, `FuzzParseStatement` | Yes |
 | RFC 9942, 9943, 9995 (and RFC 9162 for Merkle) vendored under `engineering-docs/rfcs/` | files + README rows | Yes |
 | Signed statements built with and without `WithFullySpecifiedAlgorithms()` both verify, and receipts over each verify | `TestSignedStatementAlgorithmEmission` | Yes |
 | No draft-only behavior (SCRAPI, CCF profile) is reachable without a `WithDraft…` selector | API review | Yes |
@@ -317,9 +317,9 @@ parameters are appended to existing functions.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Hash envelope in `cose` (needs 028 Phase 1) | Pending | hash-envelope rows green |
-| 2 | `cose/receipt`: Merkle + parse + verify inclusion/consistency + issue | Pending | receipt rows green |
-| 3 | `scitt` module (needs CWT proposal 031 for `ClaimsSet` with protected-header helpers) | Pending | E2E row green |
+| 1 | Hash envelope in `cose` (needs 028 Phase 1) | Done | hash-envelope rows green |
+| 2 | `cose/receipt`: Merkle + parse + verify inclusion/consistency + issue | Done | receipt rows green |
+| 3 | `scitt` module (needs CWT proposal 031 for `ClaimsSet` with protected-header helpers) | Done | E2E row green |
 
 ---
 
@@ -397,6 +397,89 @@ parameters are appended to existing functions.
 
 ---
 
+## Implementation notes
+
+All three phases landed on `feat/030-receipts`. SCRAPI
+(`draft-ietf-scitt-scrapi-11`) and the CCF receipt profile are still
+watch items: nothing draft-only is implemented, so no `WithDraft…`
+selector exists. Labels 258–260 and 394–396, VDS `RFC9162_SHA256` (1),
+and proof types −1/−2 were checked against the live IANA COSE Header
+Parameters and Verifiable Data Structure registries.
+
+Interpretations and deviations from the API sketch above:
+
+- **Examples.** The RFC 9995, 9942 and 9943 examples elide digests,
+  hashes and signatures, so the tests rebuild them structurally
+  (`TestHashEnvelopeRFC9995`, `TestReceiptRFC9942Example`,
+  `TestReceiptsAttached`, `TestReceiptConsistency`). The proof bytes for
+  tree size 8, leaf 7 match the RFC 9943 prefix `83080783`
+  (`TestReceiptRFC9943ProofBytes`).
+- **Merkle vectors.** RFC 9162 has no test vectors. The CT reference
+  probes from transparency-dev/merkle (Apache-2.0) are vendored under
+  `cose/receipt/internal/merkle/testdata/ct/` with provenance, along with
+  the CT root hashes for 0–8 leaves. They are cross-checked with an
+  exhaustive generate-and-verify run for trees up to 64 leaves. RFC 9162
+  §2.1.4.2 requires `first < second`, so the two CT probes that accept
+  an empty proof between equal sizes are rejected here on purpose.
+- **Empty inclusion path.** The CDDL says `[+ bstr]`, but a tree of
+  size 1 has an empty path. An empty path is accepted only when the tree
+  shape calls for one. Every path length must match the shape exactly.
+- **Hash envelope.** `SignHashEnvelopeMessage` and
+  `VerifySign1HashEnvelope` were added so that envelopes can carry
+  other protected parameters (CWT Claims) and use a `KeyResolver`.
+  `HashEnvelopeFrom` exposes the header rules on their own. SHA-256,
+  SHA-384, SHA-512 and SHA-512/256 are supported. The "Filter Only"
+  hashes (SHA-1, SHA-256/64) are `ErrUnsupportedAlgorithm`.
+- **Receipts.**
+  - `Issue` and `IssueConsistency` take a `ctx` and are marked
+    experimental (open question 2).
+  - `VerifyInclusionHash` answers open question 1.
+  - `VerifyConsistency(ctx, older, olderEntry, newer, keys, opts...)`
+    takes the older receipt's entry, because the older root can only be
+    recomputed from it. `VerifyConsistencyFrom` takes a known old root.
+  - When a receipt carries several inclusion proofs, all of them must
+    give the signed root, so the receipt yields one boolean result.
+  - A receipt carrying both inclusion and consistency proofs is
+    `ErrMalformed`.
+  - Every receipt and Merkle failure wraps `cose.ErrVerification`
+    through `receipt.ErrProof`.
+  - `Receipts` reads label 394 from either bucket, and `Attach` writes
+    it to the unprotected bucket.
+  - `receipt.Tree` is an experimental in-memory log for tests and small
+    operators.
+- **SCITT.**
+  - `ParseStatement` enforces RFC 9943 §6:
+    - tag 18;
+    - CWT Claims protected-only, with iss and sub;
+    - a protected kid unless x5t or x5chain is protected;
+    - with x5, an iss of 1–8192 characters that is a URI if it
+      contains `:`.
+  - `Entry` sets the unprotected bucket to `{}` before registration,
+    which is the leaf that receipts prove.
+  - Receipts must carry protected CWT Claims with iss and sub.
+    `ReceiptHeaders` builds them.
+  - `Verify` also takes detached payloads, preimages,
+    `SkipIssuerSignature` (receipts only, §7.1) and per-party verifier
+    options.
+  - `IssueOptions` adds `Claims` (extra claims) and `X5T`.
+    `Statement` adds `HashEnvelope`.
+  - New sentinels: `scitt.ErrInvalidStatement` (wraps `cose.ErrMalformed`)
+    and `scitt.ErrInsufficientReceipts` (wraps `cose.ErrVerification`).
+- **034.** All changes are additive, and apicheck is clean. No cose
+  sentinels were added, and the golden vectors are unchanged. The
+  `cose/receipt` and `scitt` sentinels are not in the cose golden-error
+  harness: `scitt` is a separate module, and importing `cose/receipt`
+  from the cose harness would create an import cycle. Neither package
+  has v0.2.2 vectors. `scitt` has no v0.2.2 baseline, so it is not in
+  the apicheck module list.
+- **Performance.** Recomputing an inclusion root for a 2^20-leaf tree
+  (20-hash path) takes about 1.3 µs/op, 640 B and 20 allocations
+  (`BenchmarkVerifyInclusionMerkle`), before the signature check.
+  `BenchmarkSignHashEnvelopeDigest` was not added, because signing a
+  digest is a plain `Sign1` call.
+
+---
+
 ## Changelog
 
 | Date | Change | Author |
@@ -404,3 +487,4 @@ parameters are appended to existing functions.
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | Phases 1–3 implemented; status In-Progress; implementation notes | corecbor maintainers |

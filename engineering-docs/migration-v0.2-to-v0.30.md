@@ -258,6 +258,36 @@ assigns them): `HPKESeal`/`HPKEOpen` (integrated encryption,
 `EncryptMulti`/`DecryptMulti`), `HPKESuite` (`HPKE0`…`HPKE7`). mode_psk
 and the X448 suites return `ErrUnsupportedAlgorithm`.
 
+### Hash envelopes, receipts and SCITT (030)
+
+All additive; nothing existing changes.
+
+- Hash envelopes (RFC 9995), in `cose`:
+  - header labels `HeaderPayloadHashAlg` (258),
+    `HeaderPreimageContentType` (259) and `HeaderPayloadLocation` (260);
+  - the `HashEnvelope` type and `HashEnvelopeFrom`;
+  - `Signer.SignHashEnvelope`, `SignHashEnvelopeDigest` and
+    `SignHashEnvelopeMessage`;
+  - `Verifier.VerifyHashEnvelope` and `VerifySign1HashEnvelope`.
+
+  Envelopes reject content type (label 3) and accept 258–260 only in the
+  protected bucket.
+- New package `cose/receipt` (RFC 9942 receipts over RFC 9162 Merkle
+  trees):
+  - `Parse`;
+  - `Receipt.VerifyInclusion`, `VerifyInclusionHash` and
+    `VerifyConsistencyFrom`;
+  - `VerifyConsistency`;
+  - `Attach` and `Receipts`, which manage label 394;
+  - experimental `Issue`, `IssueConsistency` and `Tree`, for log
+    operators and tests.
+- New module `github.com/jahkeup/corecbor/scitt` (RFC 9943 signed and
+  transparent statements):
+  - `Issue`, `ParseStatement`, `Entry`, `ReceiptHeaders`, `Verify` and
+    `VerifyTransparent`;
+  - sentinels `ErrInvalidStatement` (wraps `cose.ErrMalformed`) and
+    `ErrInsufficientReceipts` (wraps `cose.ErrVerification`).
+
 ## cwt
 
 - `Validator.Validate` returns `ErrInvalidValidator` for a negative

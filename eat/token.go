@@ -10,8 +10,8 @@ import (
 )
 
 // Sign encodes the claims and wraps them in a COSE_Sign1 structure.
-func Sign(claims *Claims, signer *cose.Signer) ([]byte, error) {
-	payload, err := claims.Encode()
+func Sign(claims *Claims, signer *cose.Signer, opts ...Option) ([]byte, error) {
+	payload, err := claims.Encode(opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -25,15 +25,15 @@ func Sign(claims *Claims, signer *cose.Signer) ([]byte, error) {
 }
 
 // Verify decodes and verifies a signed EAT, returning the embedded claims.
-func Verify(data []byte, verifier *cose.Verifier) (*Claims, error) {
+func Verify(data []byte, verifier *cose.Verifier, opts ...Option) (*Claims, error) {
 	msg, err := cose.UnmarshalSign1(data)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrMalformedEAT, err)
+		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 	}
 
 	if err := verifier.Verify(msg); err != nil {
 		return nil, err
 	}
 
-	return DecodeClaims(msg.Payload)
+	return DecodeClaims(msg.Payload, opts...)
 }

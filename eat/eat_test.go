@@ -27,6 +27,7 @@ func testClaims() *Claims {
 	nonce := []byte("test-nonce-12345")
 	secureBoot := true
 	uptime := uint64(3600)
+	bootCount := uint64(4)
 	return &Claims{
 		ClaimsSet: cwt.ClaimsSet{
 			Issuer:     "test-attester",
@@ -35,13 +36,13 @@ func testClaims() *Claims {
 			Expiration: time.Now().Add(time.Hour).Truncate(time.Second),
 			IssuedAt:   time.Now().Truncate(time.Second),
 		},
-		Nonce:         [][]byte{nonce},
-		UEID:          []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
-		OEMId:         []byte{0xAA, 0xBB, 0xCC},
-		SecurityLevel: SecLevelHardware,
-		SecureBoot:    &secureBoot,
-		Debug:         DebugPermanentDisable,
-		Uptime:        &uptime,
+		Nonce:      [][]byte{nonce},
+		UEID:       []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08},
+		OEMId:      []byte{0xAA, 0xBB, 0xCC},
+		BootCount:  &bootCount,
+		SecureBoot: &secureBoot,
+		Debug:      DebugPermanentDisable,
+		Uptime:     &uptime,
 	}
 }
 
@@ -93,8 +94,8 @@ func TestSign_Verify_RoundTrip(t *testing.T) {
 	if string(decoded.OEMId) != string(original.OEMId) {
 		t.Errorf("OEMId mismatch")
 	}
-	if decoded.SecurityLevel != original.SecurityLevel {
-		t.Errorf("SecurityLevel: got %d, want %d", decoded.SecurityLevel, original.SecurityLevel)
+	if decoded.BootCount == nil || *decoded.BootCount != *original.BootCount {
+		t.Errorf("BootCount: got %v, want %d", decoded.BootCount, *original.BootCount)
 	}
 	if decoded.SecureBoot == nil || *decoded.SecureBoot != *original.SecureBoot {
 		t.Errorf("SecureBoot mismatch")
@@ -180,6 +181,7 @@ func TestAppraiser_CWTValidation(t *testing.T) {
 
 func TestAppraiser_AllPass(t *testing.T) {
 	claims := testClaims()
+	claims.SecurityLevel = SecLevelHardware // appraised in memory; not an RFC 9711 claim
 
 	appraiser := &Appraiser{
 		RequireNonce:         claims.Nonce[0],
@@ -320,11 +322,11 @@ func TestAppraiser_ProfileMatch(t *testing.T) {
 
 func TestSubmods_InlineClaims_RoundTrip(t *testing.T) {
 	sub1 := &Claims{
-		SecurityLevel: SecLevelHardware,
-		Debug:         DebugPermanentDisable,
+		BootCount: ptrCount(4),
+		Debug:     DebugPermanentDisable,
 	}
 	sub2 := &Claims{
-		SecurityLevel: SecLevelSecureRestricted,
+		BootCount: ptrCount(3),
 	}
 
 	original := testClaims()
@@ -354,8 +356,8 @@ func TestSubmods_InlineClaims_RoundTrip(t *testing.T) {
 	if cpuSub.Claims == nil {
 		t.Fatal("cpu submod: expected inline Claims, got nil")
 	}
-	if cpuSub.Claims.SecurityLevel != SecLevelHardware {
-		t.Errorf("cpu SecurityLevel: got %d, want %d", cpuSub.Claims.SecurityLevel, SecLevelHardware)
+	if cpuSub.Claims.BootCount == nil || *cpuSub.Claims.BootCount != 4 {
+		t.Errorf("cpu BootCount: got %v, want 4", cpuSub.Claims.BootCount)
 	}
 	if cpuSub.Claims.Debug != DebugPermanentDisable {
 		t.Errorf("cpu Debug: got %d, want %d", cpuSub.Claims.Debug, DebugPermanentDisable)
@@ -368,8 +370,8 @@ func TestSubmods_InlineClaims_RoundTrip(t *testing.T) {
 	if wifiSub.Claims == nil {
 		t.Fatal("wifi submod: expected inline Claims, got nil")
 	}
-	if wifiSub.Claims.SecurityLevel != SecLevelSecureRestricted {
-		t.Errorf("wifi SecurityLevel: got %d, want %d", wifiSub.Claims.SecurityLevel, SecLevelSecureRestricted)
+	if wifiSub.Claims.BootCount == nil || *wifiSub.Claims.BootCount != 3 {
+		t.Errorf("wifi BootCount: got %v, want 3", wifiSub.Claims.BootCount)
 	}
 }
 
@@ -385,8 +387,8 @@ func TestSubmods_NestedToken_RoundTrip(t *testing.T) {
 	}
 
 	subClaims := &Claims{
-		SecurityLevel: SecLevelHardware,
-		Debug:         DebugDisabled,
+		BootCount: ptrCount(4),
+		Debug:     DebugDisabled,
 	}
 	nestedToken, err := Sign(subClaims, signer)
 	if err != nil {
@@ -424,14 +426,14 @@ func TestSubmods_NestedToken_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify nested token failed: %v", err)
 	}
-	if verified.SecurityLevel != SecLevelHardware {
-		t.Errorf("nested SecurityLevel: got %d, want %d", verified.SecurityLevel, SecLevelHardware)
+	if verified.BootCount == nil || *verified.BootCount != 4 {
+		t.Errorf("nested BootCount: got %v, want 4", verified.BootCount)
 	}
 }
 
 func TestAppraiser_SubmodPolicy(t *testing.T) {
 	sub := &Claims{
-		SecurityLevel: SecLevelUnrestricted,
+		BootCount: ptrCount(1),
 	}
 
 	claims := testClaims()
@@ -442,7 +444,7 @@ func TestAppraiser_SubmodPolicy(t *testing.T) {
 	policyErr := errors.New("submod security level too low")
 	appraiser := &Appraiser{
 		SubmodPolicy: func(name string, c *Claims) error {
-			if c.SecurityLevel < SecLevelSecureRestricted {
+			if c.BootCount == nil || *c.BootCount < 3 {
 				return policyErr
 			}
 			return nil
@@ -467,7 +469,7 @@ func TestAppraiser_NestedTokenVerification(t *testing.T) {
 	}
 
 	subClaims := &Claims{
-		SecurityLevel: SecLevelHardware,
+		BootCount: ptrCount(4),
 	}
 	nestedToken, err := Sign(subClaims, signer)
 	if err != nil {
@@ -480,12 +482,14 @@ func TestAppraiser_NestedTokenVerification(t *testing.T) {
 	}
 
 	var seenName string
-	var seenLevel SecurityLevel
+	var seenCount uint64
 	appraiser := &Appraiser{
 		SubmodVerifier: verifier,
 		SubmodPolicy: func(name string, c *Claims) error {
 			seenName = name
-			seenLevel = c.SecurityLevel
+			if c.BootCount != nil {
+				seenCount = *c.BootCount
+			}
 			return nil
 		},
 	}
@@ -496,7 +500,9 @@ func TestAppraiser_NestedTokenVerification(t *testing.T) {
 	if seenName != "tpm" {
 		t.Errorf("SubmodPolicy name: got %q, want %q", seenName, "tpm")
 	}
-	if seenLevel != SecLevelHardware {
-		t.Errorf("SubmodPolicy SecurityLevel: got %d, want %d", seenLevel, SecLevelHardware)
+	if seenCount != 4 {
+		t.Errorf("SubmodPolicy BootCount: got %d, want 4", seenCount)
 	}
 }
+
+func ptrCount(n uint64) *uint64 { return &n }

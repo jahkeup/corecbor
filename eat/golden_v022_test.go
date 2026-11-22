@@ -54,6 +54,17 @@ var (
 	ueid    = append([]byte{0x01}, bytes.Repeat([]byte{0xaa}, 16)...)
 )
 
+// Hooks for the API calls the cases make. They default to the v0.2.2
+// calls; golden_legacy_test.go swaps in WithLegacyDraftClaimKeys to show
+// the legacy selector reproduces every vector. Written with v0.2.2
+// signatures so tools/golden-regen.sh can compile this file there.
+var (
+	encodeClaims = func(c *eat.Claims) ([]byte, error) { return c.Encode() }
+	decodeClaims = func(b []byte) (*eat.Claims, error) { return eat.DecodeClaims(b) }
+	signClaims   = func(c *eat.Claims, s *cose.Signer) ([]byte, error) { return eat.Sign(c, s) }
+	verifyClaims = func(b []byte, v *cose.Verifier) (*eat.Claims, error) { return eat.Verify(b, v) }
+)
+
 func ptrBool(b bool) *bool    { return &b }
 func ptrU64(u uint64) *uint64 { return &u }
 
@@ -120,7 +131,7 @@ func signedToken(c *eat.Claims, priv ed25519.PrivateKey) []byte {
 	if err != nil {
 		panic(err)
 	}
-	b, err := eat.Sign(c, s)
+	b, err := signClaims(c, s)
 	if err != nil {
 		panic(err)
 	}
@@ -130,7 +141,7 @@ func signedToken(c *eat.Claims, priv ed25519.PrivateKey) []byte {
 func eatGoldenCases() []g.Case {
 	var cases []g.Case
 	add := func(id string, run func() string) { cases = append(cases, g.Case{ID: id, Run: run}) }
-	encodeOf := func(c *eat.Claims) string { return hexOf(c.Encode()) }
+	encodeOf := func(c *eat.Claims) string { return hexOf(encodeClaims(c)) }
 
 	// Encode, one vector per claim so key renumbering is attributable.
 	add("eat/encode/basic", func() string { return encodeOf(fullClaims()) })
@@ -156,30 +167,30 @@ func eatGoldenCases() []g.Case {
 	})
 
 	// Decode.
-	decode := func(hexIn string) string { return describe(eat.DecodeClaims(g.MustHex(hexIn))) }
+	decode := func(hexIn string) string { return describe(decodeClaims(g.MustHex(hexIn))) }
 	add("eat/decode/roundtrip-basic", func() string {
-		b, err := fullClaims().Encode()
+		b, err := encodeClaims(fullClaims())
 		if err != nil {
 			return okOf(err)
 		}
-		return describe(eat.DecodeClaims(b))
+		return describe(decodeClaims(b))
 	})
 	add("eat/decode/roundtrip-submods", func() string {
-		b, err := (&eat.Claims{Submods: map[string]eat.Submod{
+		b, err := encodeClaims(&eat.Claims{Submods: map[string]eat.Submod{
 			"radio": {Claims: &eat.Claims{UEID: ueid}},
 			"tee":   {Token: signedToken(&eat.Claims{UEID: ueid}, edPriv)},
-		}}).Encode()
+		}})
 		if err != nil {
 			return okOf(err)
 		}
-		return describe(eat.DecodeClaims(b))
+		return describe(decodeClaims(b))
 	})
 	add("eat/decode/roundtrip-uptime-seclevel", func() string {
-		b, err := (&eat.Claims{Uptime: ptrU64(7), SecurityLevel: eat.SecLevelRestrictedOS}).Encode()
+		b, err := encodeClaims(&eat.Claims{Uptime: ptrU64(7), SecurityLevel: eat.SecLevelRestrictedOS})
 		if err != nil {
 			return okOf(err)
 		}
-		return describe(eat.DecodeClaims(b))
+		return describe(decodeClaims(b))
 	})
 	add("eat/decode/rfc9711-uptime-261", func() string { return decode("a119010518 64") })
 	add("eat/decode/rfc9711-submods-266", func() string { return decode("a119010aa16161a10a480102030405060708") })
@@ -195,8 +206,8 @@ func eatGoldenCases() []g.Case {
 	// Sign / Verify.
 	verifier, _ := cose.NewVerifier(edPub)
 	add("eat/sign/ed25519", func() string { return "hex:" + fmt.Sprintf("%x", signedToken(fullClaims(), edPriv)) })
-	add("eat/sign/verify", func() string { return describe(eat.Verify(signedToken(fullClaims(), edPriv), verifier)) })
-	add("eat/sign/verify-wrong-key", func() string { return describe(eat.Verify(signedToken(fullClaims(), edPriv2), verifier)) })
+	add("eat/sign/verify", func() string { return describe(verifyClaims(signedToken(fullClaims(), edPriv), verifier)) })
+	add("eat/sign/verify-wrong-key", func() string { return describe(verifyClaims(signedToken(fullClaims(), edPriv2), verifier)) })
 
 	// Appraiser outcomes.
 	appraise := func(a eat.Appraiser, c *eat.Claims) string { return okOf(a.Appraise(c)) }

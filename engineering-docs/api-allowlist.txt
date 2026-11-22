@@ -29,3 +29,12 @@ github.com/jahkeup/corecbor/cose: VerifyMACMulti: changed from func(*Mac, KeyDer
 # the contract-defect fix 033 makes; there is no other no-option change.
 github.com/jahkeup/corecbor/edhoc: NewInitiator: changed from func(InitiatorConfig) (*Initiator, error) to func(InitiatorConfig, ...Option) (*Initiator, error)
 github.com/jahkeup/corecbor/edhoc: NewResponder: changed from func(ResponderConfig) (*Responder, error) to func(ResponderConfig, ...Option) (*Responder, error)
+
+# Proposal 032: eat entry points gain ...Option (WithLegacyDraftClaimKeys,
+# CompatV02). With no options they use the IANA/RFC 9711 claim keys, which
+# is the contract-defect fix 032 makes; the other no-option changes are
+# the fail-closed submodule safety fix and unknown-claim preservation.
+github.com/jahkeup/corecbor/eat: (*Claims).Encode: changed from func() ([]byte, error) to func(...Option) ([]byte, error)
+github.com/jahkeup/corecbor/eat: DecodeClaims: changed from func([]byte) (*Claims, error) to func([]byte, ...Option) (*Claims, error)
+github.com/jahkeup/corecbor/eat: Sign: changed from func(*Claims, *github.com/jahkeup/corecbor/cose.Signer) ([]byte, error) to func(*Claims, *github.com/jahkeup/corecbor/cose.Signer, ...Option) ([]byte, error)
+github.com/jahkeup/corecbor/eat: Verify: changed from func([]byte, *github.com/jahkeup/corecbor/cose.Verifier) (*Claims, error) to func([]byte, *github.com/jahkeup/corecbor/cose.Verifier, ...Option) (*Claims, error)

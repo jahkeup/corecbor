@@ -1,0 +1,51 @@
+# 036 — Deferred follow-ups from the 2026-11 batch
+
+## Header
+
+| Field | Value |
+|---|---|
+| **Number** | 036 |
+| **Tier** | 2 |
+| **Status** | Draft |
+| **Filed** | 2026-11-22 |
+| **Owner** | corecbor maintainers |
+| **Depends on** | proposals: 021–035 |
+| **Supersedes** | none |
+| **Spec sections touched** | none until an item is picked up |
+
+---
+
+## TL;DR
+
+Proposals 020–035 closed with their gating criteria met. This proposal
+collects the non-gating items they deferred, so they stay visible
+instead of being buried in closed documents. Each item is picked up by
+its own proposal (or a phase here) when its trigger happens; until then
+none blocks a release.
+
+## Items
+
+| # | Item | From | Trigger | Notes |
+|---|---|---|---|---|
+| 1 | Strict decode of maps with >16 entries is ~15% slower (`DecodeStrictLargeMap100/1000`), `DecodeNestedMapStrict` ~5% | 024 (accepted trade-off) | perf work | Per-key cost in the strict hashed path (`find`/`mapInsert`, `DecodeOpts` size) |
+| 2 | `RawMessage` struct decode +3–4% vs pre-025 main | 022, 025 | perf work | Decoder-recorded item offsets would remove the span walk |
+| 3 | Sibling modules adopt `Value.Int64`/`Uint64`/`Get*` | 025 Phase C | next behavior-change window | In cwt/eat this turns silent integer wrapping into errors, which golden vectors pin; needs a 034 classification |
+| 4 | RFC 8746 typed arrays | 026 Phase D | consumer request | — |
+| 5 | Concise Diagnostic Notation alignment | 026 Phase E | draft-ietf-cbor-edn-literals publishes | `DiagCDN()` reserved |
+| 6 | Ed448 / X448 sign, verify and ECDH | 028, 029, 033 | standard library support | Parse/marshal only today; EDHOC suite 25 and HPKE-5/6 blocked on it |
+| 7 | `BenchmarkParseKeyEC2` 20 allocs vs target 10 | 028 | perf work | About half is the required on-curve check |
+| 8 | mDL issuer-auth interop vector | 028 | vector with a confirmed license | Non-gating |
+| 9 | `cose.NewKeyFromPublic` accepting `*ecdh.PublicKey` (X25519) | 033 follow-ups | — | edhoc keeps a small local builder |
+| 10 | RFC 10013 measured component helpers | 032 Phase D | consumer request | `Measurements` carried as typed bytes today |
+| 11 | HPKE code points final; drop `Draft…`/Experimental | 029 | draft-ietf-cose-hpke publishes with IANA values | 034 lifecycle |
+| 12 | Serialization profile identifiers final | 024 | draft-ietf-cbor-serialization publishes | 034 lifecycle |
+| 13 | Report draft-ietf-cose-hpke-27 key-encryption vectors using 16-byte AES-GCM IVs (RFC 9053 requires 96-bit) | 029 | — | Upstream erratum/issue |
+| 14 | Add `scitt` to `apicheck` | 030 | after the first release that contains `scitt` | No v0.2.2 baseline exists |
+| 15 | Inline EAT submodules keep original bytes; JSON submods | 032 | consumer request | Re-encoded deterministically today |
+| 16 | `TestMarshalerVerbatimPermissive`-style splice for non-raw Marshalers in Permissive mode | 022 | consumer request | Raw types only today |
+
+## Changelog
+
+| Date | Change | Author |
+|---|---|---|
+| 2026-11-22 | Filed from the deferred items of 020–035 | corecbor maintainers |

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 031 |
 | **Tier** | 3 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 003 (CWT), 012 (cnf), 021 (core safety), 022 (raw-byte preservation), 023 (strict decode policy), 027 (COSE verification hardening), 028 (COSE header / key API), 034 (compatibility policy) |
@@ -529,10 +529,10 @@ functions.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| A | Total decode: `ClaimKey`, `PrivateClaims` beside `Private`, key/date range checks, duplicate rejection, budget, `%w` chain, `ClaimError` | Pending | Fuzz + `TestDecodeClaims_*` pass |
-| B | Fail-closed `Validator` + new `Verify(ctx, …)` + `KeyResolver` | Pending | `TestValidator_*`, `TestVerify_*` pass |
-| C | Envelope: tag 61, `typ`/`cty`, nested CWT, UCCS, RFC 9597 header bridge | Pending | Envelope tests pass (requires 028 `Headers` accessors) |
-| D | ACE claims (`scope`, `ace_profile`, `cnonce`, `exi`) + `cnf` completion + Encrypt0 IV | Pending | `TestCnf_*`, `TestEncrypt_IVHeader` pass (requires 029) |
+| A | Total decode: `ClaimKey`, `PrivateClaims` beside `Private`, key/date range checks, duplicate rejection, budget, `%w` chain, `ClaimError` | Done | Fuzz + `TestDecodeClaims_*` pass |
+| B | Fail-closed `Validator` + new `Verify(ctx, …)` + `KeyResolver` | Done | `TestValidator_*`, `TestVerify_*` pass |
+| C | Envelope: tag 61, `typ`/`cty`, nested CWT, UCCS, RFC 9597 header bridge | Done | Envelope tests pass (requires 028 `Headers` accessors) |
+| D | ACE claims (`scope`, `ace_profile`, `cnonce`, `exi`) + `cnf` completion + Encrypt0 IV | Done | `TestCnf_*`, `TestEncrypt_IVHeader` pass (requires 029) |
 
 Phase A has no dependency outside this module and should land first,
 because it removes a crash on untrusted input.
@@ -690,3 +690,4 @@ field. Rejected under 034; `Audiences` is added beside `Audience`.
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Implemented (phases A–D on feat/031-cwt); RFC 9200 audience and exi questions resolved; implementation notes | corecbor maintainers |
 | 2026-11-22 | `ClaimsSet.Private` marked `// Deprecated:` (use `PrivateClaims`) now that edhoc no longer reads it (033 follow-ups); closes the implementation-notes gap | corecbor maintainers |
+| 2026-11-22 | Status: Closed (acceptance met) | corecbor maintainers |

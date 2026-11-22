@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 032 |
 | **Tier** | 3 |
-| **Status** | In-Progress (Phases A–C implemented; D deferred) |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 005 (EAT), 031 (CWT hardening), 022 (raw-byte preservation), 027 (COSE verification hardening), 034 (compatibility policy) |
@@ -681,3 +681,4 @@ against the live IANA CWT Claims registry (snapshot
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Phases A–C implemented; D deferred; implementation notes | corecbor maintainers |
+| 2026-11-22 | Status: Closed (deferred items tracked in 036) | corecbor maintainers |

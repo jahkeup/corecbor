@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 030 |
 | **Tier** | 3 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 027 (raw protected bytes, policy), 028 (header options, detached, typed accessors), 029 (RFC 9054 hash identifiers); CWT proposal (031) for the `scitt` module only, 034 (compatibility policy) |
@@ -488,3 +488,4 @@ Interpretations and deviations from the API sketch above:
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Phases 1–3 implemented; status In-Progress; implementation notes | corecbor maintainers |
+| 2026-11-22 | Status: Closed (acceptance met) | corecbor maintainers |

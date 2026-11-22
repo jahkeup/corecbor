@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 034 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: none (governs 021–033) |
@@ -314,3 +314,4 @@ details.
 | 2026-11-20 | Safety defect covers fail-open auth, downgrade, unbounded work; appended-option rule allows listed defect fixes; decisions table synced with amended 021–033 | corecbor maintainers |
 | 2026-11-20 | Standards-state-first precedence; API stability is signature + semantics; reclassified changes (contract defect / superseded contract / additive / draft) | corecbor maintainers |
 | 2026-11-20 | Bundles per module/option type; never bundle verification-weakening selectors; struct-field selectors (reconciled with 021–033) | corecbor maintainers |
+| 2026-11-22 | Status: Closed (acceptance met) | corecbor maintainers |

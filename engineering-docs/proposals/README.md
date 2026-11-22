@@ -11,23 +11,24 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
+| [036](036-deferred-follow-ups-2026-11.md) | 2 | Draft | Deferred follow-ups from the 2026-11 batch | corecbor maintainers | 021–035 | 2026-11-22 |
 | [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling | corecbor maintainers | 001 | 2026-05-21 |
 | [016](016-value-tagged-union-struct.md) | 1 | Draft | Replace Value interface with tagged-union struct | corecbor maintainers | 001 | 2026-05-22 |
 | [017](017-cose-encoder-reuse.md) | 2 | Draft | COSE encoder reuse strategy | corecbor maintainers | 001, 016 | 2026-05-22 |
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
 | [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
-| [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Draft | Value accessors and reflection ergonomics | corecbor maintainers | 008, 016, 021 | 2026-11-20 |
-| [026](026-tag-helpers-and-registry-refresh.md) | 2 | Draft | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 006, 021, 023 | 2026-11-20 |
-| [028](028-cose-signing-and-key-api.md) | 3 | Draft | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 002, 011, 027 | 2026-11-20 |
-| [030](030-cose-hash-envelope-and-receipts.md) | 3 | Draft | COSE Hash Envelope, COSE Receipts, and SCITT signed statements | corecbor maintainers | 027, 028, 029, 031 | 2026-11-20 |
-| [031](031-cwt-hardening-and-integration.md) | 3 | Draft | CWT hardening and ACE / SCITT integration | corecbor maintainers | 003, 012, 021, 022, 023, 027, 028 | 2026-11-20 |
-| [032](032-eat-rfc9711-conformance.md) | 3 | Draft | EAT: RFC 9711 conformance | corecbor maintainers | 005, 022, 027, 031 | 2026-11-20 |
-| [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Draft | Standards currency and legacy-compatibility selection policy | corecbor maintainers | — | 2026-11-20 |
 
 ## Closed proposals
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Closed | Standards currency and legacy-compatibility selection policy | corecbor maintainers | 2026-11-22 | Spec §14 + §12 rule; every 021–035 proposal classified; apicheck + v0.2.2 golden vectors gate make check; migration guide lists every selector. |
+| [032](032-eat-rfc9711-conformance.md) | 3 | Closed | EAT: RFC 9711 conformance | corecbor maintainers | 2026-11-22 | IANA claim keys (test-verified), legacy draft-key selector, fail-closed submods under SubmodPolicy, Validate rules, DEB tag 602, media types, eat/psa (RFC 9783). Phase D → 036. |
+| [031](031-cwt-hardening-and-integration.md) | 3 | Closed | CWT hardening and ACE / SCITT integration | corecbor maintainers | 2026-11-22 | Panic-free claims (PrivateClaims/ClaimKey), NumericDate, NewValidator standards defaults, VerifyToken/OpenToken/Seal with KeyResolver, tag 61, UCCS, RFC 9597 bridge, ACE claims, cnf completion; Private deprecated. |
+| [030](030-cose-hash-envelope-and-receipts.md) | 3 | Closed | COSE Hash Envelope, COSE Receipts, and SCITT signed statements | corecbor maintainers | 2026-11-22 | RFC 9995 hash envelope; RFC 9942 receipts with RFC 9162 Merkle proofs (CT probes); new scitt module (RFC 9943). |
+| [028](028-cose-signing-and-key-api.md) | 3 | Closed | COSE signing headers, detached payloads, and COSE_Key API | corecbor maintainers | 2026-11-22 | Protected/unprotected header options, detached signing, typed header accessors (IANA-verified), COSE_Key parse/marshal/prefix, KeySet, key_ops, thumbprint, JWK, KeyResolver, ContextSigner, RSA verify. |
+| [026](026-tag-helpers-and-registry-refresh.md) | 2 | Closed | Tag helpers for published CBOR tag RFCs, and registry refresh | corecbor maintainers | 2026-11-22 | Helpers for tags 24/37/52/54/100/1004/1001–1003/110–112/55799–55801; COSE/CWT/UCCS/DEB constants; registry +10 tags with frozen names. Phases D/E → 036. |
+| [025](025-value-accessors-and-reflection-ergonomics.md) | 2 | Closed | Value accessors and reflection ergonomics | corecbor maintainers | 2026-11-22 | Get/GetInt/GetText, checked Int64/Uint64, Equal, String, Kind.String; toarray, DisallowUnknownFields, Text/Binary unmarshalers, omitzero, opt-in Go field names. Phase C → 036. |
 | [029](029-cose-algorithms-and-encryption-conformance.md) | 3 | Closed | COSE algorithm registry alignment and encryption conformance | corecbor maintainers | 2026-11-22 | RFC 9864 fully-specified algs (opt-in emission), ML-DSA (RFC 9964), RSA sign, AES-CCM, conformant ECDH-ES/PBES2, Encrypt0 IVs, HPKE draft-27 (Experimental), shared internal/aesccm. |
 | [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Closed | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 2026-11-22 | RFC 9529 traces byte-for-byte; all methods, suites 0–6/24; OSCORE export; RFC 9668 CoAP helpers; X.509 credentials; legacy pre-RFC selector. x/crypto only for ChaCha20-Poly1305. |
 | [020](020-default-decode-recovery.md) | 1 | Closed | Default-path decode recovery | corecbor maintainers | 2026-11-21 | Internal auto-reset arena by default; all §9 targets met on the default path (re-verified 2026-11-21). |
@@ -54,7 +55,7 @@ proposal lifecycle.
 
 ## Numbering
 
-Next available proposal number: **036**
+Next available proposal number: **037**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than

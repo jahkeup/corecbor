@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 026 |
 | **Tier** | 2 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 006 (registry codegen), 021 (core codec safety fixes — tag 1 / `TimeTo` range), 023 (tag allow-list in strict decode), 034 (compatibility policy) |
@@ -458,3 +458,4 @@ must not regress (`make bench` against `bench-020-baseline.txt`).
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Phases A–C implemented; registry refreshed (+10 tags); IXDTF 10/11/13 corrected to RFC 9581 map keys; Phases D, E deferred; status In-Progress | corecbor maintainers |
+| 2026-11-22 | Status: Closed (deferred items tracked in 036) | corecbor maintainers |

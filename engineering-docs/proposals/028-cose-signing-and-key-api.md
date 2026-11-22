@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 028 |
 | **Tier** | 3 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002, 011, 027 (verification policy, `Headers.SetChecked`), 034 (compatibility policy) |
@@ -406,9 +406,9 @@ No `...Option` parameters are appended to existing functions.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Header options, `Sign1(msg)`, detached, typed accessors, Ed25519 `crypto.Signer` | Pending | header and detached rows green |
-| 2 | COSE_Key parse/marshal/prefix, KeySet, key_ops, thumbprint, RSA verify, AKP parse | Pending | key rows green |
-| 3 | KeyResolver, `VerifySign1`, ContextSigner, JWK, RSA sign | Pending | remaining rows green |
+| 1 | Header options, `Sign1(msg)`, detached, typed accessors, Ed25519 `crypto.Signer` | Done | header and detached rows green |
+| 2 | COSE_Key parse/marshal/prefix, KeySet, key_ops, thumbprint, RSA verify, AKP parse | Done | key rows green |
+| 3 | KeyResolver, `VerifySign1`, ContextSigner, JWK, RSA sign | Done | remaining rows green |
 
 ---
 
@@ -491,3 +491,4 @@ No `...Option` parameters are appended to existing functions.
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | Phases 1–3 implemented (RSA signing, mDL vector, benchmarks remain); implementation notes; status In-Progress | corecbor maintainers |
+| 2026-11-22 | Status: Closed (acceptance met) | corecbor maintainers |

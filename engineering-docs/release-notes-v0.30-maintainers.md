@@ -30,17 +30,20 @@ v0.30.0.
    capture v0.2.2 outputs (EAT tokens, EDHOC transcripts, COSE messages
    with PBES2/HPKE, reflection output) as fixtures, so the legacy
    selectors are tested against real v0.2 bytes.
-4. **Sub-module versioning.** `cose`, `cwt`, `eat` and `edhoc` currently
+4. **Sub-module versioning.** `cose`, `cwt`, `eat`, `edhoc` and `scitt` currently
    `require github.com/jahkeup/corecbor v0.0.0` plus `replace ../` and
    have never been tagged, so they can't be consumed from outside this
    repo (`replace` is ignored for dependents). For v0.30.0:
    - drop the `replace` directives (use a `go.work` for local dev);
    - require real versions (`corecbor v0.30.0`, `cose v0.30.0`, …);
    - tag each module with its path prefix: `v0.30.0`, `cose/v0.30.0`,
-     `cwt/v0.30.0`, `eat/v0.30.0`, `edhoc/v0.30.0`, in dependency order.
-5. **EDHOC status.** If proposal 033 has not closed, keep `edhoc`
-   marked experimental in its `doc.go` and the README, and leave it
-   untagged at v0.30.0.
+     `cwt/v0.30.0`, `eat/v0.30.0`, `edhoc/v0.30.0`, `scitt/v0.30.0`, in
+     dependency order (`scitt` depends on `cose` and `cwt`);
+   - after tagging, add `scitt` to `tools/apicheck.sh` with v0.30.0 as
+     its baseline (036 item 14).
+5. **EDHOC status.** Proposal 033 closed on 2026-11-22 (RFC 9529 traces
+   pass; experimental marking removed), so `edhoc` is tagged with the
+   rest.
 6. **Deprecation floor.** Record in the release notes that `Legacy…` and
    `CompatV02` selectors are removed no earlier than v0.32.0.
 7. **Upstream re-check.** Re-run the survey behind

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 025 |
 | **Tier** | 2 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 016 (struct Value), 008 (Marshal/Unmarshal), 021 (core codec safety fixes — embedded-struct index paths), 034 (compatibility policy) |
@@ -479,3 +479,4 @@ existing functions.
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-20 | Add `Kind.String()` (downstream request) to Phase A | corecbor maintainers |
 | 2026-11-21 | Phases A, B, D implemented; Phase C deferred to 028/031/032/033; implementation notes | corecbor maintainers |
+| 2026-11-22 | Status: Closed (deferred items tracked in 036) | corecbor maintainers |

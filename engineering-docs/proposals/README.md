@@ -13,15 +13,15 @@ proposal lifecycle.
 |---|---|---|---|---|---|---|
 | [036](036-deferred-follow-ups-2026-11.md) | 2 | Draft | Deferred follow-ups from the 2026-11 batch | corecbor maintainers | 021–035 | 2026-11-22 |
 | [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling | corecbor maintainers | 001 | 2026-05-21 |
-| [016](016-value-tagged-union-struct.md) | 1 | Draft | Replace Value interface with tagged-union struct | corecbor maintainers | 001 | 2026-05-22 |
-| [017](017-cose-encoder-reuse.md) | 2 | Draft | COSE encoder reuse strategy | corecbor maintainers | 001, 016 | 2026-05-22 |
 | [018](018-opt-in-performance-extensions.md) | 2 | Draft | Opt-in performance extensions for complex use cases | corecbor maintainers | 001, 016 | 2026-05-23 |
-| [019](019-encode-throughput-recovery.md) | 2 | Draft | Encode path throughput recovery | corecbor maintainers | 016 | 2026-05-24 |
 
 ## Closed proposals
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [019](019-encode-throughput-recovery.md) | 2 | Closed | Encode path throughput recovery | corecbor maintainers | 2026-11-22 | EncodeScalars ≈2.4 GiB/s (target ≥850 MB/s); deterministic EncodeNestedMap ≈300 MiB/s (target ≥200 MB/s); no API or unsafe changes. |
+| [017](017-cose-encoder-reuse.md) | 2 | Closed | COSE encoder reuse strategy | corecbor maintainers | 2026-11-22 | Package-level NewShared encoder (concurrency-safe); MarshalSign1 3 allocs/op (target ≤9). |
+| [016](016-value-tagged-union-struct.md) | 1 | Closed | Replace Value interface with tagged-union struct | corecbor maintainers | 2026-11-22 | Value is a struct with a Kind discriminator (v0.2.0); strict nested-map decode ≈124 MiB/s vs ≥80 MB/s target; sub-modules migrated. |
 | [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Closed | Standards currency and legacy-compatibility selection policy | corecbor maintainers | 2026-11-22 | Spec §14 + §12 rule; every 021–035 proposal classified; apicheck + v0.2.2 golden vectors gate make check; migration guide lists every selector. |
 | [032](032-eat-rfc9711-conformance.md) | 3 | Closed | EAT: RFC 9711 conformance | corecbor maintainers | 2026-11-22 | IANA claim keys (test-verified), legacy draft-key selector, fail-closed submods under SubmodPolicy, Validate rules, DEB tag 602, media types, eat/psa (RFC 9783). Phase D → 036. |
 | [031](031-cwt-hardening-and-integration.md) | 3 | Closed | CWT hardening and ACE / SCITT integration | corecbor maintainers | 2026-11-22 | Panic-free claims (PrivateClaims/ClaimKey), NumericDate, NewValidator standards defaults, VerifyToken/OpenToken/Seal with KeyResolver, tag 61, UCCS, RFC 9597 bridge, ACE claims, cnf completion; Private deprecated. |

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 017 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-05-22 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001, 016 (if struct migration changes Encoder API) |
@@ -206,3 +206,7 @@ See Options A-C above. Each rejected for the stated reasons.
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-22 | Initial draft | corecbor maintainers |
+
+## Closure (2026-11-22)
+
+Implemented: cose marshals through a package-level `corecbor.NewShared` encoder (`cose/marshal.go`). Re-verified 2026-11-22: BenchmarkMarshalSign1 3 allocs/op (target ≤9); concurrent Signer/Verifier/Headers use is covered by 027's race tests.

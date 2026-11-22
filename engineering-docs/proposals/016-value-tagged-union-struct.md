@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 016 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-05-22 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 001 (foundational primitives) |
@@ -417,3 +417,7 @@ Use generics to monomorphize per-type. Rejected because:
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-22 | Initial draft | corecbor maintainers |
+
+## Closure (2026-11-22)
+
+Implemented in v0.2.0 (`cbor.Value` struct). Re-verified 2026-11-22: DecodeNestedMapStrict ≈124 MiB/s (target ≥80 MB/s); all modules build and pass on the struct API.

@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 019 |
 | **Tier** | 2 |
-| **Status** | Draft |
+| **Status** | Closed |
 | **Filed** | 2026-05-24 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 016 (struct Value) |
@@ -245,3 +245,7 @@ defeats the purpose of the unified struct model.
 | Date | Change | Author |
 |---|---|---|
 | 2026-05-24 | Initial draft with profiling data | corecbor maintainers |
+
+## Closure (2026-11-22)
+
+Implemented (77aa4fb and follow-ups). Re-verified 2026-11-22: BenchmarkEncodeScalars ≈2.4 GiB/s (≥850 MB/s), deterministic BenchmarkEncodeNestedMap ≈300 MiB/s (≥200 MB/s); apicheck clean against v0.2.2.

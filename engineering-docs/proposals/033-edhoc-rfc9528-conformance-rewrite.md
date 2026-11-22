@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 033 |
 | **Tier** | 3 |
-| **Status** | In-Progress |
+| **Status** | Closed |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 004 (EDHOC), 022 (raw-byte preservation), 028 (COSE key API: `ParseKey`, ID_CRED header parsing), 031 (CWT hardening — CCS/CWT credential validation), 034 (compatibility policy) |
@@ -477,7 +477,7 @@ All gating criteria are met except one:
 
 | Criterion | Status |
 |---|---|
-| `golang.org/x/crypto` removed from `edhoc/go.mod` | **Not met.** Only ChaCha20-Poly1305 remains (suites 4 and 5), which the standard library lacks (Go 1.27). The criterion was written for suites 0 and 2 only; the protocol core added suites 3–6 and 24. **Maintainer decision:** drop suites 4/5 (criterion met) or amend the criterion to "x/crypto only for ChaCha20-Poly1305". |
+| `golang.org/x/crypto` used only for ChaCha20-Poly1305 (amended 2026-11-22, see below) | **Met.** The only import is `golang.org/x/crypto/chacha20poly1305` for suites 4 and 5; everything else uses the standard library. |
 | Interop smoke test against an external implementation | Not done (non-gating). |
 
 Tests for the other rows: `TestRFC9529Trace1/2`, `TestSuiteNegotiation_*`,
@@ -492,8 +492,14 @@ Tests for the other rows: `TestRFC9529Trace1/2`, `TestSuiteNegotiation_*`,
 with `TestGoldenLegacyReproducesV022`, `TestLegacySelectorDeprecated`,
 apicheck and the golden vectors in `make check`.
 
-**Status stays In-Progress** until the x/crypto decision; the module
-stays marked experimental until 033 closes.
+**Amended criterion (maintainer decision, 2026-11-22).** The original
+row required removing `golang.org/x/crypto` entirely; it was written
+when only suites 0 and 2 were planned. Suites 4 and 5 (RFC 9528
+ChaCha20-Poly1305) are kept, so `x/crypto` is allowed for
+ChaCha20-Poly1305 only, until the standard library provides it.
+
+All gating criteria are met; 033 is Closed and edhoc is no longer
+marked experimental.
 
 ## Compatibility selection
 
@@ -544,7 +550,7 @@ entries):** `NewInitiator(cfg, opts ...Option)`,
 | KMS-style `crypto.Signer` (wrapper type) in `PrivateKey` works for suites 0 and 2 | `TestPrivateKey_GenericSigner` | Yes |
 | A v0.2.2-style config (`PrivateKey` + `PeerPublic`, no `Peers`) completes an RFC 9528 handshake with the peer pinned | `TestConfigV022Shape` | Yes |
 | `FuzzProcessMessage1/2/3` 60 s, no panic | fuzz | Yes |
-| `golang.org/x/crypto` removed from `edhoc/go.mod` | `go mod graph` | Yes |
+| `golang.org/x/crypto` used only for ChaCha20-Poly1305 | `go list -deps ./edhoc` shows only `x/crypto/chacha20poly1305` (+ its internals) | Yes |
 | Interop smoke test against an external implementation (lakers or uoscore-uedhoc) | manual, documented in PR | No |
 | Default sessions never speak the pre-RFC protocol: a v0.30 initiator against a v0.2.2 responder fixture fails cleanly with an error, never a partial OSCORE context | `TestCompatDefaultRejectsLegacyPeer` | Yes |
 | Two v0.30 peers with `WithLegacyPreRFCProtocol` reproduce the captured v0.2.2 transcripts byte-for-byte (fixed ephemeral keys), and interoperate with a v0.2.2 peer | `TestCompatLegacyPreRFCTranscript` vs `testdata/legacy-v0.2.2/edhoc/` | Yes |
@@ -672,3 +678,4 @@ Phase A doesn't land in a reasonable window, mark the module
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
 | 2026-11-21 | In-Progress: protocol core per RFC 9528, gated on RFC 9529 traces (both pass); implementation notes | corecbor maintainers |
 | 2026-11-21 | Follow-ups: cose key API, CoAP/RFC 9668 helpers, X.509 resolver, acceptance tests and sentinels; all gating criteria met except x/crypto removal (maintainer decision) | corecbor maintainers |
+| 2026-11-22 | Criterion amended: x/crypto only for ChaCha20-Poly1305 (maintainer decision). Status: Closed; edhoc no longer experimental | corecbor maintainers |

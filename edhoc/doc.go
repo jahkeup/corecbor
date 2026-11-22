@@ -4,9 +4,7 @@
 // Package edhoc implements the EDHOC authenticated key exchange
 // (RFC 9528).
 //
-// Status: experimental until proposal 033 closes. The protocol core
-// reproduces the RFC 9529 traces byte-for-byte; the API around it
-// (credential resolution, transport helpers) may still change.
+// The protocol core reproduces the RFC 9529 traces byte-for-byte.
 //
 // EDHOC is a three-message key exchange (an optional fourth confirms
 // keys) between an Initiator and a Responder:

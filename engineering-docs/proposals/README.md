@@ -23,13 +23,13 @@ proposal lifecycle.
 | [030](030-cose-hash-envelope-and-receipts.md) | 3 | Draft | COSE Hash Envelope, COSE Receipts, and SCITT signed statements | corecbor maintainers | 027, 028, 029, 031 | 2026-11-20 |
 | [031](031-cwt-hardening-and-integration.md) | 3 | Draft | CWT hardening and ACE / SCITT integration | corecbor maintainers | 003, 012, 021, 022, 023, 027, 028 | 2026-11-20 |
 | [032](032-eat-rfc9711-conformance.md) | 3 | Draft | EAT: RFC 9711 conformance | corecbor maintainers | 005, 022, 027, 031 | 2026-11-20 |
-| [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Draft | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 004, 022, 028, 031 | 2026-11-20 |
 | [034](034-standards-currency-and-legacy-compatibility.md) | 1 | Draft | Standards currency and legacy-compatibility selection policy | corecbor maintainers | — | 2026-11-20 |
 
 ## Closed proposals
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [033](033-edhoc-rfc9528-conformance-rewrite.md) | 3 | Closed | EDHOC: RFC 9528 conformance rewrite | corecbor maintainers | 2026-11-22 | RFC 9529 traces byte-for-byte; all methods, suites 0–6/24; OSCORE export; RFC 9668 CoAP helpers; X.509 credentials; legacy pre-RFC selector. x/crypto only for ChaCha20-Poly1305. |
 | [020](020-default-decode-recovery.md) | 1 | Closed | Default-path decode recovery | corecbor maintainers | 2026-11-21 | Internal auto-reset arena by default; all §9 targets met on the default path (re-verified 2026-11-21). |
 | [035](035-invalid-utf8-text-policy.md) | 1 | Closed | Caller-selected representation of text that is not valid UTF-8 | corecbor maintainers | 2026-11-21 | Reject/Allow/Replace/Lossless on encoder and decoder; TextLossless/AsText; tags 272–274; nested-text validation fixed. |
 | [024](024-serialization-profiles-alignment.md) | 1 | Closed | Serialization alignment and caller-selected map key identity | corecbor maintainers | 2026-11-21 | Erratum 8589; one key-identity rule at every map size + WithMapKeyIdentity/KeepDuplicateMapKeys; preferred bignums; CTAP2 NaN; RequireDeterministic; Experimental PreferredPlus. Strict >16-key decode ~+15% accepted. |

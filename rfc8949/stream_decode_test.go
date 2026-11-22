@@ -140,15 +140,37 @@ func FuzzDecodeFromMatchesDecode(f *testing.F) {
 			opts = StrictOpts()
 			opts.MaxNestingDepth, opts.MaxArrayLength, opts.MaxByteStringLength = 64, 1<<12, 1<<16
 		}
+		// ZeroCopy on odd lengths: Values alias the item bytes, which
+		// must not be a reused or read-ahead buffer.
+		opts.ZeroCopy = len(data)%2 == 1
 		want, n, wantErr := Decode(data, opts)
-		for _, opaque := range []bool{false, true} {
+		// Readers: ByteReader, plain Read, BufferedReader (item usually
+		// in its buffer), BufferedReader over 1-byte reads (item split
+		// across refills, so the buffered fast path falls back).
+		for kind := range 4 {
 			br := bytes.NewReader(data)
 			var r io.Reader = br
-			if opaque {
+			var buffered *BufferedReader
+			switch kind {
+			case 1:
 				r = opaqueReader{br}
+			case 2:
+				buffered = NewBufferedReader(opaqueReader{br})
+				r = buffered
+			case 3:
+				buffered = NewBufferedReader(iotest.OneByteReader(br))
+				r = buffered
 			}
 			got, err := DecodeFrom(r, opts)
 			consumed := len(data) - br.Len()
+			if buffered != nil {
+				consumed -= len(buffered.buf) - buffered.off
+			}
+			// A second pass must not see bytes of the first item: with
+			// a reused buffer, a stale alias would change got.
+			if err == nil {
+				_, _ = DecodeFrom(bytes.NewReader([]byte{0x65, 'x', 'x', 'x', 'x', 'x'}), opts)
+			}
 			switch {
 			case len(data) == 0:
 				if !errors.Is(err, io.EOF) {
@@ -156,7 +178,7 @@ func FuzzDecodeFromMatchesDecode(f *testing.F) {
 				}
 			case wantErr == nil:
 				if err != nil {
-					t.Fatalf("Decode ok, DecodeFrom err %v (opaque=%v)", err, opaque)
+					t.Fatalf("Decode ok, DecodeFrom err %v (reader %d)", err, kind)
 				}
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("DecodeFrom = %#v, Decode = %#v", got, want)
@@ -166,7 +188,7 @@ func FuzzDecodeFromMatchesDecode(f *testing.F) {
 				}
 			default:
 				if err == nil {
-					t.Fatalf("Decode err %v, DecodeFrom ok (opaque=%v)", wantErr, opaque)
+					t.Fatalf("Decode err %v, DecodeFrom ok (reader %d)", wantErr, kind)
 				}
 				if gc, wc := errClass(err), errClass(wantErr); gc != wc && !structuralEarlyStop[gc] {
 					t.Fatalf("DecodeFrom class %v (%v), Decode class %v (%v)", gc, err, wc, wantErr)
@@ -174,4 +196,49 @@ func FuzzDecodeFromMatchesDecode(f *testing.F) {
 			}
 		}
 	})
+}
+
+// TestBufferedReaderConsecutiveAcrossRefills decodes a sequence whose
+// items straddle BufferedReader refills, so both the buffered fast path
+// and the item-reader fallback run, and checks every item and that
+// ZeroCopy Values from earlier items survive later refills.
+func TestBufferedReaderConsecutiveAcrossRefills(t *testing.T) {
+	var seq []byte
+	var want []cbor.Value
+	for i := range 400 {
+		// Text of 0..60 bytes, then a uint: sizes drift so items land
+		// on every offset of the 4 KiB buffer.
+		s := bytes.Repeat([]byte{byte('a' + i%26)}, i%61)
+		item := append([]byte{0x82, 0x78, byte(len(s))}, s...)
+		item = append(item, 0x18, byte(i%256))
+		seq = append(seq, item...)
+		v, _, err := Decode(item, DecodeOpts{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want = append(want, v)
+	}
+	for _, zc := range []bool{false, true} {
+		for _, half := range []bool{false, true} {
+			var r io.Reader = bytes.NewReader(seq)
+			if half {
+				r = iotest.HalfReader(r)
+			}
+			br := NewBufferedReader(r)
+			var got []cbor.Value
+			for {
+				v, err := DecodeFromBuffered(br, DecodeOpts{ZeroCopy: zc})
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				if err != nil {
+					t.Fatalf("zc=%v half=%v item %d: %v", zc, half, len(got), err)
+				}
+				got = append(got, v)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("zc=%v half=%v: items differ", zc, half)
+			}
+		}
+	}
 }

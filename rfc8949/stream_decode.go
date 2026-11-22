@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/internal/decerr"
@@ -29,11 +30,70 @@ import (
 // reading, before the item's bytes are buffered, so a limit violation is
 // reported as soon as its head is read.
 func DecodeFrom(r io.Reader, opts DecodeOpts) (cbor.Value, error) {
-	ir := itemReader{r: r, opts: opts}
+	if b, ok := r.(*BufferedReader); ok {
+		if v, ok := b.decodeBuffered(opts); ok {
+			return v, nil
+		}
+	}
+	ir := itemReaderPool.Get().(*itemReader)
+	ir.r, ir.opts = r, opts
 	if br, ok := r.(io.ByteReader); ok {
 		ir.br = br
 	}
-	return ir.decode()
+	v, err := ir.decode()
+	ir.release(err == nil && !opts.ZeroCopy)
+	return v, err
+}
+
+// itemReaderPool holds itemReaders whose buf and stack are reused
+// across calls. A buf is only reused when no returned Value can alias
+// it (see release).
+var itemReaderPool = sync.Pool{New: func() any { return new(itemReader) }}
+
+// maxPooledItemBuf bounds the buffer an itemReader keeps for reuse, so
+// one large item doesn't pin its memory in the pool.
+const maxPooledItemBuf = 64 << 10
+
+// release returns ir to the pool. reuseBuf reports whether the buffered
+// item bytes are no longer referenced: without ZeroCopy, Decode copies
+// every string and byte string out of its input, so a successful decode
+// leaves nothing pointing into buf. Error paths drop the buffer.
+func (ir *itemReader) release(reuseBuf bool) {
+	if reuseBuf && cap(ir.buf) <= maxPooledItemBuf {
+		ir.buf = ir.buf[:0]
+	} else {
+		ir.buf = nil
+	}
+	if cap(ir.stack) > 64 {
+		ir.stack = nil
+	}
+	ir.stack = ir.stack[:0]
+	ir.r, ir.br, ir.opts = nil, nil, DecodeOpts{}
+	itemReaderPool.Put(ir)
+}
+
+// decodeBuffered decodes the next item directly from the read-ahead
+// buffer when the whole item is already in it, advancing past exactly
+// the item's bytes. It reports false, consuming nothing, when the item
+// isn't complete in the buffer or Decode fails (the item reader then
+// reads the item and reports its error exactly as for any reader), and
+// when the decode can't use the buffer or be repeated: ZeroCopy Values
+// would alias bytes the next refill overwrites, and a Budget or Arena
+// would be charged twice if the item reader then decoded again.
+//
+// Decode bounds preallocation by the input it is given, so decoding
+// from the buffer allocates no more than the item reader would for the
+// same bytes.
+func (br *BufferedReader) decodeBuffered(opts DecodeOpts) (cbor.Value, bool) {
+	if br.off >= len(br.buf) || opts.ZeroCopy || opts.Budget != nil || opts.Arena != nil {
+		return cbor.Value{}, false
+	}
+	v, n, err := Decode(br.buf[br.off:], opts)
+	if err != nil {
+		return cbor.Value{}, false
+	}
+	br.off += n
+	return v, true
 }
 
 // BufferedReader wraps an io.Reader with an internal read buffer for use
@@ -106,10 +166,11 @@ var errInternal = errors.New("rfc8949: internal")
 // length and well-formedness rules Decode applies to the item's
 // structure, and buffers only bytes it has actually read.
 type itemReader struct {
-	r    io.Reader
-	br   io.ByteReader
-	opts DecodeOpts
-	buf  []byte
+	r     io.Reader
+	br    io.ByteReader
+	opts  DecodeOpts
+	buf   []byte
+	stack []itemFrame
 }
 
 type itemFrame struct {
@@ -218,13 +279,13 @@ func errAt(sentinel error, off int) error {
 
 func (ir *itemReader) read() error {
 	opts := ir.opts
-	var stack []itemFrame
+	ir.stack = ir.stack[:0]
 	depth := 0
 	for {
 		off := len(ir.buf)
 		var top *itemFrame
-		if len(stack) > 0 {
-			top = &stack[len(stack)-1]
+		if len(ir.stack) > 0 {
+			top = &ir.stack[len(ir.stack)-1]
 		}
 		ib, err := ir.readByte()
 		if err != nil {
@@ -239,8 +300,8 @@ func (ir *itemReader) read() error {
 		// decodeIndefiniteText).
 		if top != nil && top.str != 0 {
 			if ib == wire.BreakCode {
-				stack = stack[:len(stack)-1]
-				if ir.complete(&stack, &depth) {
+				ir.stack = ir.stack[:len(ir.stack)-1]
+				if ir.complete(&ir.stack, &depth) {
 					return nil
 				}
 				continue
@@ -267,9 +328,9 @@ func (ir *itemReader) read() error {
 
 		if ib == wire.BreakCode {
 			if top != nil && top.indef && (!top.isMap || top.items%2 == 0) {
-				stack = stack[:len(stack)-1]
+				ir.stack = ir.stack[:len(ir.stack)-1]
 				depth--
-				if ir.complete(&stack, &depth) {
+				if ir.complete(&ir.stack, &depth) {
 					return nil
 				}
 				continue
@@ -298,7 +359,7 @@ func (ir *itemReader) read() error {
 		case wire.MajorOther:
 		case wire.MajorBytes, wire.MajorText:
 			if indefinite {
-				stack = append(stack, itemFrame{str: h.Major})
+				ir.stack = append(ir.stack, itemFrame{str: h.Major})
 				continue
 			}
 			if h.Arg > uint64(opts.maxBytes()) {
@@ -316,7 +377,7 @@ func (ir *itemReader) read() error {
 				return errAt(cbor.ErrMaxNestingDepth, off)
 			}
 			if indefinite {
-				stack = append(stack, itemFrame{indef: true, isMap: isMap})
+				ir.stack = append(ir.stack, itemFrame{indef: true, isMap: isMap})
 				depth++
 				continue
 			}
@@ -325,7 +386,7 @@ func (ir *itemReader) read() error {
 				if isMap {
 					n *= 2 // h.Arg <= maxArray <= MaxInt64, so this can't overflow
 				}
-				stack = append(stack, itemFrame{remaining: n, isMap: isMap})
+				ir.stack = append(ir.stack, itemFrame{remaining: n, isMap: isMap})
 				depth++
 				continue
 			}
@@ -340,10 +401,10 @@ func (ir *itemReader) read() error {
 				}
 				depth++
 			}
-			stack = append(stack, itemFrame{remaining: 1, selfDescribe: sd})
+			ir.stack = append(ir.stack, itemFrame{remaining: 1, selfDescribe: sd})
 			continue
 		}
-		if ir.complete(&stack, &depth) {
+		if ir.complete(&ir.stack, &depth) {
 			return nil
 		}
 	}

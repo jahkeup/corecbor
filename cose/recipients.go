@@ -107,7 +107,7 @@ func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLe
 		want := recipientAlg(deriver, o.legacy)
 		if loc != algAbsent && a != want {
 			if a == AlgPBES2_HS256_A128KW && !o.legacy.pbes2 {
-				return nil, fmt.Errorf("%w: recipient alg -11 (v0.2 PBES2 encoding; see WithLegacyPBES2Labels)", ErrUnsupportedAlgorithm)
+				return nil, fmt.Errorf("%w: recipient alg -11 (v0.2 PBES2 encoding; see WithLegacyPBES2Labels, WithLegacyMACPBES2Labels)", ErrUnsupportedAlgorithm)
 			}
 			return nil, fmt.Errorf("%w: recipient alg %s, key implies %s", ErrAlgorithmMismatch, a, want)
 		}

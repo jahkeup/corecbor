@@ -30,7 +30,7 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 
 	cekLen := hmacKeyLen(alg)
 
-	ka, direct, err := directAgreement(recipients, legacyEncoding{})
+	ka, direct, err := directAgreement(recipients, o.legacy)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 	msg.Tag = tag
 
 	if !direct {
-		msg.Recipients, err = sealRecipients(cek, alg, recipients, legacyEncoding{})
+		msg.Recipients, err = sealRecipients(cek, alg, recipients, o.legacy)
 		if err != nil {
 			return nil, err
 		}
@@ -129,10 +129,14 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...
 	}
 
 	cekLen := hmacKeyLen(alg)
-	cek, err := openRecipient(&r, recipient, alg, cekLen, &encryptOpts{policy: o.policy})
+	cek, err := openRecipient(&r, recipient, alg, cekLen, &encryptOpts{policy: o.policy, legacy: o.legacy})
 	if err != nil {
 		if errors.Is(err, ErrAlgorithmMismatch) || errors.Is(err, ErrCriticalHeader) {
 			return err
+		}
+		if errors.Is(err, ErrUnsupportedAlgorithm) {
+			// A v0.2 recipient encoding: say which selector reads it.
+			return fmt.Errorf("%w: %w", ErrMACVerification, err)
 		}
 		return fmt.Errorf("%w: key unwrap failed", ErrMACVerification)
 	}

@@ -21,6 +21,7 @@ type macOpts struct {
 	externalAAD []byte
 	policy      headerPolicy
 	strictKey   bool
+	legacy      legacyEncoding
 }
 
 func WithMACExternalAAD(aad []byte) MACOption {
@@ -46,6 +47,18 @@ func WithMACKnownCriticalHeaders(labels ...any) MACOption {
 // any non-empty key is accepted, as in v0.2.2.
 func WithStrictMACKeyLength() MACOption {
 	return func(o *macOpts) { o.strictKey = true }
+}
+
+// WithLegacyMACPBES2Labels reads and writes PBES2 COSE_Mac recipients
+// with the v0.2 identifiers (-11, count in -21), as
+// WithLegacyPBES2Labels does for COSE_Encrypt. It weakens no
+// verification. There is no MAC counterpart to WithLegacyECDHES: v0.2
+// ECDH-ES MAC recipients discarded the MAC key and never verified.
+//
+// Deprecated: interop with corecbor v0.2 only (proposal 029); removed
+// no earlier than v0.32.0.
+func WithLegacyMACPBES2Labels() MACOption {
+	return func(o *macOpts) { o.legacy.pbes2 = true }
 }
 
 // WithLegacyMACHeaders restores v0.2.2 header handling for MAC

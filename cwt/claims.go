@@ -8,7 +8,6 @@ import (
 	"crypto"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"time"
 
@@ -453,10 +452,10 @@ func (cs *ClaimsSet) decodeACE(n int64, val corecbor.Value) bool {
 		}
 		cs.CNonce = val.BytesVal()
 	case ClaimExi:
-		if val.Kind != corecbor.KindUint {
+		e, err := val.Uint64()
+		if err != nil {
 			return false
 		}
-		e := val.UintVal()
 		cs.Exi = &e
 	}
 	return true
@@ -518,16 +517,12 @@ func toValue(v any) (corecbor.Value, error) {
 // rather than wrapping.
 func fromValue(v corecbor.Value) any {
 	switch v.Kind {
-	case corecbor.KindUint:
-		if v.UintVal() > math.MaxInt64 {
+	case corecbor.KindUint, corecbor.KindNegInt:
+		n, err := v.Int64()
+		if err != nil {
 			return v
 		}
-		return int64(v.UintVal())
-	case corecbor.KindNegInt:
-		if v.NegIntVal() > math.MaxInt64 {
-			return v
-		}
-		return -1 - int64(v.NegIntVal())
+		return n
 	case corecbor.KindText:
 		return v.TextVal()
 	case corecbor.KindBytes:

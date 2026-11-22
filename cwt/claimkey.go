@@ -5,7 +5,6 @@ package cwt
 
 import (
 	"encoding/hex"
-	"math"
 	"strconv"
 
 	"github.com/jahkeup/corecbor"
@@ -77,13 +76,9 @@ func (k ClaimKey) String() string {
 // the int64 range do not wrap onto other keys; they become Raw.
 func claimKeyOf(v corecbor.Value) ClaimKey {
 	switch v.Kind {
-	case corecbor.KindUint:
-		if v.UintVal() <= math.MaxInt64 {
-			return IntKey(int64(v.UintVal()))
-		}
-	case corecbor.KindNegInt:
-		if v.NegIntVal() <= math.MaxInt64 {
-			return IntKey(-1 - int64(v.NegIntVal()))
+	case corecbor.KindUint, corecbor.KindNegInt:
+		if n, err := v.Int64(); err == nil {
+			return IntKey(n)
 		}
 	case corecbor.KindText:
 		return TextKey(v.TextVal())

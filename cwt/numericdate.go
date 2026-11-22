@@ -40,16 +40,15 @@ func numericDate(t time.Time) corecbor.Value {
 
 func parseNumericDate(v corecbor.Value) (time.Time, error) {
 	switch v.Kind {
-	case corecbor.KindUint:
-		if v.UintVal() > math.MaxInt64 {
-			return time.Time{}, fmt.Errorf("%w: %w: %d", ErrMalformedClaims, corecbor.ErrTimeRange, v.UintVal())
-		}
-		return time.Unix(int64(v.UintVal()), 0), nil
-	case corecbor.KindNegInt:
-		if v.NegIntVal() > math.MaxInt64 {
+	case corecbor.KindUint, corecbor.KindNegInt:
+		n, err := v.Int64()
+		if err != nil {
+			if v.Kind == corecbor.KindUint {
+				return time.Time{}, fmt.Errorf("%w: %w: %d", ErrMalformedClaims, corecbor.ErrTimeRange, v.UintVal())
+			}
 			return time.Time{}, fmt.Errorf("%w: %w: -1-%d", ErrMalformedClaims, corecbor.ErrTimeRange, v.NegIntVal())
 		}
-		return time.Unix(-1-int64(v.NegIntVal()), 0), nil
+		return time.Unix(n, 0), nil
 	case corecbor.KindFloat64:
 		return floatDate(v.Float64Val())
 	case corecbor.KindFloat32:

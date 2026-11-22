@@ -551,21 +551,12 @@ func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error)
 var restEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic,
 	corecbor.AllowInvalidUTF8(), corecbor.AllowNonFiniteFloats())
 
+// intKey returns k as an int64 when it is an integer in the int64
+// range; anything else (other kinds, or integers beyond int64) is
+// reported as not an integer key rather than wrapping.
 func intKey(k corecbor.Value) (int64, bool) {
-	switch k.Kind {
-	case corecbor.KindUint:
-		if k.UintVal() > math.MaxInt64 {
-			return 0, false
-		}
-		return int64(k.UintVal()), true
-	case corecbor.KindNegInt:
-		if k.NegIntVal() > math.MaxInt64 {
-			return 0, false
-		}
-		return -1 - int64(k.NegIntVal()), true
-	default:
-		return 0, false
-	}
+	n, err := k.Int64()
+	return n, err == nil
 }
 
 func malformed(format string, args ...any) error {
@@ -1035,10 +1026,11 @@ func parseIntClaim(v corecbor.Value) (int64, error) {
 }
 
 func parseUintClaim(v corecbor.Value) (uint64, error) {
-	if v.Kind != corecbor.KindUint {
+	n, err := v.Uint64()
+	if err != nil {
 		return 0, fmt.Errorf("%w: expected unsigned integer, got kind %d", ErrMalformedEAT, v.Kind)
 	}
-	return v.UintVal(), nil
+	return n, nil
 }
 
 // sortedSubmodNames returns the submodule names in sorted order, so

@@ -148,17 +148,11 @@ func (p *Claims) ToEAT() *eat.Claims {
 }
 
 func intOf(v corecbor.Value, what string) (int64, error) {
-	switch v.Kind {
-	case corecbor.KindUint:
-		if v.UintVal() <= math.MaxInt64 {
-			return int64(v.UintVal()), nil
-		}
-	case corecbor.KindNegInt:
-		if v.NegIntVal() <= math.MaxInt64 {
-			return -1 - int64(v.NegIntVal()), nil
-		}
+	n, err := v.Int64()
+	if err != nil {
+		return 0, fmt.Errorf("%w: %s must be an integer", ErrMalformedPSA, what)
 	}
-	return 0, fmt.Errorf("%w: %s must be an integer", ErrMalformedPSA, what)
+	return n, nil
 }
 
 func intValue(n int64) corecbor.Value {

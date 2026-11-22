@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 032 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress (Phases A–C implemented; D deferred) |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 005 (EAT), 031 (CWT hardening), 022 (raw-byte preservation), 027 (COSE verification hardening), 034 (compatibility policy) |
@@ -512,10 +512,10 @@ as v0.2.2 except the contract-defect rows above.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| A | Renumber claims; add missing scalar claims; fail-closed submods; `dbgstat`/nonce/UEID/profile rules; unknown-claim preservation via `cwt` (031 Phase A) | Pending | `TestClaimKeys_IANA`, `TestRFC9711_AppendixA`, `TestAppraise_SubmodFailClosed` pass |
-| B | `eat/psa` package (RFC 9783); remove `SWComponent` / `SecurityLevel` from `eat` | Pending | `TestPSA_RFC9783Example` passes |
-| C | Detached submods + tag-602 bundle + RFC 9782 media types | Pending | `TestSubmod_Detached`, `TestDetachedBundle` pass |
-| D | Measured component (RFC 10013) helpers | Pending | follow-up proposal Accepted |
+| A | Renumber claims; add missing scalar claims; fail-closed submods; `dbgstat`/nonce/UEID/profile rules; unknown-claim preservation via `cwt` (031 Phase A) | Done | `TestClaimKeys_IANA`, `TestRFC9711_AppendixA`, `TestAppraise_SubmodFailClosed` pass |
+| B | `eat/psa` package (RFC 9783); ~~remove `SWComponent` / `SecurityLevel` from `eat`~~ kept per 034 API stability (`SecurityLevel` deprecated; `SWComponents` maps to 2399, aliased as `psa.SoftwareComponent`) | Done | `TestPSA_RFC9783Example` passes |
+| C | Detached submods + tag-602 bundle + RFC 9782 media types | Done | `TestSubmod_Detached`, `TestDetachedBundle` pass |
+| D | Measured component (RFC 10013) helpers | Deferred (RFC vendored; `Measurements` carried as `TypedBytes`) | follow-up proposal Accepted |
 
 Phase A is a security fix (the submodule fail-open) and an interop fix
 (the keys), and should land as soon as proposal 031 Phase A lands.
@@ -526,11 +526,13 @@ Phase A is a security fix (the submodule fail-open) and an interop fix
 
 | Test | Covers | Lives at |
 |---|---|---|
-| `TestClaimKeys_IANA` | constants vs registry snapshot | `eat/claims_test.go` |
-| `TestRFC9711_AppendixA` | spec examples (errata-corrected) | `eat/rfc9711_test.go` + `eat/testdata/` |
-| `TestAppraise_*` | fail-closed submods, ordering, dbgstat, nonce | `eat/appraiser_test.go` |
+| `TestClaimKeys_IANA` | constants vs registry snapshot | `eat/eat032_test.go` + `eat/testdata/cwt-claims.xml` |
+| `TestRFC9711_AppendixA_*` | spec examples A.1.1–A.1.5 (errata-corrected) | `eat/eat032_test.go` + `eat/rfc9711_vectors_test.go` |
+| `TestDetachedBundle` | A.2.2 tag-602 bundle and detached-digest submod (covers `TestSubmod_Detached`) | `eat/eat032_test.go` |
+| `TestAppraise_SubmodFailClosed`, `TestDbgStat`, `TestNonce_Length`, `TestAppraiserDefaults` | fail-closed submods, ordering, dbgstat, nonce, zero vs `NewAppraiser()` | `eat/eat032_test.go` |
+| `TestCompatDraftClaimKeys`, `TestCompatNoMixedNumbering`, `TestGoldenLegacyReproducesV022` | legacy numbering, byte-identical to v0.2.2 | `eat/eat032_test.go`, `eat/golden_legacy_test.go` |
 | `TestPSA_*` | RFC 9783 | `eat/psa/psa_test.go` |
-| `FuzzDecodeClaims` | arbitrary bytes → typed error | `eat/fuzz_test.go` (new) |
+| `FuzzDecodeClaims`, `FuzzAppraise`, `FuzzDecodeDetachedBundle` | arbitrary bytes → typed error; fail-closed invariant | `eat/fuzz_test.go` |
 
 ---
 
@@ -607,6 +609,70 @@ isolation benefit.
 
 ---
 
+## Implementation notes (2026-11-21)
+
+**Phases A–C are implemented; D is deferred.** Claim keys were checked
+against the live IANA CWT Claims registry (snapshot
+`eat/testdata/cwt-claims.xml`, updated 2026-11-13) for 10, 256–275 and
+2394–2400; `TestClaimKeys_IANA` parses the snapshot.
+
+- **Delegation to `cwt` (031).** `DecodeClaims` decodes the map,
+  handles the keys eat models and re-encodes the rest through
+  `cwt.DecodeClaimsSet`, so registered claims, `cnf` and unknown claims
+  land in the embedded `ClaimsSet` / `PrivateClaims`. eat never reads
+  or writes the deprecated `Private`. Duplicate claim keys are rejected
+  (RFC 8392 §7.2, inherited from 031).
+- **Legacy numbering.** `WithLegacyDraftClaimKeys()` (and
+  `CompatV02()`) switches all four draft keys at once and rejects
+  RFC-only claims rather than mixing. `TestGoldenLegacyReproducesV022`
+  runs the whole v0.2.2 eat golden corpus under the selector: every
+  vector is byte-identical except `eat/appraise/submod-token-no-verifier`
+  (the safety fix, which no selector undoes).
+- **`SecurityLevel`.** Encoding a non-zero `SecurityLevel` without the
+  legacy selector returns `ErrClaimNumbering` instead of silently
+  dropping it; it decodes only under legacy numbering. A signed
+  `SecurityLevel` or `Debug` is encoded as a CBOR integer (negative
+  values were written as a wrapped uint64 in v0.2.2, which it could not
+  decode back; found by `FuzzDecodeClaims`). Non-negative values encode
+  as before.
+- **Fail closed.** As specified, submodules are appraised only when
+  `SubmodPolicy` is set; then a token or JSON submod with neither
+  `SubmodVerify` nor `SubmodVerifier`, or a detached digest without
+  `SubmodDetached`, returns `ErrSubmodUnverified`. Inline submods are
+  checked one level deep by the appraiser (deeper levels are the
+  policy's job); `Validate` recurses through inline submods.
+- **Validation is opt-in.** `DecodeClaims` accepts what v0.2.2 accepted;
+  `Claims.Validate()` and `NewAppraiser()` (`ValidateValues`) apply the
+  nonce, UEID, dbgstat and profile rules.
+- **Additions beyond the text:** `OEMIDPEN` (the integer oemid form),
+  `DetachedDigest.AlgName` (text algorithm identifiers),
+  `HeadingNull` on `Location` (erratum 8776). `eat/psa` uses pointer
+  fields for presence; `ClientID` is range-checked to int32.
+- **Not addressed:** inline submodule original bytes are not preserved
+  (re-encoding is deterministic); JSON submods stay opaque bytes.
+- **Open questions answered:** `Location` is typed. Nested tokens are
+  not decoded recursively by the appraiser; `SubmodVerify` returns the
+  claims and `SubmodPolicy` sees them. RFC 9783 §4.3 confirms no
+  automatic security-level → lifecycle translation. Media types and
+  content-formats 263–268 are quoted from the vendored RFC 9782.
+- **RFC example inconsistencies** (documented in the tests): the A.1.3
+  UEID is 16 bytes, which isn't a valid RAND length (reported erratum
+  9193), so that test checks `Validate` rejects it. In A.2.2 the hex
+  main token's detached digest (`8def652f…`) is not SHA-256 of the
+  detached TEE claims set; the RFC's diagnostic notation (`ab86f765…`)
+  is, and the appraisal test uses that. The A.1.3 payload isn't in
+  deterministic key order, so its re-encoding is compared with the
+  deterministic encoding of the same value.
+- **Golden ids changed by default** (allowlisted, "proposal 032 …"):
+  `eat/encode/{uptime,sw-components,submods-inline,submods-token,security-level}`,
+  `eat/decode/{roundtrip-uptime-seclevel,rfc9711-uptime-261,rfc9711-submods-266,rfc9711-bootcount-267,rfc9711-bootseed-268,profile-oid-bstr}`,
+  `eat/appraise/submod-token-no-verifier`.
+- **Fuzz:** `FuzzDecodeClaims`, `FuzzAppraise` and
+  `FuzzDecodeDetachedBundle` ran 60 s each without failure after the
+  integer-encoding fix.
+
+---
+
 ## Changelog
 
 | Date | Change | Author |
@@ -614,3 +680,4 @@ isolation benefit.
 | 2026-11-20 | Initial draft from 2026-11-20 codebase review + IANA registry check | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | Phases A–C implemented; D deferred; implementation notes | corecbor maintainers |

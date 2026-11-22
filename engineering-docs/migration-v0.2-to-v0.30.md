@@ -333,6 +333,65 @@ peer does not interoperate with a v0.2 peer** unless one side passes
 `NewInitiator(cfg, ...Option)` and `NewResponder(cfg, ...Option)` gain
 optional parameters; existing calls compile unchanged.
 
+## eat (032)
+
+The package now uses the IANA CWT claim keys (RFC 9711). v0.2 used
+draft-era keys for four claims, so **v0.2-issued tokens carrying
+uptime, sw-components or submods decode differently** unless you pass
+`eat.WithLegacyDraftClaimKeys()` (or `eat.CompatV02()`) to
+`DecodeClaims`, `Encode`, `Sign` and `Verify`. Under the selector,
+`Encode` is byte-identical to v0.2.2. Numbering is never auto-detected.
+
+| Claim | v0.2 key | v0.30 key |
+|---|---|---|
+| security level (not in RFC 9711) | 261 | none (legacy selector only) |
+| uptime | 266 | 261 |
+| sw-components → `psa-software-components` (RFC 9783) | 267 | 2399 |
+| submods | 268 | 266 |
+
+Existing identifiers keep their meaning (034). Changes to them:
+
+| Change | Old behavior | Restore with |
+|---|---|---|
+| Claim keys per the table above | draft keys | `WithLegacyDraftClaimKeys()` (deprecated) |
+| `Encode` of a non-zero `SecurityLevel` returns `ErrClaimNumbering` without the selector | encoded at 261 (now `uptime`) | `WithLegacyDraftClaimKeys()` |
+| With `SubmodPolicy` set, a nested-token submod without `SubmodVerify`/`SubmodVerifier` returns `ErrSubmodUnverified` | decoded unverified and passed to the policy as trusted | none; pass a `SubmodVerify` that decodes without verifying to make that choice explicit |
+| Submodules are appraised in sorted name order | map order | n/a |
+| `cnf`, private and unknown claims are preserved (embedded `cwt.ClaimsSet`, `PrivateClaims`) | dropped | n/a |
+| Duplicate claim keys are rejected (via `cwt`, 031) | last one won | none |
+| `eat_profile` may be an OID (`ProfileOID`) | bstr form rejected | n/a |
+| A negative `SecurityLevel` or `Debug` encodes as a CBOR negative integer | wrapped to a large uint | none |
+
+`DecodeClaims` accepts the same values as before. The RFC 9711 value
+rules (nonce 8–64 bytes, UEID form, dbgstat 0–4, profile URI or OID)
+are opt-in: `Claims.Validate()`, or `NewAppraiser()`, which also sets
+`cwt.NewValidator()`. A zero-value `Appraiser{}` behaves as in v0.2.
+
+New, additive:
+
+- Claims: `SUEIDs`, `HWModel`, `HWVersion`, `Location`, `BootCount`,
+  `BootSeed`, `DLOAs`, `SWName`, `SWVersion`, `Manifests`,
+  `Measurements`, `MeasRes`, `IntUse`, `DbgStat` (encodes 0 explicitly),
+  `OEMIDPEN`, `ProfileOID`; `DebugDisabledFullyAndPermanently`;
+  `UEID.Validate()`.
+- Submodules: `Submod.JSON` and `Submod.Detached`; `Appraiser.SubmodVerify`,
+  `SubmodDetached`, `NonceVerifier`, `MinDebugStatus`,
+  `RequireProfileOID`, `MeasurementPolicy`, `AppraiseContext`.
+- Detached EAT bundles (tag 602): `DecodeDetachedBundle`.
+- RFC 9782 media types and content-formats (`MediaTypeEAT*`,
+  `ContentFormatEAT*`).
+- `eat/psa`: RFC 9783 PSA claims (`FromEAT`, `ToEAT`, lifecycle
+  constants); `psa.SoftwareComponent` is `eat.SWComponent`.
+- New sentinels: `ErrSubmodUnverified`, `ErrInvalidUEID`,
+  `ErrInvalidNonce`, `ErrDebugStatus`, `ErrUnknownDebugStatus`,
+  `ErrInvalidProfile`, `ErrClaimNumbering`.
+
+Deprecated: `Claims.SecurityLevel`, `Appraiser.RequireSecurityLevel`
+(the claim isn't in RFC 9711).
+
+`DecodeClaims`, `(*Claims).Encode`, `Sign` and `Verify` gain
+`...Option`; existing calls compile unchanged.
+
 ## Deprecated legacy selectors
 
 All are `// Deprecated:` on arrival and removed no earlier than v0.32.0.
@@ -355,3 +414,5 @@ Selectors that weaken verification are never included in a
 | `WithLegacyMACPBES2Labels()` | cose | the same for `COSE_Mac` recipients |
 | `WithLegacyECDHES()` | cose | the v0.2 ECDH-ES encoding (talks only to v0.2 peers) |
 | `WithLegacyPreRFCProtocol()` | edhoc | the v0.2 pre-RFC protocol (talks only to v0.2 peers; never bundled) |
+| `CompatV02()` | eat | `WithLegacyDraftClaimKeys()` |
+| `WithLegacyDraftClaimKeys()` | eat | v0.2 draft claim keys (261/266/267/268), all at once |

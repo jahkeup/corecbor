@@ -100,6 +100,27 @@ func TestNonZeroCopyBytes(t *testing.T) {
 	}
 }
 
+// TestZeroCopyEmptyTextAtEnd decodes empty text strings that end the
+// input (top level, array element, map value, indefinite chunk), which
+// panicked taking the address of src[len(src)].
+func TestZeroCopyEmptyTextAtEnd(t *testing.T) {
+	for _, src := range [][]byte{
+		{0x60},             // ""
+		{0x81, 0x60},       // [""]
+		{0xa1, 0x01, 0x60}, // {1: ""}
+		{0x7f, 0x60, 0xff}, // (_ "")
+	} {
+		v, _, err := Decode(src, DecodeOpts{ZeroCopy: true})
+		if err != nil {
+			t.Fatalf("% x: %v", src, err)
+		}
+		want, _, _ := Decode(src, DecodeOpts{})
+		if !v.Equal(want) {
+			t.Fatalf("% x: got %v, want %v", src, v, want)
+		}
+	}
+}
+
 func BenchmarkDecodeZeroCopy(b *testing.B) {
 	m := cbor.MakeMap(
 		cbor.MapEntry{Key: cbor.Text("name"), Value: cbor.Text("alice")},

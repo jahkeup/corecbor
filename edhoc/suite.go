@@ -19,7 +19,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/jahkeup/corecbor/cose"
-	"github.com/jahkeup/corecbor/edhoc/internal/aesccm"
+	"github.com/jahkeup/corecbor/internal/aesccm"
 )
 
 // Cipher suites registered by RFC 9528 §10.2 beyond Suite0 and Suite2.

@@ -14,7 +14,7 @@ import (
 	"math/big"
 
 	"github.com/jahkeup/corecbor/cbor"
-	"github.com/jahkeup/corecbor/edhoc/internal/aesccm"
+	"github.com/jahkeup/corecbor/internal/aesccm"
 )
 
 type initiatorState int

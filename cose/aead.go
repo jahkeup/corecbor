@@ -7,7 +7,7 @@ import (
 	"crypto/cipher"
 	"fmt"
 
-	"github.com/jahkeup/corecbor/cose/internal/aesccm"
+	"github.com/jahkeup/corecbor/internal/aesccm"
 )
 
 // contentAEAD returns the AEAD for a COSE content-encryption algorithm:

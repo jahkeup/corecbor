@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"github.com/jahkeup/corecbor/cbor"
-	"github.com/jahkeup/corecbor/edhoc/internal/aesccm"
+	"github.com/jahkeup/corecbor/internal/aesccm"
 )
 
 type responderState int

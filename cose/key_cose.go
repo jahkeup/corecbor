@@ -165,8 +165,14 @@ func intLabel(k corecbor.Value) (int64, error) {
 // Key keeps references to its byte strings and nested values.
 func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 	var cfg keyParseConfig
-	for _, o := range opts {
-		o(&cfg)
+	if len(opts) > 0 {
+		// Options take a pointer; building them on a separate value keeps
+		// cfg on the stack for the common no-options call.
+		c := new(keyParseConfig)
+		for _, o := range opts {
+			o(c)
+		}
+		cfg = *c
 	}
 	if v.Kind != corecbor.KindMap {
 		return nil, fmt.Errorf("%w: COSE_Key must be a map", ErrMalformed)
@@ -371,8 +377,16 @@ func (k *Key) validateEC2(cfg keyParseConfig) error {
 		}
 	}
 	if hasX {
-		point := append(append([]byte{0x04}, x...), y...)
-		if _, err := ecdsa.ParseUncompressedPublicKey(goCrv, point); err != nil {
+		// crypto/ecdh validates the point is on the curve (and not the
+		// identity) without the big.Int affine conversion that
+		// ecdsa.ParseUncompressedPublicKey does, so it allocates less.
+		var buf [1 + 2*66]byte
+		point := append(append(append(buf[:0], 0x04), x...), y...)
+		ec, err := coseCurveToECDH(k.Curve())
+		if err != nil {
+			return err
+		}
+		if _, err := ec.NewPublicKey(point); err != nil {
 			return fmt.Errorf("%w: EC2 point: %w", ErrInvalidKey, err)
 		}
 	}

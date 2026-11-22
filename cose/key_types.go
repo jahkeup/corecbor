@@ -4,6 +4,7 @@
 package cose
 
 import (
+	"crypto/ecdh"
 	"crypto/elliptic"
 	"fmt"
 
@@ -97,6 +98,23 @@ func coseCurveToGo(c Curve) (elliptic.Curve, error) {
 		return elliptic.P521(), nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported COSE curve %d", ErrInvalidKey, c)
+	}
+}
+
+// coseCurveToECDH maps a COSE curve to its crypto/ecdh curve: the NIST
+// curves (EC2) and X25519 (OKP).
+func coseCurveToECDH(c Curve) (ecdh.Curve, error) {
+	switch c {
+	case CurveP256:
+		return ecdh.P256(), nil
+	case CurveP384:
+		return ecdh.P384(), nil
+	case CurveP521:
+		return ecdh.P521(), nil
+	case CurveX25519:
+		return ecdh.X25519(), nil
+	default:
+		return nil, fmt.Errorf("%w: COSE curve %d has no ECDH form", ErrInvalidKey, c)
 	}
 }
 

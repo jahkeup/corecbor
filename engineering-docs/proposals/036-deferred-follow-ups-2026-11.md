@@ -33,9 +33,9 @@ none blocks a release.
 | 4 | RFC 8746 typed arrays | 026 Phase D | consumer request | — |
 | 5 | Concise Diagnostic Notation alignment | 026 Phase E | draft-ietf-cbor-edn-literals publishes | `DiagCDN()` reserved |
 | 6 | Ed448 / X448 sign, verify and ECDH | 028, 029, 033 | standard library support | Parse/marshal only today; EDHOC suite 25 and HPKE-5/6 blocked on it |
-| 7 | `BenchmarkParseKeyEC2` 20 allocs vs target 10 | 028 | perf work | About half is the required on-curve check |
+| 7 | `BenchmarkParseKeyEC2` 20 allocs vs target 10 | 028 | perf work | **Done (partial, floor documented).** 20 → 15 allocs/op (2064 → 2056 B/op, time unchanged within noise): the on-curve check uses `crypto/ecdh` `NewPublicKey` on a stack buffer instead of `ecdsa.ParseUncompressedPublicKey`, and parse config no longer escapes without options. Floor ~15 with the current design: decode 3, `Key` + params map 2, boxing into `map[int64]any` 2–3, point buffer escaping through the interface call 1, `crypto/ecdh` internals ~4. Reaching 10 needs typed key fields instead of `map[int64]any` and a non-allocating on-curve check, which the standard library doesn't expose |
 | 8 | mDL issuer-auth interop vector | 028 | vector with a confirmed license | Non-gating |
-| 9 | `cose.NewKeyFromPublic` accepting `*ecdh.PublicKey` (X25519) | 033 follow-ups | — | edhoc keeps a small local builder |
+| 9 | `cose.NewKeyFromPublic` accepting `*ecdh.PublicKey` (X25519) | 033 follow-ups | — | **Done.** `NewKeyFromPublic` already took `*ecdh.PublicKey` (029); added `NewKeyFromECDH`, `(*Key).ECDHPublicKey` and `(*Key).ECDHPrivateKey` (X25519; EC2 P-256/384/521), additive per 034. edhoc's local builder is removed in favor of `cose.NewKeyFromPublic`; RFC 9529 traces 1 and 2 pass byte-for-byte and the legacy v0.2.2 vectors still reproduce |
 | 10 | RFC 10013 measured component helpers | 032 Phase D | consumer request | `Measurements` carried as typed bytes today |
 | 11 | HPKE code points final; drop `Draft…`/Experimental | 029 | draft-ietf-cose-hpke publishes with IANA values | 034 lifecycle |
 | 12 | Serialization profile identifiers final | 024 | draft-ietf-cbor-serialization publishes | 034 lifecycle |

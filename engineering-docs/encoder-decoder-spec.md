@@ -714,6 +714,10 @@ This document is the **tier-1 spec**. Subsequent in-flight proposals
 5. **Rollback-safe code paths.** Every Phase-N feature MUST be revertable
    without breaking Phase-(N-1) guarantees. Behind a flag if necessary
    during the transition.
+6. **Compatibility selection.** A proposal that changes wire output,
+   validation outcomes, or code points, or touches an exported
+   identifier, MUST include a Compatibility selection section
+   classifying each change per §14.
 
 ---
 
@@ -732,3 +736,58 @@ offline reference. See `rfcs/README.md` for refresh procedure.
   here but informs tag-preservation requirements (§4.3).
 - IANA CBOR tags registry (live, not vendored): https://www.iana.org/assignments/cbor-tags/
   — Phase 3 helper coverage.
+
+---
+
+## 14 — API stability and standards currency
+
+Adopted by proposal 034; the proposal holds the rationale and worked
+decisions.
+
+### 14.1 API stability (signature and semantics)
+
+For every exported identifier present in a released version:
+
+- **Not allowed:** removing or renaming it; changing a parameter,
+  result, or struct-field type; adding a method to an exported
+  interface; changing an exported constant's value.
+- **Allowed:** new identifiers; new struct fields whose zero value
+  preserves existing behavior (or, for fields that bound
+  attacker-controlled work, a safe documented default); `// Deprecated:`
+  with a pointer to the replacement; appending a variadic `...Option`
+  parameter only if a call with no options behaves exactly as before,
+  apart from defect fixes listed in the same proposal.
+- **Semantics:** the documented behavior of an existing identifier,
+  including its zero value and default configuration, does not change,
+  except to fix a defect (§14.3).
+
+`make apicheck` (apidiff against the last release) and the golden
+vectors recorded from that release enforce this in `make check`.
+
+### 14.2 Precedence for new identifiers and defect fixes
+
+1. The current standards state: the latest published RFC, its verified
+   errata, and the current IANA registries.
+2. Deployed-ecosystem interoperability, as a tie-breaker where the
+   standard permits several behaviors.
+3. Existing behavior, where neither decides.
+4. Internet-Drafts: opt-in only, under identifiers documented as
+   Experimental and naming the draft and revision.
+
+On the accept side, be liberal where the input is unambiguous; where
+two behaviors are ambiguous on the wire, accept only the selected one.
+
+### 14.3 Classification
+
+| Class | Meaning | Selector |
+|---|---|---|
+| Safety defect | race, panic, memory corruption, fail-open authentication or validation, attacker-chosen downgrade, unbounded attacker-controlled work | none |
+| Contract defect | implementation contradicts its own documentation, this spec, or the RFC it claims to implement | fixed in place; a deprecated `Legacy…` selector where callers may depend on the old bytes |
+| Superseded contract | an identifier does what it documents, but the standard has moved on | old identifier unchanged and deprecated; new identifier carries the standards behavior |
+| Additive | new identifier, no existing behavior affected | — |
+| Draft | defined only by an Internet-Draft | opt-in, Experimental |
+
+`Legacy…` selectors are deprecated on arrival and removed no earlier
+than v0.32.0. Selectors that weaken verification or validation are
+never included in a `CompatV02*` bundle.
+

@@ -256,3 +256,81 @@ func BenchmarkCursorFindMapKeyLast(b *testing.B) {
 		c.Decode()               //nolint:errcheck
 	}
 }
+
+// Nesting deeper than the Cursor's inline frames spills into the
+// overflow slice; entering and leaving must stay balanced (036 item 20).
+func TestCursorDeepNesting(t *testing.T) {
+	const depth = 10
+	var src []byte
+	for range depth {
+		src = append(src, 0x81) // array(1)
+	}
+	src = append(src, 0x07)
+	c := NewCursor(src, DecodeOpts{})
+	for i := range depth {
+		if n, err := c.EnterArray(); err != nil || n != 1 {
+			t.Fatalf("EnterArray %d: n=%d err=%v", i, n, err)
+		}
+	}
+	v, err := c.Decode()
+	if err != nil || v.Kind != cbor.KindUint || v.Num != 7 {
+		t.Fatalf("Decode = %v, %v", v, err)
+	}
+	for i := range depth {
+		if err := c.ExitArray(); err != nil {
+			t.Fatalf("ExitArray %d: %v", i, err)
+		}
+	}
+	if err := c.ExitArray(); err == nil {
+		t.Fatal("ExitArray past the top level: want error")
+	}
+	if !c.AtEnd() {
+		t.Fatal("cursor not at end")
+	}
+}
+
+// A nested container counts as one item of its parent: after leaving it,
+// the next sibling is read rather than skipped.
+func TestCursorSiblingAfterNested(t *testing.T) {
+	// [[1], 2]
+	c := NewCursor([]byte{0x82, 0x81, 0x01, 0x02}, DecodeOpts{})
+	if _, err := c.EnterArray(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.EnterArray(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ExitArray(); err != nil {
+		t.Fatal(err)
+	}
+	if v, err := c.Decode(); err != nil || v.Num != 2 {
+		t.Fatalf("sibling = %v, %v; want 2", v, err)
+	}
+	if err := c.ExitArray(); err != nil || !c.AtEnd() {
+		t.Fatalf("exit outer: %v, at end %v", err, c.AtEnd())
+	}
+
+	// {"a": {"x": 1}, "b": 2}
+	c = NewCursor([]byte{0xa2, 0x61, 'a', 0xa1, 0x61, 'x', 0x01, 0x61, 'b', 0x02}, DecodeOpts{})
+	if _, err := c.EnterMap(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.FindMapKey("a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.EnterMap(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ExitMap(); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.FindMapKey("b"); err != nil {
+		t.Fatalf("FindMapKey(b) after nested map: %v", err)
+	}
+	if v, err := c.Decode(); err != nil || v.Num != 2 {
+		t.Fatalf("b = %v, %v; want 2", v, err)
+	}
+	if err := c.ExitMap(); err != nil || !c.AtEnd() {
+		t.Fatalf("exit outer map: %v, at end %v", err, c.AtEnd())
+	}
+}

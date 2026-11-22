@@ -28,11 +28,39 @@ type cursorFrame struct {
 // only wire headers to determine structure, skipping payloads until
 // the caller requests a value. Zero allocations for Skip and RawBytes.
 type Cursor struct {
-	src   []byte
-	pos   int
-	stack []cursorFrame
-	opts  DecodeOpts
+	src  []byte
+	pos  int
+	opts DecodeOpts
+	// Open containers: the first len(frames) levels live inline so that
+	// entering a container doesn't allocate in the common shallow case;
+	// deeper levels spill into extra.
+	frames [4]cursorFrame
+	extra  []cursorFrame
+	nopen  int
 }
+
+// depth returns the number of open containers.
+func (c *Cursor) depth() int { return c.nopen }
+
+// top returns the innermost open container; c.depth() must be > 0.
+func (c *Cursor) top() *cursorFrame {
+	i := c.nopen - 1
+	if i < len(c.frames) {
+		return &c.frames[i]
+	}
+	return &c.extra[i-len(c.frames)]
+}
+
+func (c *Cursor) push(f cursorFrame) {
+	if c.nopen < len(c.frames) {
+		c.frames[c.nopen] = f
+	} else {
+		c.extra = append(c.extra[:c.nopen-len(c.frames)], f)
+	}
+	c.nopen++
+}
+
+func (c *Cursor) pop() { c.nopen-- }
 
 // NewCursor creates a cursor over src.
 func NewCursor(src []byte, opts DecodeOpts) *Cursor {
@@ -45,8 +73,8 @@ func (c *Cursor) Offset() int { return c.pos }
 // AtEnd reports whether the cursor has consumed all bytes at the
 // current level.
 func (c *Cursor) AtEnd() bool {
-	if len(c.stack) > 0 {
-		top := &c.stack[len(c.stack)-1]
+	if c.depth() > 0 {
+		top := c.top()
 		return top.remaining == 0
 	}
 	return c.pos >= len(c.src)
@@ -95,7 +123,7 @@ func (c *Cursor) RawBytes() ([]byte, error) {
 // Raw returns the source bytes of the item the cursor is positioned
 // at, without advancing. The slice aliases the cursor's source.
 func (c *Cursor) Raw() ([]byte, error) {
-	next, err := c.skipAt(c.pos, len(c.stack), 0, len(c.stack) == 0)
+	next, err := c.skipAt(c.pos, c.depth(), 0, c.depth() == 0)
 	if err != nil {
 		return nil, err
 	}
@@ -164,10 +192,10 @@ func (c *Cursor) Decode() (cbor.Value, error) {
 }
 
 func (c *Cursor) consumeFromFrame() {
-	if len(c.stack) == 0 {
+	if c.depth() == 0 {
 		return
 	}
-	top := &c.stack[len(c.stack)-1]
+	top := c.top()
 	if top.remaining > 0 {
 		top.remaining--
 	}
@@ -191,7 +219,9 @@ func (c *Cursor) EnterArray() (int, error) {
 	if h.AI != wire.AIIndefinite {
 		count = int(h.Arg)
 	}
-	c.stack = append(c.stack, cursorFrame{remaining: count, isMap: false})
+	// The nested container is one item of its parent.
+	c.consumeFromFrame()
+	c.push(cursorFrame{remaining: count, isMap: false})
 	return count, nil
 }
 
@@ -214,7 +244,9 @@ func (c *Cursor) EnterMap() (int, error) {
 	if h.AI != wire.AIIndefinite {
 		count = int(h.Arg) * 2
 	}
-	c.stack = append(c.stack, cursorFrame{remaining: count, isMap: true})
+	// The nested container is one item of its parent.
+	c.consumeFromFrame()
+	c.push(cursorFrame{remaining: count, isMap: true})
 	if h.AI != wire.AIIndefinite {
 		return int(h.Arg), nil
 	}
@@ -225,34 +257,34 @@ func (c *Cursor) EnterMap() (int, error) {
 // the cursor to the enclosing container. Returns ErrNotInContainer if
 // not inside an array.
 func (c *Cursor) ExitArray() error {
-	if len(c.stack) == 0 {
+	if c.depth() == 0 {
 		return ErrNotInContainer
 	}
-	top := &c.stack[len(c.stack)-1]
+	top := c.top()
 	if top.isMap {
 		return fmt.Errorf("%w: currently in a map, not an array", ErrNotInContainer)
 	}
 	if err := c.skipRemaining(top); err != nil {
 		return err
 	}
-	c.stack = c.stack[:len(c.stack)-1]
+	c.pop()
 	return nil
 }
 
 // ExitMap skips any remaining key-value pairs in the current map and
 // returns the cursor to the enclosing container.
 func (c *Cursor) ExitMap() error {
-	if len(c.stack) == 0 {
+	if c.depth() == 0 {
 		return ErrNotInContainer
 	}
-	top := &c.stack[len(c.stack)-1]
+	top := c.top()
 	if !top.isMap {
 		return fmt.Errorf("%w: currently in an array, not a map", ErrNotInContainer)
 	}
 	if err := c.skipRemaining(top); err != nil {
 		return err
 	}
-	c.stack = c.stack[:len(c.stack)-1]
+	c.pop()
 	return nil
 }
 
@@ -261,10 +293,10 @@ func (c *Cursor) ExitMap() error {
 // Returns ErrKeyNotFound if the key is not found before the map ends.
 // Only scans forward — cannot find keys already passed.
 func (c *Cursor) FindMapKey(key string) error {
-	if len(c.stack) == 0 {
+	if c.depth() == 0 {
 		return ErrNotInContainer
 	}
-	top := &c.stack[len(c.stack)-1]
+	top := c.top()
 	if !top.isMap {
 		return fmt.Errorf("%w: not in a map", ErrNotInContainer)
 	}
@@ -350,7 +382,7 @@ func (c *Cursor) skipRemaining(frame *cursorFrame) error {
 // of the content knobs (UTF-8, duplicates, tags, floats), which only
 // Decode applies.
 func (c *Cursor) skipItem() error {
-	next, err := c.skipAt(c.pos, len(c.stack), 0, len(c.stack) == 0)
+	next, err := c.skipAt(c.pos, c.depth(), 0, c.depth() == 0)
 	if err != nil {
 		return err
 	}

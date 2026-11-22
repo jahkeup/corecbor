@@ -830,6 +830,13 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if err != nil {
 		return cbor.Value{}, next, err
 	}
+	if opts.Arena != nil {
+		// Same layout as MakeTag; the one-item slice is capped so an
+		// append can't overwrite the arena slot that follows it.
+		items := opts.Arena.AllocValues(1)[:1:1]
+		items[0] = inner
+		return cbor.Value{Kind: cbor.KindTag, Num: tagID, Items: items}, next, nil
+	}
 	return cbor.MakeTag(tagID, inner), next, nil
 }
 

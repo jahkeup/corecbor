@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 029 |
 | **Tier** | 3 |
-| **Status** | Draft |
+| **Status** | In-Progress |
 | **Filed** | 2026-11-20 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 002, 027 (alg binding + policy), 028 (COSE_Key, AKP kty), 034 (compatibility policy) |
@@ -481,11 +481,11 @@ appended to existing functions.
 
 | Phase | Scope | Status | Closes when |
 |---|---|---|---|
-| 1 | Registry constants, `String`, `Deprecated`, RFC 9864 verify + opt-in emit, PBES2 renumber | Pending | registry + RFC 9864 rows green |
-| 2 | ECDH-ES rewrite (-25/-26/-29/-30/-31), Encrypt0 IV, Partial IV | Pending | ECDH + IV rows green |
-| 3 | AES-CCM move, ChaCha20-Poly1305, RFC 9054 hashes, RSA verify | Pending | content-alg rows green |
-| 4 | ML-DSA | Pending | ML-DSA rows green |
-| 5 | HPKE draft-27 behind tag; pin on RFC publication | Pending | HPKE row green; then retag |
+| 1 | Registry constants, `String`, `Deprecated`, RFC 9864 verify + opt-in emit, PBES2 renumber | Done | registry + RFC 9864 rows green |
+| 2 | ECDH-ES rewrite (-25/-26/-29/-30/-31), Encrypt0 IV, Partial IV | Done | ECDH + IV rows green |
+| 3 | AES-CCM move, ChaCha20-Poly1305, RFC 9054 hashes, RSA verify | Partial: AES-CCM and RSA sign/verify done; ChaCha20-Poly1305 constant only | content-alg rows green |
+| 4 | ML-DSA | Done (Go 1.27 build tag) | ML-DSA rows green |
+| 5 | HPKE draft-27 behind tag; pin on RFC publication | Not started | HPKE row green; then retag |
 
 ---
 
@@ -573,6 +573,93 @@ appended to existing functions.
   (AEAD sharing)
 - External: IANA COSE registries (fetched 2026-11-20); cose-wg/Examples
 
+## Implementation notes
+
+Phases 1, 2 and 4 and most of phase 3 landed on `feat/029-cose-algs`.
+HPKE draft-27 (phase 5) has not started: `HPKEKey` and alg 35 are
+unchanged, are not yet marked deprecated, and there is no
+`WithDraftHPKE27`.
+
+Interpretations and deviations:
+
+- **Registry.** `cose/testdata/iana-cose-algorithms.csv` is a snapshot
+  of the IANA COSE Algorithms registry (updated 2026-11-13), parsed from
+  the registry XML. `TestAlgorithmRegistry` checks every constant's
+  value and name against it. The only exceptions are the frozen
+  constants that IANA assigns to something else: −11 (v0.2 PBES2), alg
+  35 (v0.2 HPKE) and the private-use −65601. `TestConstantsFrozen` pins
+  their values.
+- **RFC 9864.** Verifiers accept the polymorphic and fully-specified
+  forms of a family. `WithAllowedAlgorithms` and the COSE_Key `alg`
+  match exactly, so allowing ES256 does not allow ESP256.
+  `FullySpecified(alg, pub)` maps a polymorphic identifier to its
+  replacement. ESP256 with a P-384 key is `ErrAlgorithmMismatch`, not
+  the `ErrInvalidKey` in the acceptance table, so that it matches the
+  existing ES256 mismatch error. Ed448 and the Brainpool ESB*
+  identifiers are constants only.
+- **ML-DSA.** `crypto/mldsa` first ships in Go 1.27, so the
+  implementation is `//go:build go1.27`. On Go 1.26, the module's `go`
+  directive, ML-DSA returns `ErrUnsupportedAlgorithm`. Private AKP keys
+  are 32-byte seeds (label −2), and a present public key must match the
+  seed. The context string is empty. `TestMLDSARFC9964Examples` parses
+  the vendored RFC's Appendix A examples and verifies all three.
+- **RSA signing.** `NewSigner` signs PS256 with RSA keys of at least
+  2048 bits. A protected `alg` or the COSE_Key `alg` selects another
+  PS/RS algorithm. PSS uses a salt length equal to the hash length.
+  RS* still needs `WithAllowedAlgorithms` to verify.
+- **ECDH-ES.** `ECDHESKey.Alg` selects the variant, and zero means −25.
+  The COSE_KDF_Context encodes absent PartyU/PartyV fields as null, a
+  layout checked against the cose-wg `Context_hex` intermediates. The
+  AlgorithmID is the key-wrap algorithm for −29/−30/−31 and the content
+  algorithm for −25/−26. Party info and salt are emitted in the
+  recipient's unprotected headers (−20 to −26), and received values take
+  precedence.
+  - **Direct mode.** Direct key agreement (−25/−26) goes through the new
+    `KeyAgreer` interface rather than a new method on the `KeyDeriver`
+    interface, which would break 034. A direct recipient must be the only
+    one, and `EncryptMulti`/`ComputeMACMulti` reject a direct recipient
+    mixed with others.
+  - **Comparability.** The party info and salt are held behind a pointer
+    (`ECDHESKey.KDF *ECDHKDFContext`), so `ECDHESKey`, `KeyWrapOpts` and
+    `KeyUnwrapOpts` stay comparable (apicheck).
+  - **Static-static.** Static-static ECDH (−27, −28, −32 to −34) is not
+    implemented.
+- **Legacy selectors.** `WithLegacyECDHES`, `WithLegacyPBES2Labels` and
+  `CompatV02Encryption` are EncryptOptions. `WithLegacyMACPBES2Labels` is
+  the MAC counterpart for PBES2. There is no MAC ECDH selector, because
+  v0.2.2's `ECDHESKey.WrapKey` discarded the MAC key, so its ECDH-ES
+  COSE_Mac messages never verified (the v0.2.2 fixture shows this).
+  `DeriveKey` and `UnderiveKey` keep their v0.2 behavior.
+- **Encrypt0.** The new `Encrypt0Seal` and `Encrypt0Open` carry the IV.
+  `EncryptEncrypt0` and `DecryptEncrypt0` are unchanged and not yet
+  deprecated, because `cwt` (031) still calls them. They should be
+  deprecated once `cwt` moves to the new functions. A message carrying
+  both IV (5) and Partial IV (6) is `ErrMalformed`.
+- **AES-CCM.** AES-CCM is a copy of `edhoc/internal/aesccm` at
+  `cose/internal/aesccm`. `edhoc` still uses its own copy, so the "move"
+  in phase 3 is a copy until a change in `edhoc/` drops it.
+- **Tests.** The v0.2.2 compatibility fixtures are in
+  `cose/testdata/legacy-v0.2.2/encryption.json`, generated by running
+  `EncryptMulti`/`ComputeMACMulti` from the v0.2.2 tag. The interop
+  vectors are generated Go tables, not vendored JSON:
+  `cose/cosewg_029_vectors_test.go` holds 51 cose-wg/Examples vectors
+  (ECDH-ES direct and wrap on P-256, P-521 and X25519, AES-KW, AES-CCM,
+  RSA-PSS). Static-static and AES-CBC-MAC vectors are skipped.
+- **Test names.** Several tests are named differently from the test
+  surface table:
+  - `TestCOSEWGVectors029` covers `TestCOSEWGECDH*` and `TestAESCCM*`.
+  - `TestECDHESConformant` covers `TestECDHEphemeralCOSEKey`.
+  - `TestEncrypt0SealIV` and `TestEncrypt0PartialIV` cover
+    `TestEncrypt0IV` and `TestPartialIV`.
+  - `TestCompatLegacyEncryption` and `TestCompatLegacyMAC` cover
+    `TestCompatLegacyEncryption*`.
+  - `FuzzDecrypt029` covers `FuzzEncrypt0Open` and `FuzzECDHRecipient`.
+  - The Partial IV test checks the RFC 9052 §3.1 construction with
+    OSCORE parameters, not the RFC 8613 §5.2 nonce, which also encodes
+    the sender ID.
+- **Golden vectors.** No golden vector changed. The default emission is
+  still −7/−8, and no golden case covers ECDH or PBES2.
+
 ---
 
 ## Changelog
@@ -582,3 +669,4 @@ appended to existing functions.
 | 2026-11-20 | Initial draft | corecbor maintainers |
 | 2026-11-20 | Compatibility selection per 034 | corecbor maintainers |
 | 2026-11-20 | API stability (signature + semantics) per revised 034 | corecbor maintainers |
+| 2026-11-21 | Status In-Progress; phases 1, 2, 4 and most of 3 implemented; implementation notes | corecbor maintainers |

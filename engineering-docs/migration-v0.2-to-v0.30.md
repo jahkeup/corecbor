@@ -215,6 +215,38 @@ Functions with appended optional parameters (existing calls compile
 unchanged): `VerifyMulti(..., ...VerifyPolicy)`,
 `VerifyMACMulti(..., ...MACOption)`, `DecryptMulti(..., ...EncryptOption)`.
 
+### Algorithms and encryption (029)
+
+| Change | Old behavior | Restore with |
+|---|---|---|
+| `ECDHESKey` follows RFC 9053 §6.3: `-25`/`-26` are direct key agreement (the derived key is the content key, so the recipient must be the only one), `-29`/`-30`/`-31` (`Alg: AlgECDH_ES_A128KW`, …) wrap the content key with AES-KW; the ephemeral key is a COSE_Key map; the KDF context is `COSE_KDF_Context` | `-25` labelled an AES-KW wrap with a raw-point ephemeral key and a private KDF context; no other implementation could read it | `WithLegacyECDHES()` (or `CompatV02Encryption()`) to read and write v0.2 messages; to mix ECDH with other recipients, set `Alg: cose.AlgECDH_ES_A128KW` |
+| `PBES2Key` uses private-use identifiers: alg `AlgPrivatePBES2_HS256_A128KW` (−65601), iteration count in label −65602. `PBES2Key.Algorithm()` returns the new value; `AlgPBES2_HS256_A128KW` is still −11 | −11 and −21, which IANA registers for direct+HKDF-SHA-512 and PartyU identity | `WithLegacyPBES2Labels()` (encrypt), `WithLegacyMACPBES2Labels()` (MAC); without them a −11 recipient is `ErrUnsupportedAlgorithm` |
+| `NewSigner` accepts RSA keys and signs PS256 (a protected `alg` or COSE_Key `alg` selects PS384/512 or RS256/384/512) | `ErrInvalidKey` | n/a (newly accepted) |
+| v0.2 ECDH-ES `COSE_Mac` recipients | discarded the MAC key; never verified | none (nothing to restore) |
+
+`NewSigner` with no options still emits ES256 (−7), ES384, ES512 and
+EdDSA (−8), and verifiers accept both those and the fully-specified
+RFC 9864 identifiers. Those polymorphic constants (`AlgES256`,
+`AlgES384`, `AlgES512`, `AlgEdDSA`) are marked deprecated, as IANA
+marks them, but keep their values; `WithFullySpecifiedAlgorithms()`
+emits ESP256 (−9), ESP384, ESP512 or Ed25519 (−19) instead. A verifier
+binds whichever identifier the message names, and
+`WithAllowedAlgorithms` matches identifiers exactly, so allow both forms
+during a migration.
+
+New in 029 (additive): `AlgESP256`, `AlgESP384`, `AlgESP512`,
+`AlgEd25519`, `AlgEd448` (constant only), `AlgESB256`–`AlgESB512`
+(constants only), `AlgMLDSA44`/`65`/`87` (RFC 9964, AKP keys with
+32-byte seeds; needs Go 1.27, otherwise `ErrUnsupportedAlgorithm`), the
+AES-CCM content algorithms (10–13, 30–33), `AlgChaCha20Poly1305`
+(constant only), `AlgECDH_ES_HKDF_512`, `AlgECDH_ES_A128KW`/`192`/`256`,
+`AlgPrivatePBES2_HS256_A128KW`; `Algorithm.Deprecated`, `FullySpecified`,
+`WithFullySpecifiedAlgorithms`; `ECDHESKey.Alg`, `ECDHESKey.KDF`
+(`ECDHKDFContext`, `PartyInfo`), `KeyAgreer`; `Encrypt0Seal` and
+`Encrypt0Open` (random IV carried in header 5, or `WithPartialIV`; AES-GCM
+and, via `WithEncryptAlgorithms`, AES-CCM), `WithNonce`. Prefer
+`Encrypt0Seal` to `EncryptEncrypt0`, which never transmits its nonce.
+
 ## cwt
 
 - `Validator.Validate` returns `ErrInvalidValidator` for a negative
@@ -318,4 +350,8 @@ Selectors that weaken verification are never included in a
 | `WithLegacyIgnoreCritical()` | cose | ignore `crit` |
 | `WithLegacyMACHeaders()` | cose | v0.2 MAC header handling |
 | `WithLegacyEncryptHeaders()` | cose | v0.2 encrypt header handling |
+| `CompatV02Encryption()` | cose | `WithLegacyPBES2Labels()` + `WithLegacyECDHES()` |
+| `WithLegacyPBES2Labels()` | cose | PBES2 recipients as −11 / count −21 (encrypt) |
+| `WithLegacyMACPBES2Labels()` | cose | the same for `COSE_Mac` recipients |
+| `WithLegacyECDHES()` | cose | the v0.2 ECDH-ES encoding (talks only to v0.2 peers) |
 | `WithLegacyPreRFCProtocol()` | edhoc | the v0.2 pre-RFC protocol (talks only to v0.2 peers; never bundled) |

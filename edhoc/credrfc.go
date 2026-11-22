@@ -10,7 +10,6 @@ import (
 	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/ed25519"
-	"crypto/elliptic"
 	"fmt"
 
 	"github.com/jahkeup/corecbor"
@@ -91,30 +90,9 @@ func intVal(n int64) cbor.Value {
 
 // coseKeyOf returns pub as a COSE_Key, built with cose's key API so the
 // encoding is the one cose produces and parses (deterministic: kty, crv,
-// x, y). P-curve ECDH keys go through their ECDSA form. cose has no
-// constructor for X25519 keys, so that OKP map is built here and then
-// validated by cose.ParseKey.
+// x, y). cose.NewKeyFromPublic accepts *ecdh.PublicKey directly: OKP
+// X25519, and EC2 for the P-curves.
 func coseKeyOf(pub crypto.PublicKey) (cbor.Value, error) {
-	if e, ok := pub.(*ecdh.PublicKey); ok {
-		switch e.Curve() {
-		case ecdh.X25519():
-			return x25519COSEKey(e.Bytes())
-		case ecdh.P256():
-			p, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), e.Bytes())
-			if err != nil {
-				return cbor.Value{}, fmt.Errorf("%w: %w", ErrUnsupportedSuite, err)
-			}
-			pub = p
-		case ecdh.P384():
-			p, err := ecdsa.ParseUncompressedPublicKey(elliptic.P384(), e.Bytes())
-			if err != nil {
-				return cbor.Value{}, fmt.Errorf("%w: %w", ErrUnsupportedSuite, err)
-			}
-			pub = p
-		default:
-			return cbor.Value{}, fmt.Errorf("%w: unsupported EC2 curve", ErrUnsupportedSuite)
-		}
-	}
 	k, err := cose.NewKeyFromPublic(pub)
 	if err != nil {
 		return cbor.Value{}, fmt.Errorf("%w: cannot build a COSE_Key for %T: %w", ErrUnsupportedSuite, pub, err)
@@ -126,20 +104,6 @@ func coseKeyOf(pub crypto.PublicKey) (cbor.Value, error) {
 	v, err := corecbor.NewDecoder(seqDecOpts...).Decode(enc)
 	if err != nil {
 		return cbor.Value{}, fmt.Errorf("%w: COSE_Key: %w", ErrUnsupportedSuite, err)
-	}
-	return v, nil
-}
-
-// x25519COSEKey builds an OKP X25519 COSE_Key and checks it with
-// cose.ParseKey.
-func x25519COSEKey(x []byte) (cbor.Value, error) {
-	v := cbor.MakeMap(
-		cbor.MapEntry{Key: intVal(coseKeyKty), Value: intVal(ktyOKP)},
-		cbor.MapEntry{Key: intVal(coseKeyCrv), Value: intVal(crvX25519)},
-		cbor.MapEntry{Key: intVal(coseKeyX), Value: cbor.Bytes(x)},
-	)
-	if _, err := cose.ParseKey(item(v)); err != nil {
-		return cbor.Value{}, fmt.Errorf("%w: X25519 COSE_Key: %w", ErrUnsupportedSuite, err)
 	}
 	return v, nil
 }

@@ -92,7 +92,8 @@ func BenchmarkDecodeLongBytes(b *testing.B) {
 func buildTagged() Value {
 	items := make([]Value, 0, 300)
 	for i := range 100 {
-		items = append(items,
+		items = append(
+			items,
 			TimeTo(time.Unix(int64(1_700_000_000+i), 0)),
 			BigIntTo(new(big.Int).Lsh(big.NewInt(int64(i+1)), 80)),
 			MakeTag(TagEncodedCBOR, Bytes([]byte{0x82, 0x01, 0x02})),

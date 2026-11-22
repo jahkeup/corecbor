@@ -224,14 +224,21 @@ func keyHashInto(h uint64, v cbor.Value) uint64 {
 // handling under the configured KeyIdentity. Maps of up to
 // dedupThreshold entries scan linearly; larger ones hash. Both use the
 // same predicate, so the result doesn't depend on map size.
+//
+// Hashed lookups use a chain rather than a slice per hash: head maps a
+// hash to 1 + the index of the most recent entry with that hash, and
+// next[i] is 1 + the index of the previous entry sharing entry i's hash
+// (0 ends a chain). Both are reused through keySetPool, so tracking a
+// map's keys doesn't allocate per key once the pool is warm.
 type keySet struct {
-	seen   map[uint64][]int
+	head   map[uint64]int32
+	next   []int32
 	enc    [][]byte // encoded key per entry (KeyIdentityEncoded)
-	hashed bool     // use seen; otherwise scan linearly
+	hashed bool     // use head/next; otherwise scan linearly
 }
 
 var keySetPool = sync.Pool{
-	New: func() any { return &keySet{seen: make(map[uint64][]int, 32)} },
+	New: func() any { return &keySet{head: make(map[uint64]int32, 32)} },
 }
 
 // getKeySet returns the key tracker for a map of count entries (count
@@ -246,7 +253,8 @@ func getKeySet(count int, opts *DecodeOpts) *keySet {
 		return nil
 	}
 	ks := keySetPool.Get().(*keySet)
-	clear(ks.seen)
+	clear(ks.head)
+	ks.next = ks.next[:0]
 	ks.enc = ks.enc[:0]
 	ks.hashed = hashed
 	return ks
@@ -257,6 +265,17 @@ func putKeySet(ks *keySet) {
 		clear(ks.enc) // drop references into the source buffer
 		keySetPool.Put(ks)
 	}
+}
+
+// sameKey reports whether stored key a and key b are the same key in the
+// data model. Text and integer keys compare directly; other kinds go
+// through keysEqual.
+func sameKey(a *cbor.Value, b *cbor.Value, legacyFloat bool) bool {
+	switch b.Kind {
+	case cbor.KindText, cbor.KindUint, cbor.KindNegInt:
+		return a.Kind == b.Kind && a.Num == b.Num && a.Str == b.Str
+	}
+	return keysEqual(*a, *b, legacyFloat)
 }
 
 // find returns the index of an entry in m whose key is the same key as
@@ -286,20 +305,21 @@ func (ks *keySet) find(m []cbor.MapEntry, key cbor.Value, enc []byte, opts *Deco
 	} else {
 		h = keyHash(key)
 	}
-	for _, idx := range ks.seen[h] {
+	for link := ks.head[h]; link != 0; link = ks.next[link-1] {
+		idx := int(link - 1)
 		if encoded {
 			if bytes.Equal(ks.enc[idx], enc) {
 				return idx, h
 			}
-		} else if keysEqual(m[idx].Key, key, opts.LegacyFloatKeyEquality) {
+		} else if sameKey(&m[idx].Key, &key, opts.LegacyFloatKeyEquality) {
 			return idx, h
 		}
 	}
 	return -1, h
 }
 
-// add records that entry index idx has key (encoded as enc) with hash h
-// from find.
+// add records that entry index idx (always the next entry, len(m)) has
+// key (encoded as enc) with hash h from find.
 func (ks *keySet) add(idx int, enc []byte, h uint64, opts *DecodeOpts) {
 	if ks == nil {
 		return
@@ -308,7 +328,8 @@ func (ks *keySet) add(idx int, enc []byte, h uint64, opts *DecodeOpts) {
 		ks.enc = append(ks.enc, enc)
 	}
 	if ks.hashed {
-		ks.seen[h] = append(ks.seen[h], idx)
+		ks.next = append(ks.next, ks.head[h])
+		ks.head[h] = int32(idx + 1)
 	}
 }
 

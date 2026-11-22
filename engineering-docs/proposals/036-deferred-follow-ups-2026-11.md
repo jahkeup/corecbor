@@ -30,6 +30,9 @@ none blocks a release.
 | 1 | Strict decode of maps with >16 entries is ~15% slower (`DecodeStrictLargeMap100/1000`), `DecodeNestedMapStrict` ~5% | 024 (accepted trade-off) | perf work | Per-key cost in the strict hashed path (`find`/`mapInsert`, `DecodeOpts` size) |
 | 2 | `RawMessage` struct decode +3–4% vs pre-025 main | 022, 025 | perf work | Decoder-recorded item offsets would remove the span walk |
 | 3 | ~~Sibling modules adopt `Value.Int64`/`Uint64`/`Get*`~~ **Done (cwt, eat) 2026-11-22** | 025 Phase C | — | Every integer narrowing site in cwt/eat was already range-checked by 031/032 (no wrapping left), so adoption is behavior-identical: `claimKeyOf`, `fromValue`, `parseNumericDate`, ACE `exi`, eat `intKey`/`parseUintClaim`, `psa.intOf` now use `Int64`/`Uint64`; boundary tests added; no golden changes. Map loops dispatch every entry, so `Get*` doesn't apply. cose/edhoc sites not in scope here |
+| 1 | Strict decode of maps with >16 entries is ~15% slower (`DecodeStrictLargeMap100/1000`), `DecodeNestedMapStrict` ~5% — **partly recovered 2026-11-22**: strict 100/1000-entry maps −7%/−10% and half the allocations; ~5% of the original gap remains | 024 (accepted trade-off) | perf work | See *Results*. Duplicate tracking now chains entries per hash instead of a slice per hash. `DecodeOpts` is 96 bytes vs v0.2.2's 88: its exported fields can't be reordered or moved behind a pointer under 034, so the size target is dropped |
+| 2 | `RawMessage` struct decode +3–4% vs pre-025 main — **measured, deferred 2026-11-22** | 022, 025 | perf work | The span walk (`Cursor.RawBytes`) is ~2.6% of the profile. Decoder-recorded offsets need a module-internal channel into `rfc8949`'s unexported span recorder and trade the walk for per-entry recording, so the expected gain is below run-to-run noise (±5–10%). One alloc removed in passing (23 → 22) |
+| 3 | Sibling modules adopt `Value.Int64`/`Uint64`/`Get*` | 025 Phase C | next behavior-change window | In cwt/eat this turns silent integer wrapping into errors, which golden vectors pin; needs a 034 classification |
 | 4 | RFC 8746 typed arrays | 026 Phase D | consumer request | — |
 | 5 | Concise Diagnostic Notation alignment | 026 Phase E | draft-ietf-cbor-edn-literals publishes | `DiagCDN()` reserved |
 | 6 | Ed448 / X448 sign, verify and ECDH | 028, 029, 033 | standard library support | Parse/marshal only today; EDHOC suite 25 and HPKE-5/6 blocked on it |
@@ -43,10 +46,38 @@ none blocks a release.
 | 14 | Add `scitt` to `apicheck` | 030 | after the first release that contains `scitt` | No v0.2.2 baseline exists |
 | 15 | Inline EAT submodules keep original bytes; JSON submods | 032 | consumer request | Re-encoded deterministically today |
 | 16 | `TestMarshalerVerbatimPermissive`-style splice for non-raw Marshalers in Permissive mode | 022 | consumer request | Raw types only today |
-| 17 | Benchmark coverage: every decode/encode path the default options exercise (forgiving maps were uncovered until 2026-11-22) | release check | — | `BenchmarkDecodeItemMapForgiving` added; audit for other gaps |
-| 18 | String interning (`WithStringIntern`) has no tests or benchmark | 018 | next perf pass | Add correctness tests and `BenchmarkDecodeRepeatedKeysIntern` (target: steady-state 0 allocs for repeated keys) |
-| 19 | Arena-only nested-map decode: 10 allocs vs target ≤2 | 018 | perf work | 0 allocs with zero-copy + arena; the remaining allocs are text strings |
-| 20 | `Cursor.FindMapKey` on a 50-key map: 2 allocs vs target ≤1 | 018 | perf work | `BenchmarkCursorFindMapKey` |
+| 17 | Benchmark coverage: every decode/encode path the default options exercise (forgiving maps were uncovered until 2026-11-22) — **done 2026-11-22** | release check | — | `bench_036_test.go` adds forgiving large maps, nested maps, long text/bytes, tags, mixed arrays, deterministic/permissive encode, `EncodeTo`, `Marshal`/`Unmarshal` of maps/any/slices, `DecodeFrom` and stream decode. Gaps it showed → items 21–24 |
+| 18 | String interning (`WithStringIntern`) has no tests or benchmark — **done 2026-11-22** | 018 | — | `intern_036_test.go`: equal and shared strings, no aliasing of the source (plain, zero-copy, arena), `Prefill`, capacity bound, steady-state 0 allocs; `BenchmarkDecodeRepeatedKeysIntern` is 0 allocs/op. The steady-state test caught a per-key allocation in duplicate tracking for maps over 16 entries, fixed with item 1 |
+| 19 | Arena-only nested-map decode: 10 allocs vs target ≤2 — **criterion amended 2026-11-22** | 018 | — | All 10 are text and byte strings. `WithArena` documents that only container backing is arena-owned and that strings stay valid after `Reset`, so arena-only can't reach ≤2 without changing that contract (034). `TestArenaNestedMapAllocs` pins arena 10, arena + intern 1, arena + zero-copy 0 |
+| 20 | `Cursor.FindMapKey` on a 50-key map: 2 allocs vs target ≤1 — **done 2026-11-22** | 018 | — | Frames are stored inline: 2 → 1 alloc (the decoded value). Fixed a defect found on the way: `EnterArray`/`EnterMap` didn't count the nested container as an item of its parent, so leaving the parent afterwards failed with `ErrTruncated` or skipped the next sibling (`TestCursorSiblingAfterNested`) |
+| 21 | `Unmarshal` of a 1000-item `[]uint64`: ~23 µs vs ~1.9 µs to `Decode` the same array | 036 item 17 | perf work | `BenchmarkUnmarshalSlice`; per-element reflection |
+| 22 | `DecodeTags`: ~500 allocs for 300 tags | 036 item 17 | perf work | Each tag's one-item `Items` slice is its own allocation, arena or not |
+| 23 | `DecodeFrom`: 28 allocs vs 10 for `Decode` of the same item | 036 item 17 | perf work | Reader buffering |
+| 24 | Stream decode: ~7.8 µs per item vs ~0.7 µs for `Decode` | 036 item 17 | perf work | `BenchmarkStreamDecodeSequence` |
+
+## Results (2026-11-22)
+
+Apple M4 Pro, default GOMAXPROCS. Base is `fea25db` plus the item 17
+benchmarks; base and head binaries ran interleaved, benchstat n=6–8.
+Times on this machine vary ±5–10% between runs, so only significant
+changes are listed; every other benchmark was unchanged within noise.
+
+| Benchmark | Before | After | Item |
+|---|---|---|---|
+| `DecodeStrictLargeMap100` | 7.28 µs, 200 allocs | 6.76 µs (−7%), 100 allocs | 1 |
+| `DecodeStrictLargeMap1000` | 75.5–77.3 µs, 2000 allocs | 67.9–71.5 µs (−7 to −10%), 1000 allocs | 1 |
+| `DecodeForgivingLargeMap100` | 7.27–7.45 µs, 200 allocs | 6.66–6.76 µs (−8 to −9%), 100 allocs | 1 |
+| `DecodeForgivingLargeMap1000` | 74.6–76.2 µs, 2000 allocs | 66.1–67.8 µs (−11%), 1000 allocs | 1 |
+| `MapInsertHash` (rfc8949) | 10.1 µs, 201 allocs | 8.73 µs (−14%), 101 allocs | 1 |
+| `DecodeNestedMapStrict` | 769 ns | 781 ns (~, p=0.07) | 1 |
+| `UnmarshalMap` | 255 allocs, 4.19 KiB | 205 allocs, 3.80 KiB | 1 |
+| `UnmarshalStructRawMessage` | 1.26 µs, 23 allocs | 1.27 µs (~), 22 allocs | 2 |
+| `DecodeRepeatedKeysIntern` | — | 1.32 µs, 0 allocs | 18 |
+| `CursorFindMapKey` / `…Last` | 2 allocs, 128 B | 1 alloc, 112 B | 20 |
+
+`EncodeMapPreordered` (16 ns) read +6.7% in one full run and +7%
+(not significant, p=0.06) on a 10-round re-run; the encoder is
+unchanged on this branch, so this is code layout, not a regression.
 
 ## Changelog
 
@@ -56,3 +87,4 @@ none blocks a release.
 | 2026-11-22 | Add items 18–20 from 018's closure | corecbor maintainers |
 | 2026-11-22 | Status: In-Progress (streams for items 1–3, 7, 9, 17–20 started) | corecbor maintainers |
 | 2026-11-22 | Item 3 done for cwt and eat (behavior-identical accessor adoption) | corecbor maintainers |
+| 2026-11-22 | Items 17, 18, 20 done; 19 criterion amended; 1 partly recovered; 2 measured and deferred; items 21–24 filed from 17 | corecbor maintainers |

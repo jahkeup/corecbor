@@ -4,6 +4,7 @@
 package cose_test
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -63,5 +64,80 @@ func TestParseKeyRejectsNonFinite(t *testing.T) {
 	set := append([]byte{0x81}, okpKey("30f97e00")...)
 	if _, err := cose.ParseKeySet(set); !errors.Is(err, cose.ErrNonFiniteKeyParam) {
 		t.Fatalf("ParseKeySet err = %v, want ErrNonFiniteKeyParam", err)
+	}
+}
+
+// TestKeepParamsAsReceived: with the option, a non-finite parameter is
+// kept byte for byte, listed by ReceivedParams, written back verbatim
+// by MarshalCBOR, and removable with DeleteReceivedParam.
+func TestKeepParamsAsReceived(t *testing.T) {
+	keep := cose.KeepParamsAsReceived()
+	for _, val := range []string{"faffff3030", "f97e01", "fb7ff0000000000000", "8201f9fe00"} {
+		in := okpKey("30" + val)
+		k, err := cose.ParseKey(in, keep)
+		if err != nil {
+			t.Fatalf("%s: %v", val, err)
+		}
+		got := k.ReceivedParams()
+		if len(got) != 1 || hex.EncodeToString(got[int64(-17)]) != val {
+			t.Fatalf("%s: ReceivedParams = %x", val, got)
+		}
+		out, err := k.MarshalCBOR()
+		if err != nil || !bytes.Equal(out, in) {
+			t.Fatalf("%s: MarshalCBOR = %x, %v; want %x", val, out, err, in)
+		}
+		pub, err := k.Public()
+		if err != nil || len(pub.ReceivedParams()) != 1 {
+			t.Fatalf("%s: Public kept %v, %v", val, pub.ReceivedParams(), err)
+		}
+	}
+
+	// A text label is kept too; ReceivedParams returns a copy.
+	k, err := cose.ParseKey(okpKey("6178"+"f97e00"), keep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.ReceivedParams()["x"][0] = 0
+	if hex.EncodeToString(k.ReceivedParams()["x"]) != "f97e00" {
+		t.Fatal("ReceivedParams aliases the key")
+	}
+
+	// Cleaning up: delete the parameter and the key marshals normally.
+	k, _ = cose.ParseKey(okpKey("30f97e01"), keep)
+	k.DeleteReceivedParam(-17)
+	if k.ReceivedParams() != nil {
+		t.Fatalf("after delete: %x", k.ReceivedParams())
+	}
+	out, err := k.MarshalCBOR()
+	if err != nil || out[0] != 0xa3 {
+		t.Fatalf("after delete MarshalCBOR = %x, %v", out, err)
+	}
+
+	// Defined labels are always parsed and checked.
+	_, err = cose.ParseKey(okpKey("03f97e01"), keep)
+	var pe *cose.KeyParamError
+	if !errors.As(err, &pe) || pe.Label != int64(3) || !errors.Is(err, cose.ErrNonFiniteKeyParam) {
+		t.Fatalf("alg NaN with keep: err = %v", err)
+	}
+}
+
+func TestKeepParamsAsReceivedSetAndPrefix(t *testing.T) {
+	keep := cose.KeepParamsAsReceived()
+	one, two := okpKey("30f97e01"), okpKey("30f90000")
+	set := append(append([]byte{0x82}, one...), two...)
+	ks, err := cose.ParseKeySet(set, keep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ks[0].ReceivedParams()) != 1 || ks[1].ReceivedParams() != nil {
+		t.Fatalf("ReceivedParams = %x, %x", ks[0].ReceivedParams(), ks[1].ReceivedParams())
+	}
+	if out, err := ks.MarshalCBOR(); err != nil || !bytes.Equal(out, set) {
+		t.Fatalf("KeySet MarshalCBOR = %x, %v; want %x", out, err, set)
+	}
+
+	k, rest, err := cose.ParseKeyPrefix(append(bytes.Clone(one), 0x01, 0x02), keep)
+	if err != nil || !bytes.Equal(rest, []byte{1, 2}) || len(k.ReceivedParams()) != 1 {
+		t.Fatalf("ParseKeyPrefix = %v, %x, %v", k, rest, err)
 	}
 }

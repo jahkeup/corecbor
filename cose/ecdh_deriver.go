@@ -360,7 +360,7 @@ func ephemeralFromHeaders(h Headers, curve ecdh.Curve) (*ecdh.PublicKey, error) 
 	if !ok {
 		return nil, fmt.Errorf("%w: ephemeral key must be a COSE_Key", ErrMalformed)
 	}
-	k, err := keyFromValue(val, nil)
+	k, err := keyFromValue(val, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("%w: ephemeral key: %w", ErrMalformed, err)
 	}

@@ -49,6 +49,9 @@ const (
 type Key struct {
 	params map[int64]any
 	text   map[string]corecbor.Value
+	// received holds parameters kept as received (KeepParamsAsReceived),
+	// keyed by int64 or string label, as their source bytes.
+	received map[any]corecbor.RawMessage
 }
 
 func (k *Key) get(label int64) any {

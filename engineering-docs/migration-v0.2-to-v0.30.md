@@ -179,7 +179,10 @@ goroutine (for example from a `sync.Pool`).
   `cwt.ErrAmbiguousClaimKey`, `cwt.ErrNonCanonicalNaN`,
   `cose.ErrNonFiniteKeyParam`, `cose.KeyParamError`; and opt-ins that
   keep such data byte for byte instead: `cwt.DecodeOptions.KeepAsReceived`
-  with `cwt.ClaimsSet.ReceivedClaims`, `eat.WithKeepAsReceived()`.
+  with `cwt.ClaimsSet.ReceivedClaims`, `eat.WithKeepAsReceived()`,
+  `cose.KeepParamsAsReceived()` with `(*Key).ReceivedParams` and
+  `(*Key).DeleteReceivedParam`. Data kept this way is written back
+  verbatim, so it is the one exception to Core Deterministic output.
 - `registry`: refreshed from IANA (2026-11-13). Every generated
   constant from v0.2.2 keeps its name and value
   (`registry/names_frozen.txt`); new tags get new constants.
@@ -201,7 +204,7 @@ goroutine (for example from a `sync.Pool`).
 | Ed25519 signing works with any `crypto.Signer` (KMS/HSM), not only `ed25519.PrivateKey` (028) | `ErrInvalidKey` | n/a (newly accepted) |
 | `NewVerifier` accepts `*rsa.PublicKey` (≥ 2048 bits): PS256/384/512 by default, RS256/384/512 only via `WithAllowedAlgorithms`; the `alg` must be protected (028) | unsupported key type | n/a (newly accepted) |
 | `(*Key).PublicKey` rejects EC2 coordinates longer than the curve size (028) | silently truncated into a different point | none (short coordinates are still left-padded) |
-| `ParseKey`, `ParseKeyPrefix`, `ParseKeySet` and `(*Key).UnmarshalCBOR` reject a parameter whose value is or contains a NaN or infinite float: `errors.Is(err, ErrNonFiniteKeyParam)` (also `ErrMalformed`), and `*KeyParamError` gives the label (036 item 25) | parsed, then `MarshalCBOR` failed | none yet (safety defect, 034; a byte-preserving opt-in is planned) |
+| `ParseKey`, `ParseKeyPrefix`, `ParseKeySet` and `(*Key).UnmarshalCBOR` reject a parameter whose value is or contains a NaN or infinite float: `errors.Is(err, ErrNonFiniteKeyParam)` (also `ErrMalformed`), and `*KeyParamError` gives the label (036 item 25) | parsed, then `MarshalCBOR` failed | `KeepParamsAsReceived()` keeps the parameter verbatim (`ReceivedParams`, `DeleteReceivedParam`; labels -12..5 are always checked) (safety defect, 034) |
 | `*cose.Key` implements `corecbor.Marshaler`/`Unmarshaler`, so `Marshal` of a struct holding a `Key` writes the COSE_Key (028) | an empty map (only unexported fields) | n/a |
 | A signed message's `Protected.Raw()` returns the bytes the signature covers (028) | nil until decoded | n/a |
 

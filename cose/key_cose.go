@@ -16,6 +16,8 @@ import (
 	"slices"
 
 	"github.com/jahkeup/corecbor"
+	"github.com/jahkeup/corecbor/internal/asreceived"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
 )
 
 // Key type parameter labels (RFC 9053 §7, RFC 8230 §4, RFC 9964 §3).
@@ -53,6 +55,7 @@ const (
 // keyParseConfig holds KeyOption settings.
 type keyParseConfig struct {
 	allowShort bool
+	keep       bool
 }
 
 // KeyOption adjusts COSE_Key parsing.
@@ -67,6 +70,54 @@ type KeyOption func(*keyParseConfig)
 func AllowShortCoordinates() KeyOption {
 	return func(c *keyParseConfig) { c.allowShort = true }
 }
+
+// KeepParamsAsReceived makes ParseKey, ParseKeyPrefix and ParseKeySet
+// keep a parameter whose value is or contains a NaN or infinite float
+// (ErrNonFiniteKeyParam), byte for byte, instead of rejecting the key.
+// Such a parameter isn't interpreted: it is listed by ReceivedParams,
+// can be removed with DeleteReceivedParam, and MarshalCBOR writes it
+// verbatim, so for it the output is the input, not Core Deterministic.
+// Labels -12 through 5, which the COSE key types define, are always
+// parsed and checked.
+func KeepParamsAsReceived() KeyOption {
+	return func(c *keyParseConfig) { c.keep = true }
+}
+
+// ReceivedParams returns the parameters kept under KeepParamsAsReceived,
+// keyed by label (an int64, or a string for a text label), with their
+// encoded values as received. It returns a copy, or nil if there are
+// none.
+func (k *Key) ReceivedParams() map[any]corecbor.RawMessage {
+	if len(k.received) == 0 {
+		return nil
+	}
+	out := make(map[any]corecbor.RawMessage, len(k.received))
+	for l, v := range k.received {
+		out[l] = bytes.Clone(v)
+	}
+	return out
+}
+
+// DeleteReceivedParam removes a parameter kept under
+// KeepParamsAsReceived. label is an int64 (or int), or a string.
+func (k *Key) DeleteReceivedParam(label any) {
+	if n, ok := label.(int); ok {
+		label = int64(n)
+	}
+	delete(k.received, label)
+}
+
+func (k *Key) keepReceived(label any, raw []byte) {
+	if k.received == nil {
+		k.received = map[any]corecbor.RawMessage{}
+	}
+	k.received[label] = bytes.Clone(raw)
+}
+
+// definedLabel reports whether label is one the COSE key types define
+// (RFC 9052 §7.1, RFC 9053 §7, RFC 8230, RFC 9864); those are never
+// kept as received.
+func definedLabel(label int64) bool { return label >= -12 && label <= 5 }
 
 // newKeyDecoder is the decoder for COSE_Key and COSE_KeySet: duplicate
 // labels are rejected (RFC 9052 §7), and so is text that isn't valid
@@ -89,7 +140,7 @@ func ParseKey(data []byte, opts ...KeyOption) (*Key, error) {
 	if err != nil {
 		return nil, decodeError(err)
 	}
-	return keyFromValue(v, opts)
+	return keyFromValue(v, data, opts)
 }
 
 // ParseKeyPrefix decodes one COSE_Key from the front of data and
@@ -101,7 +152,7 @@ func ParseKeyPrefix(data []byte, opts ...KeyOption) (*Key, []byte, error) {
 	if err != nil {
 		return nil, nil, decodeError(err)
 	}
-	k, err := keyFromValue(v, opts)
+	k, err := keyFromValue(v, data[:len(data)-len(rest)], opts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -139,6 +190,19 @@ func (k *Key) toValue() (corecbor.Value, error) {
 	}
 	for label, v := range k.text {
 		entries = append(entries, corecbor.MapEntry{Key: corecbor.Text(label), Value: v})
+	}
+	for label, raw := range k.received {
+		if !asreceived.OneItem(raw) {
+			return corecbor.Value{}, &KeyParamError{Label: label, Err: fmt.Errorf("%w: received value is not one CBOR data item", ErrInvalidKey)}
+		}
+		lv := corecbor.Text("")
+		switch l := label.(type) {
+		case int64:
+			lv = goToCBOR(l)
+		case string:
+			lv = corecbor.Text(l)
+		}
+		entries = append(entries, corecbor.MapEntry{Key: lv, Value: rawvalue.Make(raw)})
 	}
 	return corecbor.MakeMapFromSlice(entries), nil
 }
@@ -193,7 +257,9 @@ func nonFiniteParamErr(label any) error {
 	return &KeyParamError{Label: label, Err: fmt.Errorf("%w: %w", ErrMalformed, ErrNonFiniteKeyParam)}
 }
 
-func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
+// keyFromValue builds a Key from the decoded COSE_Key v. raw is v's
+// source bytes, or nil; KeepParamsAsReceived needs it.
+func keyFromValue(v corecbor.Value, raw []byte, opts []KeyOption) (*Key, error) {
 	var cfg keyParseConfig
 	if len(opts) > 0 {
 		// Options take a pointer; building them on a separate value keeps
@@ -207,8 +273,15 @@ func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 	if v.Kind != corecbor.KindMap {
 		return nil, fmt.Errorf("%w: COSE_Key must be a map", ErrMalformed)
 	}
+	var spans []asreceived.Span
+	if cfg.keep && raw != nil {
+		var err error
+		if spans, err = asreceived.MapSpans(raw); err != nil || len(spans) != len(v.Pairs) {
+			return nil, fmt.Errorf("%w: COSE_Key entries don't match their source", ErrMalformed)
+		}
+	}
 	k := &Key{params: make(map[int64]any, len(v.Pairs))}
-	for _, e := range v.Pairs {
+	for i, e := range v.Pairs {
 		switch e.Key.Kind {
 		case corecbor.KindText:
 			if k.text == nil {
@@ -218,7 +291,11 @@ func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 				return nil, fmt.Errorf("%w: key label %q repeated", ErrMalformed, e.Key.TextVal())
 			}
 			if hasNonFinite(e.Value) {
-				return nil, nonFiniteParamErr(e.Key.TextVal())
+				if spans == nil {
+					return nil, nonFiniteParamErr(e.Key.TextVal())
+				}
+				k.keepReceived(e.Key.TextVal(), spans[i].Value)
+				continue
 			}
 			k.text[e.Key.TextVal()] = e.Value
 			continue
@@ -231,7 +308,11 @@ func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 			return nil, fmt.Errorf("%w: key label %d repeated", ErrMalformed, n)
 		}
 		if hasNonFinite(e.Value) {
-			return nil, nonFiniteParamErr(n)
+			if spans == nil || definedLabel(n) {
+				return nil, nonFiniteParamErr(n)
+			}
+			k.keepReceived(n, spans[i].Value)
+			continue
 		}
 		k.params[n] = cborToGo(e.Value)
 	}
@@ -568,7 +649,7 @@ func (k *Key) Public() (*Key, error) {
 	if kty == KeyTypeSymmetric {
 		return nil, fmt.Errorf("%w: a symmetric key has no public part", ErrInvalidKey)
 	}
-	out := &Key{params: maps.Clone(k.params), text: maps.Clone(k.text)}
+	out := &Key{params: maps.Clone(k.params), text: maps.Clone(k.text), received: maps.Clone(k.received)}
 	for _, l := range privateLabels(kty) {
 		delete(out.params, l)
 	}
@@ -691,9 +772,19 @@ func ParseKeySet(data []byte, opts ...KeyOption) (KeySet, error) {
 	if v.Kind != corecbor.KindArray || len(v.Items) == 0 {
 		return nil, fmt.Errorf("%w: COSE_KeySet must be a non-empty array", ErrMalformed)
 	}
+	var raws [][]byte
+	if len(opts) > 0 {
+		if raws, err = asreceived.ArraySpans(data); err != nil || len(raws) != len(v.Items) {
+			return nil, fmt.Errorf("%w: COSE_KeySet items don't match their source", ErrMalformed)
+		}
+	}
 	ks := make(KeySet, len(v.Items))
 	for i, it := range v.Items {
-		k, err := keyFromValue(it, opts)
+		var raw []byte
+		if raws != nil {
+			raw = raws[i]
+		}
+		k, err := keyFromValue(it, raw, opts)
 		if err != nil {
 			return nil, fmt.Errorf("key %d: %w", i, err)
 		}

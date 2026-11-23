@@ -47,6 +47,7 @@ var (
 	// (Core Deterministic encoding, RFC 9052 §9), so ParseKey rejects it
 	// rather than return a key that can't be re-encoded. It is returned
 	// inside a *KeyParamError and also wraps ErrMalformed.
+	// KeepParamsAsReceived keeps such parameters instead.
 	ErrNonFiniteKeyParam = errors.New("cose: non-finite float in key parameter")
 )
 

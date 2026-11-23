@@ -114,3 +114,34 @@ func OneItem(b []byte) bool {
 	n, err := rfc8949.NewCursor(b, rfc8949.DecodeOpts{}).Skip()
 	return err == nil && n == len(b)
 }
+
+// ArraySpans returns the source bytes of each element of the array
+// encoded in src, in order, after any leading self-describe tags. The
+// slices alias src. src must already have decoded successfully.
+func ArraySpans(src []byte) ([][]byte, error) {
+	for len(src) >= 3 && src[0] == 0xd9 && src[1] == 0xd9 && src[2] == 0xf7 {
+		src = src[3:]
+	}
+	c := rfc8949.NewCursor(src, rfc8949.DecodeOpts{})
+	if k, err := c.Kind(); err != nil || k != 0x80 {
+		return nil, errNotArray
+	}
+	n, err := c.EnterArray()
+	if err != nil {
+		return nil, err
+	}
+	var items [][]byte
+	for i := 0; n < 0 || i < n; i++ {
+		if n < 0 && c.AtBreak() {
+			break
+		}
+		b, err := c.RawBytes()
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, b)
+	}
+	return items, nil
+}
+
+var errNotArray = errors.New("asreceived: not an array")

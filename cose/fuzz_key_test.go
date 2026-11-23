@@ -24,7 +24,23 @@ func FuzzParseKey(f *testing.F) {
 		b, _ := hex.DecodeString(h)
 		f.Add(b)
 	}
+	f.Add([]byte("\xa4\x01\x01 \x06!X 000000000000000000000000000000000\xfa\xff\xff00"))
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if kk, _, err := ParseKeyPrefix(data, KeepParamsAsReceived()); err == nil {
+			kenc, err := kk.MarshalCBOR()
+			if err != nil {
+				t.Fatalf("MarshalCBOR of a key kept as received: %v", err)
+			}
+			kk2, err := ParseKey(kenc, KeepParamsAsReceived())
+			if err != nil {
+				t.Fatalf("re-parse of %x: %v", kenc, err)
+			}
+			for l, v := range kk.ReceivedParams() {
+				if !bytes.Equal(kk2.ReceivedParams()[l], v) {
+					t.Fatalf("param %v changed: %x -> %x", l, v, kk2.ReceivedParams()[l])
+				}
+			}
+		}
 		k, rest, err := ParseKeyPrefix(data)
 		if err != nil {
 			return
@@ -49,6 +65,24 @@ func FuzzParseKey(f *testing.F) {
 		_, _ = k.Public()
 		_, _ = k.JWK()
 		_ = k.Ops()
+
+		// With KeepParamsAsReceived, kept parameters survive a marshal
+		// and re-parse byte for byte, and marshalling is idempotent.
+		kk, _, err := ParseKeyPrefix(data, KeepParamsAsReceived())
+		if err != nil {
+			t.Fatalf("KeepParamsAsReceived rejected a key the default accepts: %v", err)
+		}
+		kenc, err := kk.MarshalCBOR()
+		if err != nil {
+			t.Fatalf("MarshalCBOR with kept params: %v", err)
+		}
+		kk2, err := ParseKey(kenc, KeepParamsAsReceived())
+		if err != nil {
+			t.Fatalf("re-parse of %x: %v", kenc, err)
+		}
+		if kenc2, _ := kk2.MarshalCBOR(); !bytes.Equal(kenc, kenc2) {
+			t.Fatalf("kept: not idempotent:\n%x\n%x", kenc, kenc2)
+		}
 	})
 }
 

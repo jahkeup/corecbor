@@ -100,3 +100,16 @@ func TestOneItem(t *testing.T) {
 		}
 	}
 }
+
+func TestArraySpans(t *testing.T) {
+	for _, h := range []string{"82a101f97e01a0", "9fa101f97e01a0ff", "d9d9f782a101f97e01a0"} {
+		b, _ := hex.DecodeString(h)
+		items, err := ArraySpans(b)
+		if err != nil || len(items) != 2 || hex.EncodeToString(items[0]) != "a101f97e01" || hex.EncodeToString(items[1]) != "a0" {
+			t.Fatalf("%s: ArraySpans = %x, %v", h, items, err)
+		}
+	}
+	if _, err := ArraySpans([]byte{0xa0}); err == nil {
+		t.Error("ArraySpans(map) succeeded")
+	}
+}

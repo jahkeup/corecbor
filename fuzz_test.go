@@ -270,6 +270,10 @@ func FuzzResourceLimits(f *testing.F) {
 func FuzzTagPreservation(f *testing.F) {
 	enc := New(ModeCoreDeterministic)
 	dec := NewDecoder()
+	// tag must stay valid across the re-decode, and a Decoder's Values
+	// last only until its next Decode (tag content is arena-backed,
+	// proposal 036 item 22), so re-decode on a second Decoder.
+	dec2 := NewDecoder()
 
 	seeds := []Value{
 		MakeTag(1, Uint(1000)),
@@ -298,7 +302,7 @@ func FuzzTagPreservation(f *testing.F) {
 			return
 		}
 
-		v2, err := dec.Decode(encoded)
+		v2, err := dec2.Decode(encoded)
 		if err != nil {
 			t.Fatalf("re-decode failed: %v (encoded: %x)", err, encoded)
 		}

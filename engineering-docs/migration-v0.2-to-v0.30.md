@@ -62,6 +62,7 @@ v0.2.2 and under the new version and diffs the output.
 | Every `Unmarshaler` (including `RawMessage`, `RawTag`) receives its item's original bytes (022) | custom `UnmarshalCBOR` | Core Deterministic re-encoding | none; canonicalize inside your `UnmarshalCBOR` if you need it |
 | `DecodeFrom` reads exactly one item, in linear time (021 D10) | `DecodeFrom`, `Stream` | quadratic; discarded bytes after the item | none |
 | `cbor.Value` fields filled by `Unmarshal` no longer alias the decoder's arena (021 D2) | `Unmarshal` into `cbor.Value`/`any` | overwritten by the next decode | none |
+| A tag `Value` returned by `Decoder.Decode` is valid until the next `Decode` on the same `Decoder`, like arrays and maps: its content is arena-backed (036 item 22) | keeping a tag from `Decode` across another `Decode` on the same `Decoder` | a tag around a scalar survived the next `Decode` | `v.Clone()`, a separate `Decoder`, or `WithoutInternalArena()` |
 | Non-text map keys decode into `map[any]any` as `cbor.ByteKey` / `cbor.EncodedKey` (021 D3) | `Unmarshal` into `any`/`map[any]any` with byte-string, array, map or tag keys | panicked | none |
 | Negative integers below `math.MinInt64` decode into `any` as `*big.Int` (021 D7) | `Unmarshal` into `any` | wrong value | none |
 | `AsTime` returns `ErrTimeRange` for out-of-range or non-finite epochs (021 D5) | `AsTime` | wrapped or garbage times | none |

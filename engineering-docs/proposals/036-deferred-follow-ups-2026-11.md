@@ -50,8 +50,8 @@ none blocks a release.
 | 18 | String interning (`WithStringIntern`) has no tests or benchmark — **done 2026-11-22** | 018 | — | `intern_036_test.go`: equal and shared strings, no aliasing of the source (plain, zero-copy, arena), `Prefill`, capacity bound, steady-state 0 allocs; `BenchmarkDecodeRepeatedKeysIntern` is 0 allocs/op. The steady-state test caught a per-key allocation in duplicate tracking for maps over 16 entries, fixed with item 1 |
 | 19 | Arena-only nested-map decode: 10 allocs vs target ≤2 — **criterion amended 2026-11-22** | 018 | — | All 10 are text and byte strings. `WithArena` documents that only container backing is arena-owned and that strings stay valid after `Reset`, so arena-only can't reach ≤2 without changing that contract (034). `TestArenaNestedMapAllocs` pins arena 10, arena + intern 1, arena + zero-copy 0 |
 | 20 | `Cursor.FindMapKey` on a 50-key map: 2 allocs vs target ≤1 — **done 2026-11-22** | 018 | — | Frames are stored inline: 2 → 1 alloc (the decoded value). Fixed a defect found on the way: `EnterArray`/`EnterMap` didn't count the nested container as an item of its parent, so leaving the parent afterwards failed with `ErrTruncated` or skipped the next sibling (`TestCursorSiblingAfterNested`) |
-| 21 | `Unmarshal` of a 1000-item `[]uint64`: ~23 µs vs ~1.9 µs to `Decode` the same array | 036 item 17 | perf work | `BenchmarkUnmarshalSlice`; per-element reflection |
-| 22 | `DecodeTags`: ~500 allocs for 300 tags | 036 item 17 | perf work | Each tag's one-item `Items` slice is its own allocation, arena or not |
+| 21 | `Unmarshal` of a 1000-item `[]uint64`: ~23 µs vs ~1.9 µs to `Decode` the same array — **done 2026-11-22**: 23.6 → 6.0 µs (−75%) at `-cpu 1`, 2.85 µs at default GOMAXPROCS | 036 item 17 | perf work | Elements of predeclared scalar types can't have methods, so slices and arrays of them call the same setters as `valueToGo` without per-element dispatch, and `[]uint64`/`[]string`/`[]float64`/`[]bool` of matching kinds are filled directly. Errors and results are unchanged; `unmarshal_slice_036_test.go` compares every outcome with named element types, which keep the generic path. The remaining gap to `Decode` (~3× at `-cpu 1`, ~1.6× at default) is mostly GC for the 8 KB result slice |
+| 22 | `DecodeTags`: ~500 allocs for 300 tags — **done 2026-11-22**: 500 → 200 allocs, 35.2 → 1.6 KB/op, −28% time | 036 item 17 | perf work | With an arena (including the `Decoder`'s internal one), tag content comes from the arena like array backing, capped at one item so an append can't overwrite the next slot. `Value` and `Clone` unchanged. The remaining 200 are the tags' byte strings, which `WithArena` keeps heap-owned. Without an arena each tag still allocates its one-item slice; batching it would tie every tag's lifetime to a shared slab. Lifetime note: a tag from `Decoder.Decode` around a scalar used to survive the next `Decode` (one around an array never did); it now follows the documented rule that Values are valid until the next `Decode`. `FuzzTagPreservation` relied on the old behavior and now re-decodes on a second `Decoder` |
 | 23 | `DecodeFrom`: 28 allocs vs 10 for `Decode` of the same item — **done 2026-11-22** | 036 item 17 | — | 28 → 20 allocs, 4928 → 4352 B, 1.83 → 1.71 µs (−7%). The item reader's buffer and frame stack are pooled; the buffer is reused only after a successful non-`ZeroCopy` decode, when no Value can alias it. The 20 that remain are the decoded value (10 strings, 9 heap container slices) plus the benchmark's `bytes.Reader`, so the reader adds none. `Decode`'s 10 come from the root decoder's internal arena, which `DecodeFrom` doesn't use: its Values outlive the call (034) |
 | 24 | Stream decode: ~7.8 µs per item vs ~0.7 µs for `Decode` — **done 2026-11-22** | 036 item 17 | — | 1.83 → 1.31 µs per item (−28%), 27 → 19 allocs per item. On this machine the gap was 1.8 vs 0.7 µs, not 7.8. `Stream.Next` decodes an item in place from the `BufferedReader` buffer when the whole item is there. It falls back to the item reader, with identical errors, limits and consumption, when the item straddles a refill, the decode fails, or `ZeroCopy`, `Budget` or `Arena` is set. Per item it now matches `rfc8949.Decode` with heap containers (1.23 µs, 19 allocs); the rest of the gap to `Decode` is the arena, as in item 23. `FuzzDecodeFromMatchesDecode` now covers `BufferedReader` and `ZeroCopy`. Adding `ZeroCopy` coverage exposed a panic in `Decode`: a zero-copy empty text string at the end of the input. It is fixed |
 
@@ -79,6 +79,17 @@ changes are listed; every other benchmark was unchanged within noise.
 (not significant, p=0.06) on a 10-round re-run; the encoder is
 unchanged on this branch, so this is code layout, not a regression.
 
+### Items 21–22
+
+Base `01b8bb0`, `-cpu 1`, min of 10 interleaved rounds. Every other
+benchmark in the root and `rfc8949` packages was within 2% of base on
+a focused re-run of anything a full run flagged.
+
+| Benchmark | Before | After | Item |
+|---|---|---|---|
+| `UnmarshalSlice` | 23.6 µs, 3 allocs | 5.98 µs (−75%), 3 allocs | 21 |
+| `DecodeTags` | 21.5 µs, 500 allocs, 35.2 KB | 15.5 µs (−28%), 200 allocs, 1.6 KB | 22 |
+
 ### Items 23–24
 
 Base `01b8bb0`. Base and head binaries ran interleaved at `-cpu 1`,
@@ -102,3 +113,4 @@ focused re-run of anything a full run flagged; the full runs drifted
 | 2026-11-22 | Item 3 done for cwt and eat (behavior-identical accessor adoption) | corecbor maintainers |
 | 2026-11-22 | Items 17, 18, 20 done; 19 criterion amended; 1 partly recovered; 2 measured and deferred; items 21–24 filed from 17 | corecbor maintainers |
 | 2026-11-22 | Items 23, 24 done; zero-copy empty-text panic fixed on the way | corecbor maintainers |
+| 2026-11-22 | Items 21, 22 done | corecbor maintainers |

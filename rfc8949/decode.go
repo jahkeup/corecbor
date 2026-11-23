@@ -164,10 +164,16 @@ func (o DecodeOpts) maxBytes() int {
 }
 
 func Decode(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
+	return decodeFrom(src, 0, opts)
+}
+
+// decodeFrom is Decode for an item already inside depth containers
+// (Cursor.Decode), so MaxNestingDepth counts them too.
+func decodeFrom(src []byte, depth int, opts DecodeOpts) (cbor.Value, int, error) {
 	if opts.KeepDuplicateMapKeys && opts.RejectDuplicateMapKeys {
 		return cbor.Value{}, 0, decodeErrDetail(cbor.ErrInvalidOption, 0, ": KeepDuplicateMapKeys with RejectDuplicateMapKeys")
 	}
-	v, n, err := decodeValue(src, 0, 0, opts, true)
+	v, n, err := decodeValue(src, 0, depth, opts, true)
 	if err != nil && opts.ErrorPath {
 		err = withPath(err, "$")
 	}

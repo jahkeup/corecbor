@@ -182,7 +182,8 @@ func (c *Cursor) Bytes() ([]byte, error) {
 // Decode fully decodes the current item using the cursor's DecodeOpts.
 // Advances the cursor past the item.
 func (c *Cursor) Decode() (cbor.Value, error) {
-	v, next, err := Decode(c.src[c.pos:], c.opts)
+	// Nesting depth continues from the containers the cursor is in.
+	v, next, err := decodeFrom(c.src[c.pos:], c.depth(), c.opts)
 	if err != nil {
 		return cbor.Value{}, err
 	}
@@ -203,54 +204,78 @@ func (c *Cursor) consumeFromFrame() {
 
 // EnterArray positions the cursor at the first element of the current
 // array. Returns the element count (-1 for indefinite-length).
+//
+// It applies the same structural rules and limits as Decode and Skip
+// to the array's head (reserved additional information, indefinite or
+// non-shortest lengths when the options reject them, MaxArrayLength,
+// MaxNestingDepth, and a count the input can't hold); on error the
+// cursor doesn't move.
 func (c *Cursor) EnterArray() (int, error) {
-	if c.pos >= len(c.src) {
-		return 0, decodeErr(cbor.ErrTruncated, c.pos)
-	}
-	h := wire.ParseHead(c.src[c.pos:])
-	if h.N == 0 {
-		return 0, decodeErr(cbor.ErrTruncated, c.pos)
-	}
-	if h.Major != wire.MajorArray {
-		return 0, decodeErrf(ErrTypeMismatch, c.pos, ": expected array, got major %d", h.Major>>5)
-	}
-	c.pos += h.N
-	count := -1
-	if h.AI != wire.AIIndefinite {
-		count = int(h.Arg)
-	}
-	// The nested container is one item of its parent.
-	c.consumeFromFrame()
-	c.push(cursorFrame{remaining: count, isMap: false})
-	return count, nil
+	return c.enter(wire.MajorArray)
 }
 
 // EnterMap positions the cursor at the first key of the current map.
 // Returns the pair count (-1 for indefinite-length). Keys and values
-// alternate: key, value, key, value, ...
+// alternate: key, value, key, value, ... It checks the map's head as
+// EnterArray does.
 func (c *Cursor) EnterMap() (int, error) {
-	if c.pos >= len(c.src) {
-		return 0, decodeErr(cbor.ErrTruncated, c.pos)
+	return c.enter(wire.MajorMap)
+}
+
+func (c *Cursor) enter(major byte) (int, error) {
+	off, o := c.pos, c.opts
+	if off >= len(c.src) {
+		return 0, decodeErr(cbor.ErrTruncated, off)
 	}
-	h := wire.ParseHead(c.src[c.pos:])
+	h := wire.ParseHead(c.src[off:])
 	if h.N == 0 {
-		return 0, decodeErr(cbor.ErrTruncated, c.pos)
+		return 0, decodeErr(cbor.ErrTruncated, off)
 	}
-	if h.Major != wire.MajorMap {
-		return 0, decodeErrf(ErrTypeMismatch, c.pos, ": expected map, got major %d", h.Major>>5)
+	isMap := major == wire.MajorMap
+	if h.Major != major {
+		want := "array"
+		if isMap {
+			want = "map"
+		}
+		return 0, decodeErrf(ErrTypeMismatch, off, ": expected %s, got major %d", want, h.Major>>5)
+	}
+	if h.AI >= 28 && h.AI <= 30 {
+		return 0, decodeErr(cbor.ErrReservedAI, off)
+	}
+	indefinite := h.AI == wire.AIIndefinite
+	if indefinite && o.RejectIndefiniteLength {
+		return 0, decodeErr(cbor.ErrIndefiniteLength, off)
+	}
+	if o.RejectNonShortest && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
+		return 0, decodeErr(cbor.ErrNonShortest, off)
+	}
+	// Same order as Decode: length limit, then nesting depth.
+	if !indefinite && h.Arg > uint64(o.maxArray()) {
+		return 0, decodeErr(cbor.ErrMaxArrayLength, off)
+	}
+	if c.depth()+1 > o.maxNesting() {
+		return 0, decodeErr(cbor.ErrMaxNestingDepth, off)
+	}
+	count, items := -1, -1
+	if !indefinite {
+		// h.Arg <= maxArray, an int, so the conversion can't wrap.
+		// Every item takes at least a byte: fail now on a count the
+		// input can't hold, which also bounds the doubling for a map.
+		per := 1
+		if isMap {
+			per = 2
+		}
+		count = int(h.Arg)
+		if count > (len(c.src)-off-h.N)/per {
+			return 0, decodeErr(cbor.ErrTruncated, off)
+		}
+		items = count * per
 	}
 	c.pos += h.N
-	count := -1
-	if h.AI != wire.AIIndefinite {
-		count = int(h.Arg) * 2
-	}
 	// The nested container is one item of its parent.
 	c.consumeFromFrame()
-	c.push(cursorFrame{remaining: count, isMap: true})
-	if h.AI != wire.AIIndefinite {
-		return int(h.Arg), nil
-	}
-	return -1, nil
+	c.push(cursorFrame{remaining: items, isMap: isMap})
+	return count, nil
 }
 
 // ExitArray skips any remaining items in the current array and returns
@@ -319,10 +344,10 @@ func (c *Cursor) FindMapKey(key string) error {
 		}
 
 		if h.Major == wire.MajorText && h.AI != wire.AIIndefinite {
-			length := int(h.Arg)
 			start := c.pos + h.N
-			end := start + length
-			if end <= len(c.src) {
+			// Compare in uint64: a huge length would wrap as an int.
+			if h.Arg <= uint64(len(c.src)-start) {
+				end := start + int(h.Arg)
 				candidate := c.src[start:end]
 				if len(candidate) == len(key) && string(candidate) == key {
 					c.pos = end

@@ -431,6 +431,11 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 
 	case wire.MajorArray, wire.MajorMap:
 		isMap := h.Major == wire.MajorMap
+		// Same order as Decode and the stream reader: a definite length
+		// over the limit is reported before the nesting depth.
+		if h.AI != wire.AIIndefinite && h.Arg > uint64(o.maxArray()) {
+			return off, decodeErr(cbor.ErrMaxArrayLength, off)
+		}
 		if depth+1 > o.maxNesting() {
 			return off, decodeErr(cbor.ErrMaxNestingDepth, off)
 		}
@@ -458,9 +463,6 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 					pos = next
 				}
 			}
-		}
-		if h.Arg > uint64(o.maxArray()) {
-			return off, decodeErr(cbor.ErrMaxArrayLength, off)
 		}
 		count := int(h.Arg)
 		if count > avail/per {

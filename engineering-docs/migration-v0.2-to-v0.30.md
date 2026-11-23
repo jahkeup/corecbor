@@ -310,6 +310,7 @@ Existing identifiers keep their meaning (034). Changes to them (031):
 | `aud` may be an array (RFC 9200); it decodes into `Audiences` (`Audience` stays the single-string form) | rejected | n/a |
 | `cnf`: one method per claim (RFC 8747 §3.1); OKP keys need `crv` (X25519 is no longer read as Ed25519); oversize EC2 coordinates rejected; symmetric keys and COSE_Encrypt0/COSE_Encrypt in member 2 accepted | several methods kept; OKP assumed Ed25519; oversize truncated | none |
 | `Encode` rejects a claim set twice with different values (e.g. `Issuer` and `Private[int64(1)]`) | emitted duplicate keys | n/a |
+| `DecodeClaimsSet` rejects a claim key that is a bignum (tag 2/3) with an integer value, e.g. `c24101`; claim keys are integers or text (RFC 8392 §7.1), and deterministic encoding writes such a bignum as the integer, so it re-encoded as another claim (bignum 1 as `iss`). Larger bignums are still private claims | kept as a private claim | none (safety defect, 034) |
 
 New, recommended:
 
@@ -408,6 +409,7 @@ Existing identifiers keep their meaning (034). Changes to them:
 | Submodules are appraised in sorted name order | map order | n/a |
 | `cnf`, private and unknown claims are preserved (embedded `cwt.ClaimsSet`, `PrivateClaims`) | dropped | n/a |
 | Duplicate claim keys are rejected (via `cwt`, 031) | last one won | none |
+| A claim key that is a bignum with an integer value is rejected, in submodules too (same reason as in `cwt`: bignum 10 re-encoded as `nonce`) | kept as an unknown claim | none (safety defect, 034) |
 | `eat_profile` may be an OID (`ProfileOID`) | bstr form rejected | n/a |
 | A negative `SecurityLevel` or `Debug` encodes as a CBOR negative integer | wrapped to a large uint | none |
 

@@ -4,6 +4,7 @@
 package eat
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -522,6 +523,11 @@ func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error)
 	c := &Claims{}
 	var rest []corecbor.MapEntry
 	for _, entry := range v.Map() {
+		// Checked here because rest is re-encoded deterministically
+		// before cwt sees it, which turns these keys into integers.
+		if integerBignumKey(entry.Key) {
+			return nil, fmt.Errorf("%w: claim key is a bignum with an integer value", ErrMalformedEAT)
+		}
 		k, ok := intKey(entry.Key)
 		if !ok || !cfg.num.models(k) {
 			rest = append(rest, entry)
@@ -550,6 +556,17 @@ func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error)
 // anything the forgiving decoder accepted.
 var restEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic,
 	corecbor.AllowInvalidUTF8(), corecbor.AllowNonFiniteFloats())
+
+// integerBignumKey reports whether k is a tag 2/3 bignum whose value
+// fits a CBOR integer; see cwt's check of the same name.
+func integerBignumKey(k corecbor.Value) bool {
+	if k.Kind != corecbor.KindTag ||
+		(k.TagID() != corecbor.TagUnsignedBignum && k.TagID() != corecbor.TagNegativeBignum) {
+		return false
+	}
+	in := k.TagInner()
+	return in.Kind == corecbor.KindBytes && len(bytes.TrimLeft(in.BytesVal(), "\x00")) <= 8
+}
 
 // intKey returns k as an int64 when it is an integer in the int64
 // range; anything else (other kinds, or integers beyond int64) is

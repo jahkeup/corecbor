@@ -4,6 +4,7 @@
 package cwt
 
 import (
+	"bytes"
 	"encoding/hex"
 	"strconv"
 
@@ -74,6 +75,20 @@ func (k ClaimKey) String() string {
 
 // claimKeyOf maps a decoded map key to a ClaimKey. Integers outside
 // the int64 range do not wrap onto other keys; they become Raw.
+// integerBignumKey reports whether k is a tag 2/3 bignum whose value
+// fits a CBOR integer. Deterministic encoding writes such a bignum as
+// the plain integer (RFC 8949 §3.4.3), so as a claim key it would
+// re-encode as a different claim (bignum 1 as iss). Claim keys are
+// integers or text (RFC 8392 §7.1), so these are rejected.
+func integerBignumKey(k corecbor.Value) bool {
+	if k.Kind != corecbor.KindTag ||
+		(k.TagID() != corecbor.TagUnsignedBignum && k.TagID() != corecbor.TagNegativeBignum) {
+		return false
+	}
+	in := k.TagInner()
+	return in.Kind == corecbor.KindBytes && len(bytes.TrimLeft(in.BytesVal(), "\x00")) <= 8
+}
+
 func claimKeyOf(v corecbor.Value) ClaimKey {
 	switch v.Kind {
 	case corecbor.KindUint, corecbor.KindNegInt:

@@ -42,6 +42,16 @@ var (
 	// ErrKeyResolution indicates the key resolver failed or none was
 	// configured.
 	ErrKeyResolution = errors.New("cwt: key resolution failed")
+
+	// ErrAmbiguousClaimKey indicates a claim key that encoding would
+	// turn into a different key: a bignum (tag 2/3) whose value fits a
+	// CBOR integer, which deterministic encoding writes as that integer
+	// (bignum 1 as iss). It is returned inside a *ClaimError whose
+	// Key.Raw holds the key's bytes as received, and also wraps
+	// ErrMalformedClaims. eat returns it the same way; for a key inside
+	// an EAT submodule that *ClaimError is wrapped in the one for the
+	// submods claim, so follow ClaimError.Err to the innermost.
+	ErrAmbiguousClaimKey = errors.New("cwt: ambiguous claim key")
 )
 
 // ClaimError reports which claim failed and why. Err wraps a cwt

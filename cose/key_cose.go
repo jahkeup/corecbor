@@ -163,6 +163,36 @@ func intLabel(k corecbor.Value) (int64, error) {
 // keyFromValue builds a Key from a decoded COSE_Key. v must own its
 // memory (decoded by newKeyDecoder: no arena, no zero-copy), because the
 // Key keeps references to its byte strings and nested values.
+// hasNonFinite reports whether v is or contains (in an array, map, or
+// tag) a NaN or infinite float.
+func hasNonFinite(v corecbor.Value) bool {
+	switch v.Kind {
+	case corecbor.KindFloat32:
+		f := float64(v.Float32Val())
+		return math.IsNaN(f) || math.IsInf(f, 0)
+	case corecbor.KindFloat64:
+		f := v.Float64Val()
+		return math.IsNaN(f) || math.IsInf(f, 0)
+	case corecbor.KindArray, corecbor.KindTag:
+		for _, it := range v.Items {
+			if hasNonFinite(it) {
+				return true
+			}
+		}
+	case corecbor.KindMap:
+		for _, e := range v.Pairs {
+			if hasNonFinite(e.Key) || hasNonFinite(e.Value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func nonFiniteParamErr(label any) error {
+	return &KeyParamError{Label: label, Err: fmt.Errorf("%w: %w", ErrMalformed, ErrNonFiniteKeyParam)}
+}
+
 func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 	var cfg keyParseConfig
 	if len(opts) > 0 {
@@ -187,6 +217,9 @@ func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 			if _, dup := k.text[e.Key.TextVal()]; dup {
 				return nil, fmt.Errorf("%w: key label %q repeated", ErrMalformed, e.Key.TextVal())
 			}
+			if hasNonFinite(e.Value) {
+				return nil, nonFiniteParamErr(e.Key.TextVal())
+			}
 			k.text[e.Key.TextVal()] = e.Value
 			continue
 		}
@@ -196,6 +229,9 @@ func keyFromValue(v corecbor.Value, opts []KeyOption) (*Key, error) {
 		}
 		if _, dup := k.params[n]; dup {
 			return nil, fmt.Errorf("%w: key label %d repeated", ErrMalformed, n)
+		}
+		if hasNonFinite(e.Value) {
+			return nil, nonFiniteParamErr(n)
 		}
 		k.params[n] = cborToGo(e.Value)
 	}

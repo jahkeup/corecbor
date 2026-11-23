@@ -526,7 +526,7 @@ func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error)
 		// Checked here because rest is re-encoded deterministically
 		// before cwt sees it, which turns these keys into integers.
 		if integerBignumKey(entry.Key) {
-			return nil, fmt.Errorf("%w: claim key is a bignum with an integer value", ErrMalformedEAT)
+			return nil, ambiguousKeyErr(entry.Key)
 		}
 		k, ok := intKey(entry.Key)
 		if !ok || !cfg.num.models(k) {
@@ -566,6 +566,22 @@ func integerBignumKey(k corecbor.Value) bool {
 	}
 	in := k.TagInner()
 	return in.Kind == corecbor.KindBytes && len(bytes.TrimLeft(in.BytesVal(), "\x00")) <= 8
+}
+
+// ambiguousKeyErr reports a key integerBignumKey matched as a
+// *cwt.ClaimError (Key.Raw is the key as received) wrapping
+// ErrMalformedEAT and cwt.ErrAmbiguousClaimKey.
+func ambiguousKeyErr(k corecbor.Value) error {
+	// Tags 2 and 3 have one-byte heads and a byte string encodes as
+	// received, so raw is the key's original encoding.
+	raw, err := restEncoder.Encode([]byte{0xc0 | byte(k.TagID())}, k.TagInner())
+	if err != nil {
+		raw = []byte("\x00invalid")
+	}
+	return &cwt.ClaimError{
+		Key: cwt.ClaimKey{Raw: string(raw)},
+		Err: fmt.Errorf("%w: %w: bignum with an integer value", ErrMalformedEAT, cwt.ErrAmbiguousClaimKey),
+	}
 }
 
 // intKey returns k as an int64 when it is an integer in the int64

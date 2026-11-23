@@ -3,7 +3,10 @@
 
 package cose
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrVerification         = errors.New("cose: verification failed")
@@ -38,4 +41,28 @@ var (
 	// type has no CBOR encoding here. SetChecked returns it directly;
 	// a value stored with Set surfaces it from the next Marshal*.
 	ErrUnsupportedHeader = errors.New("cose: header value type not encodable")
+
+	// ErrNonFiniteKeyParam indicates a COSE_Key parameter whose value is
+	// or contains a NaN or infinite float. MarshalCBOR can't write one
+	// (Core Deterministic encoding, RFC 9052 §9), so ParseKey rejects it
+	// rather than return a key that can't be re-encoded. It is returned
+	// inside a *KeyParamError and also wraps ErrMalformed.
+	ErrNonFiniteKeyParam = errors.New("cose: non-finite float in key parameter")
 )
+
+// KeyParamError reports which COSE_Key parameter failed and why. Label
+// is the parameter's label: an int64, or a string for a text label.
+// Err wraps a cose sentinel such as ErrNonFiniteKeyParam.
+type KeyParamError struct {
+	Label any
+	Err   error
+}
+
+func (e *KeyParamError) Error() string {
+	if s, ok := e.Label.(string); ok {
+		return fmt.Sprintf("key label %q: %v", s, e.Err)
+	}
+	return fmt.Sprintf("key label %v: %v", e.Label, e.Err)
+}
+
+func (e *KeyParamError) Unwrap() error { return e.Err }

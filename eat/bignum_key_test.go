@@ -6,8 +6,10 @@ package eat_test
 import (
 	"encoding/hex"
 	"errors"
+	"strings"
 	"testing"
 
+	"github.com/jahkeup/corecbor/cwt"
 	"github.com/jahkeup/corecbor/eat"
 )
 
@@ -44,5 +46,34 @@ func TestDecodeRejectsIntegerBignumKeys(t *testing.T) {
 	ok, _ := hex.DecodeString("a1" + "19010a" + "a1" + "6161" + "a1" + "3a" + "00010000" + "01")
 	if _, err := eat.DecodeClaims(ok); err != nil {
 		t.Errorf("control submodule: %v", err)
+	}
+}
+
+// TestAmbiguousClaimKeyError: the rejection wraps cwt's sentinel and
+// ErrMalformedEAT, and names the key as received, in submodules too.
+func TestAmbiguousClaimKeyError(t *testing.T) {
+	for name, h := range map[string]string{
+		"top level":    "a1c2410a3830",
+		"in submodule": "a1" + "19010a" + "a1" + "6161" + "a1c2410a01",
+	} {
+		b, _ := hex.DecodeString(h)
+		_, err := eat.DecodeClaims(b)
+		if !errors.Is(err, cwt.ErrAmbiguousClaimKey) || !errors.Is(err, eat.ErrMalformedEAT) {
+			t.Fatalf("%s: err = %v, want cwt.ErrAmbiguousClaimKey and ErrMalformedEAT", name, err)
+		}
+		// Submodule errors nest: the innermost *cwt.ClaimError names the
+		// offending key; outer ones name the enclosing submods claim.
+		var ce *cwt.ClaimError
+		for e := err; errors.As(e, &ce); e = ce.Err {
+			if ce.Key.Raw != "" {
+				break
+			}
+		}
+		if ce == nil || hex.EncodeToString([]byte(ce.Key.Raw)) != "c2410a" {
+			t.Fatalf("%s: err = %v, want a *cwt.ClaimError with Key.Raw c2410a", name, err)
+		}
+		if name == "in submodule" && !strings.Contains(err.Error(), `submods["a"]`) {
+			t.Errorf("%s: err %q doesn't name the submodule", name, err)
+		}
 	}
 }

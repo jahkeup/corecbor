@@ -6,6 +6,7 @@ package cwt
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 	"strconv"
 
 	"github.com/jahkeup/corecbor"
@@ -73,8 +74,6 @@ func (k ClaimKey) String() string {
 	}
 }
 
-// claimKeyOf maps a decoded map key to a ClaimKey. Integers outside
-// the int64 range do not wrap onto other keys; they become Raw.
 // integerBignumKey reports whether k is a tag 2/3 bignum whose value
 // fits a CBOR integer. Deterministic encoding writes such a bignum as
 // the plain integer (RFC 8949 §3.4.3), so as a claim key it would
@@ -89,6 +88,25 @@ func integerBignumKey(k corecbor.Value) bool {
 	return in.Kind == corecbor.KindBytes && len(bytes.TrimLeft(in.BytesVal(), "\x00")) <= 8
 }
 
+// receivedKey returns a key integerBignumKey matched as a Raw ClaimKey
+// in its received form. Tags 2 and 3 have one-byte heads (0xc2, 0xc3)
+// and a byte string encodes as received, so this is the key's original
+// encoding (normalizing it would yield the integer it collides with).
+func receivedKey(k corecbor.Value) ClaimKey {
+	enc, err := keyEncoder.Encode([]byte{0xc0 | byte(k.TagID())}, k.TagInner())
+	if err != nil {
+		return ClaimKey{Raw: "\x00invalid"}
+	}
+	return ClaimKey{Raw: string(enc)}
+}
+
+// ambiguousKeyErr is the error for a key integerBignumKey reports.
+func ambiguousKeyErr(k corecbor.Value) error {
+	return &ClaimError{Key: receivedKey(k), Err: fmt.Errorf("%w: %w: bignum with an integer value", ErrMalformedClaims, ErrAmbiguousClaimKey)}
+}
+
+// claimKeyOf maps a decoded map key to a ClaimKey. Integers outside
+// the int64 range do not wrap onto other keys; they become Raw.
 func claimKeyOf(v corecbor.Value) ClaimKey {
 	switch v.Kind {
 	case corecbor.KindUint, corecbor.KindNegInt:

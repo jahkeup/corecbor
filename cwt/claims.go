@@ -335,7 +335,7 @@ func decodeClaimsValue(v corecbor.Value, opts DecodeOptions) (*ClaimsSet, error)
 	cs := &ClaimsSet{}
 	for _, entry := range v.Map() {
 		if integerBignumKey(entry.Key) {
-			return nil, fmt.Errorf("%w: claim key is a bignum with an integer value", ErrMalformedClaims)
+			return nil, ambiguousKeyErr(entry.Key)
 		}
 		key := claimKeyOf(entry.Key)
 		if handled, err := cs.decodeRegistered(key, entry.Value, opts); err != nil {

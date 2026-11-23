@@ -4,7 +4,6 @@
 package eat
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"math"
@@ -14,6 +13,8 @@ import (
 	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
+	"github.com/jahkeup/corecbor/internal/asreceived"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
 )
 
 const (
@@ -172,11 +173,9 @@ func (c *Claims) toValue(cfg config) (corecbor.Value, error) {
 	if err != nil {
 		return corecbor.Value{}, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 	}
-	v, err := corecbor.NewDecoder(corecbor.WithoutInternalArena()).Decode(b)
-	if err != nil {
-		return corecbor.Value{}, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
-	}
-	return v, nil
+	// cwt's output is already Core Deterministic; splice it rather
+	// than decode and re-encode it, which would undo ReceivedClaims.
+	return rawvalue.Make(b), nil
 }
 
 func wholeSeconds(t time.Time) time.Time {
@@ -506,36 +505,64 @@ func DecodeClaims(data []byte, opts ...Option) (*Claims, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 	}
-	return decodeClaimsValue(v, cfg, 0)
+	var raw []byte
+	if cfg.keep {
+		raw = data
+	}
+	return decodeClaimsValue(v, raw, cfg, 0)
 }
 
 // maxSubmodDepth bounds inline-submodule recursion.
 const maxSubmodDepth = 16
 
-func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error) {
+// decodeClaimsValue decodes the claims map v. raw, when not nil, is v's
+// source bytes (WithKeepAsReceived).
+func decodeClaimsValue(v corecbor.Value, raw []byte, cfg config, depth int) (*Claims, error) {
 	if v.Kind != corecbor.KindMap {
 		return nil, fmt.Errorf("%w: expected map, got kind %d", ErrMalformedEAT, v.Kind)
 	}
 	if depth > maxSubmodDepth {
 		return nil, fmt.Errorf("%w: submodules nested deeper than %d", ErrMalformedEAT, maxSubmodDepth)
 	}
+	spans, err := entrySpans(raw, len(v.Map()))
+	if err != nil {
+		return nil, err
+	}
 
 	c := &Claims{}
 	var rest []corecbor.MapEntry
-	for _, entry := range v.Map() {
-		// Checked here because rest is re-encoded deterministically
-		// before cwt sees it, which turns these keys into integers.
-		if integerBignumKey(entry.Key) {
+	for i, entry := range v.Map() {
+		// The checks for data encoding would change run here, before
+		// rest is re-encoded for cwt, which would already change it.
+		ambiguous := asreceived.IntegerBignum(entry.Key)
+		if ambiguous && spans == nil {
 			return nil, ambiguousKeyErr(entry.Key)
 		}
 		k, ok := intKey(entry.Key)
-		if !ok || !cfg.num.models(k) {
-			rest = append(rest, entry)
+		if !ambiguous && ok && cfg.num.models(k) {
+			// Modeled: parsed and checked, never kept as received.
+			// Inline submodules check their own claims.
+			if k != cfg.num.submods && asreceived.NonCanonicalNaN(entry.Value) {
+				return nil, nanErr(entry.Key)
+			}
+			var sub []byte
+			if spans != nil {
+				sub = spans[i].Value
+			}
+			if err := c.decodeClaim(k, entry.Value, sub, cfg, depth); err != nil {
+				return nil, &cwt.ClaimError{Key: cwt.IntKey(k), Err: err}
+			}
 			continue
 		}
-		if err := c.decodeClaim(k, entry.Value, cfg, depth); err != nil {
-			return nil, &cwt.ClaimError{Key: cwt.IntKey(k), Err: err}
+		if spans == nil && (asreceived.NonCanonicalNaN(entry.Key) || asreceived.NonCanonicalNaN(entry.Value)) {
+			return nil, nanErr(entry.Key)
 		}
+		if spans != nil {
+			// Hand cwt the entry as received; it keeps what needs
+			// keeping and decodes the rest as usual.
+			entry = corecbor.MapEntry{Key: rawvalue.Make(spans[i].Key), Value: rawvalue.Make(spans[i].Value)}
+		}
+		rest = append(rest, entry)
 	}
 
 	if len(rest) > 0 {
@@ -543,7 +570,7 @@ func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 		}
-		cs, err := cwt.DecodeClaimsSet(b)
+		cs, err := cwt.DecodeClaimsSetWith(b, cwt.DecodeOptions{KeepAsReceived: spans != nil})
 		if err != nil {
 			return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 		}
@@ -552,23 +579,42 @@ func decodeClaimsValue(v corecbor.Value, cfg config, depth int) (*Claims, error)
 	return c, nil
 }
 
+// entrySpans returns the source bytes of the n entries of the map
+// encoded in raw, or nil when raw is nil.
+func entrySpans(raw []byte, n int) ([]asreceived.Span, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	spans, err := asreceived.MapSpans(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
+	}
+	if len(spans) != n {
+		return nil, fmt.Errorf("%w: map entries don't match their source", ErrMalformedEAT)
+	}
+	return spans, nil
+}
+
+// nanErr reports a claim holding a NaN other than f97e00 as a
+// *cwt.ClaimError wrapping ErrMalformedEAT and cwt.ErrNonCanonicalNaN.
+func nanErr(key corecbor.Value) error {
+	var ck cwt.ClaimKey
+	if n, ok := intKey(key); ok {
+		ck = cwt.IntKey(n)
+	} else if key.Kind == corecbor.KindText {
+		ck = cwt.TextKey(key.TextVal())
+	} else if b, err := restEncoder.Encode(nil, key); err == nil {
+		ck = cwt.ClaimKey{Raw: string(b)}
+	}
+	return &cwt.ClaimError{Key: ck, Err: fmt.Errorf("%w: %w", ErrMalformedEAT, cwt.ErrNonCanonicalNaN)}
+}
+
 // restEncoder re-encodes the claims handed to cwt. It is lossless for
 // anything the forgiving decoder accepted.
 var restEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic,
 	corecbor.AllowInvalidUTF8(), corecbor.AllowNonFiniteFloats())
 
-// integerBignumKey reports whether k is a tag 2/3 bignum whose value
-// fits a CBOR integer; see cwt's check of the same name.
-func integerBignumKey(k corecbor.Value) bool {
-	if k.Kind != corecbor.KindTag ||
-		(k.TagID() != corecbor.TagUnsignedBignum && k.TagID() != corecbor.TagNegativeBignum) {
-		return false
-	}
-	in := k.TagInner()
-	return in.Kind == corecbor.KindBytes && len(bytes.TrimLeft(in.BytesVal(), "\x00")) <= 8
-}
-
-// ambiguousKeyErr reports a key integerBignumKey matched as a
+// ambiguousKeyErr reports a key asreceived.IntegerBignum matched as a
 // *cwt.ClaimError (Key.Raw is the key as received) wrapping
 // ErrMalformedEAT and cwt.ErrAmbiguousClaimKey.
 func ambiguousKeyErr(k corecbor.Value) error {
@@ -596,7 +642,9 @@ func malformed(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{ErrMalformedEAT}, args...)...)
 }
 
-func (c *Claims) decodeClaim(k int64, val corecbor.Value, cfg config, depth int) error {
+// decodeClaim decodes modeled claim k. raw is val's source bytes, or
+// nil; only submods uses it.
+func (c *Claims) decodeClaim(k int64, val corecbor.Value, raw []byte, cfg config, depth int) error {
 	n := cfg.num
 	switch k {
 	case ClaimNonce:
@@ -662,7 +710,7 @@ func (c *Claims) decodeClaim(k int64, val corecbor.Value, cfg config, depth int)
 		}
 		c.SWComponents = sws
 	case n.submods:
-		return c.decodeSubmods(val, cfg, depth)
+		return c.decodeSubmods(val, raw, cfg, depth)
 	}
 	if n.legacy {
 		if k == n.securityLevel {
@@ -742,12 +790,16 @@ func (c *Claims) decodeRFCClaim(k int64, val corecbor.Value) error {
 
 func isMalformed(err error) bool { return errors.Is(err, ErrMalformedEAT) }
 
-func (c *Claims) decodeSubmods(val corecbor.Value, cfg config, depth int) error {
+func (c *Claims) decodeSubmods(val corecbor.Value, raw []byte, cfg config, depth int) error {
 	if val.Kind != corecbor.KindMap {
 		return malformed("submods must be map")
 	}
+	spans, err := entrySpans(raw, len(val.Map()))
+	if err != nil {
+		return err
+	}
 	c.Submods = make(map[string]Submod, len(val.Map()))
-	for _, e := range val.Map() {
+	for i, e := range val.Map() {
 		if e.Key.Kind != corecbor.KindText {
 			return malformed("submod key must be text")
 		}
@@ -756,7 +808,11 @@ func (c *Claims) decodeSubmods(val corecbor.Value, cfg config, depth int) error 
 		case corecbor.KindBytes:
 			c.Submods[name] = Submod{Token: e.Value.BytesVal()}
 		case corecbor.KindMap:
-			inline, err := decodeClaimsValue(e.Value, cfg, depth+1)
+			var sub []byte
+			if spans != nil {
+				sub = spans[i].Value
+			}
+			inline, err := decodeClaimsValue(e.Value, sub, cfg, depth+1)
 			if err != nil {
 				return fmt.Errorf("%w: submods[%q]: %w", ErrMalformedEAT, name, err)
 			}

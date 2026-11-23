@@ -7,7 +7,8 @@ package eat
 type Option func(*config)
 
 type config struct {
-	num numbering
+	num  numbering
+	keep bool
 }
 
 func newConfig(opts []Option) config {
@@ -16,6 +17,19 @@ func newConfig(opts []Option) config {
 		o(&c)
 	}
 	return c
+}
+
+// WithKeepAsReceived makes DecodeClaims keep claims that Encode
+// couldn't write back unchanged, byte for byte, in the embedded
+// cwt.ClaimsSet's ReceivedClaims instead of rejecting them: a claim key
+// that is a bignum with an integer value (cwt.ErrAmbiguousClaimKey),
+// and an unmodeled claim whose key or value holds a NaN other than
+// f97e00 (cwt.ErrNonCanonicalNaN). This applies in inline submodules
+// too. Claims this package models are still parsed and checked, so a
+// NaN payload in one is an error. Encode writes kept claims verbatim,
+// so for them its output is the input, not Core Deterministic.
+func WithKeepAsReceived() Option {
+	return func(c *config) { c.keep = true }
 }
 
 // WithLegacyDraftClaimKeys reads and writes the draft-era claim

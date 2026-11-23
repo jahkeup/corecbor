@@ -28,7 +28,7 @@ func ClaimsFromHeaders(h *cose.Headers) (*ClaimsSet, bool, error) {
 		}
 		return nil, false, nil
 	}
-	cs, err := decodeClaimsValue(v, DecodeOptions{})
+	cs, err := decodeClaimsValue(v, nil, DecodeOptions{})
 	if err != nil {
 		return nil, true, err
 	}

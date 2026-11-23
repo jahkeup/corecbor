@@ -27,13 +27,14 @@ func fuzzSeeds(f *testing.F) {
 		"a1190108a2011a00000001021a00000002", // location
 		"d9025a8243a10a40a1616143010203",     // detached bundle
 		"a0", "80", "ff", "",
+		"a40a4801020304050607081864f97e0119010aa16161a21864f9fe00c24101f6c2410a01", // kept as received
 	} {
 		b, _ := hex.DecodeString(s)
 		f.Add(b)
 	}
 }
 
-var fuzzOptions = [][]eat.Option{nil, {eat.CompatV02()}} //nolint:staticcheck // legacy numbering is fuzzed too
+var fuzzOptions = [][]eat.Option{nil, {eat.CompatV02()}, {eat.WithKeepAsReceived()}, {eat.WithKeepAsReceived(), eat.CompatV02()}} //nolint:staticcheck // legacy numbering is fuzzed too
 
 // FuzzDecodeClaims: arbitrary bytes return an error or claims that
 // re-encode to bytes that decode again, in both numberings; Validate

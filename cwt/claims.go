@@ -13,6 +13,8 @@ import (
 
 	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cose"
+	"github.com/jahkeup/corecbor/internal/asreceived"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
 )
 
 // cnf map keys per RFC 8747.
@@ -118,6 +120,17 @@ type ClaimsSet struct {
 	// PrivateClaims holds every claim this package does not model,
 	// keyed by label, with its decoded value.
 	PrivateClaims map[ClaimKey]corecbor.Value
+
+	// ReceivedClaims holds claims kept exactly as received because
+	// Encode couldn't otherwise write them back unchanged: a key that
+	// is a bignum with an integer value (ErrAmbiguousClaimKey; its
+	// ClaimKey.Raw is the key's received bytes), or a key or value
+	// holding a NaN other than f97e00 (ErrNonCanonicalNaN). Decoding
+	// fills it only with DecodeOptions.KeepAsReceived. Encode writes
+	// each key and value verbatim, so for these claims its output is
+	// the input, not Core Deterministic. Delete an entry to drop the
+	// claim.
+	ReceivedClaims map[ClaimKey]corecbor.RawMessage
 }
 
 // ContainsAudience reports whether s is the aud claim or one of its
@@ -127,6 +140,9 @@ func (c *ClaimsSet) ContainsAudience(s string) bool {
 }
 
 // Encode serializes the ClaimsSet as a CBOR map using CoreDeterministic mode.
+// Claims in ReceivedClaims are written verbatim. A value holding a NaN
+// other than f97e00 is an error wrapping ErrNonCanonicalNaN, since
+// deterministic encoding would replace it.
 //
 // A claim emitted from more than one place (a modeled field, Private,
 // PrivateClaims) must have the same value everywhere; otherwise Encode
@@ -137,8 +153,18 @@ func (c *ClaimsSet) Encode() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return corecbor.New(corecbor.ModeCoreDeterministic).Encode(nil, v)
+	// Never rewrite a NaN payload silently (ReceivedClaims are spliced
+	// verbatim and not inspected here).
+	if asreceived.NonCanonicalNaN(v) {
+		return nil, fmt.Errorf("%w: %w: a claim holds a NaN other than f97e00; keep it in ReceivedClaims as encoded bytes", ErrMalformedClaims, ErrNonCanonicalNaN)
+	}
+	return claimsEncoder.Encode(nil, v)
 }
+
+// claimsEncoder writes claim sets. Non-finite floats are allowed: ±Inf
+// and the quiet NaN f97e00 encode exactly, and decoding rejects (or,
+// with KeepAsReceived, keeps verbatim) any other NaN.
+var claimsEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic, corecbor.AllowNonFiniteFloats())
 
 // claimsBuilder collects claims, rejecting conflicting duplicates.
 type claimsBuilder struct {
@@ -262,6 +288,18 @@ func (c *ClaimsSet) toValue() (corecbor.Value, error) {
 			return corecbor.Value{}, err
 		}
 	}
+	for k, raw := range c.ReceivedClaims {
+		kv, err := k.receivedValue()
+		if err != nil {
+			return corecbor.Value{}, claimErr(k, "received claim key", err)
+		}
+		if !asreceived.OneItem(raw) {
+			return corecbor.Value{}, claimErr(k, "received claim value is not one CBOR data item", nil)
+		}
+		if err := b.add(k, kv, rawvalue.Make(raw)); err != nil {
+			return corecbor.Value{}, err
+		}
+	}
 	return corecbor.MakeMapFromSlice(b.entries), nil
 }
 
@@ -296,6 +334,15 @@ type DecodeOptions struct {
 	// Opt-in; DecodeClaimsSet ignores them, as in v0.2.2.
 	RejectUnknownCnf bool
 
+	// KeepAsReceived keeps claims that Encode couldn't write back
+	// unchanged in ClaimsSet.ReceivedClaims, byte for byte, instead of
+	// rejecting them: a claim key that is a bignum with an integer value
+	// (ErrAmbiguousClaimKey), and a claim whose key or value holds a
+	// NaN other than f97e00 (ErrNonCanonicalNaN). A modeled claim (iss,
+	// sub, aud, exp, nbf, iat, cti, cnf) is still rejected. Opt-in;
+	// without it, and in ClaimsFromHeaders, these claims are errors.
+	KeepAsReceived bool
+
 	// AllowDuplicateClaims restores v0.2's last-one-wins handling of
 	// duplicate map keys.
 	//
@@ -324,18 +371,35 @@ func DecodeClaimsSetWith(data []byte, opts DecodeOptions) (*ClaimsSet, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
-	return decodeClaimsValue(v, opts)
+	var spans []asreceived.Span
+	if opts.KeepAsReceived {
+		if spans, err = asreceived.MapSpans(data); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
+		}
+	}
+	return decodeClaimsValue(v, spans, opts)
 }
 
-func decodeClaimsValue(v corecbor.Value, opts DecodeOptions) (*ClaimsSet, error) {
+// decodeClaimsValue decodes the claims map v. spans, when not nil, are
+// the source bytes of v's entries (DecodeOptions.KeepAsReceived).
+func decodeClaimsValue(v corecbor.Value, spans []asreceived.Span, opts DecodeOptions) (*ClaimsSet, error) {
 	if v.Kind != corecbor.KindMap {
 		return nil, fmt.Errorf("%w: expected map, got kind %d", ErrMalformedClaims, v.Kind)
 	}
+	if spans != nil && len(spans) != len(v.Map()) {
+		// Only with the deprecated AllowDuplicateClaims, which drops
+		// the earlier duplicates.
+		return nil, fmt.Errorf("%w: duplicate claims can't be kept as received", ErrMalformedClaims)
+	}
 
 	cs := &ClaimsSet{}
-	for _, entry := range v.Map() {
-		if integerBignumKey(entry.Key) {
-			return nil, ambiguousKeyErr(entry.Key)
+	for i, entry := range v.Map() {
+		kept, err := cs.keepAsReceived(entry, spans, i)
+		if err != nil {
+			return nil, err
+		}
+		if kept {
+			continue
 		}
 		key := claimKeyOf(entry.Key)
 		if handled, err := cs.decodeRegistered(key, entry.Value, opts); err != nil {
@@ -346,6 +410,48 @@ func decodeClaimsValue(v corecbor.Value, opts DecodeOptions) (*ClaimsSet, error)
 		cs.addPrivate(key, entry.Value)
 	}
 	return cs, nil
+}
+
+// keepAsReceived handles a claim Encode couldn't write back unchanged.
+// With spans it is kept in ReceivedClaims, unless it is a modeled claim
+// (whose value is parsed and checked); otherwise it is an error.
+func (cs *ClaimsSet) keepAsReceived(entry corecbor.MapEntry, spans []asreceived.Span, i int) (bool, error) {
+	ambiguous := asreceived.IntegerBignum(entry.Key)
+	nan := asreceived.NonCanonicalNaN(entry.Key) || asreceived.NonCanonicalNaN(entry.Value)
+	if !ambiguous && !nan {
+		return false, nil
+	}
+	key := claimKeyOf(entry.Key)
+	if ambiguous {
+		key = receivedKey(entry.Key)
+	}
+	if spans == nil || (!ambiguous && modeledClaim(key)) {
+		if ambiguous {
+			return false, ambiguousKeyErr(entry.Key)
+		}
+		return false, &ClaimError{Key: key, Err: fmt.Errorf("%w: %w", ErrMalformedClaims, ErrNonCanonicalNaN)}
+	}
+	if key.Raw != "" {
+		key = ClaimKey{Raw: string(spans[i].Key)} // the key exactly as received
+	}
+	if cs.ReceivedClaims == nil {
+		cs.ReceivedClaims = map[ClaimKey]corecbor.RawMessage{}
+	}
+	cs.ReceivedClaims[key] = bytes.Clone(spans[i].Value)
+	return true, nil
+}
+
+// modeledClaim reports whether decodeRegistered parses key into a typed
+// field and checks its value; such a claim is never kept as received.
+func modeledClaim(key ClaimKey) bool {
+	if key.Raw != "" || key.IsText {
+		return false
+	}
+	switch key.Int {
+	case ClaimIss, ClaimSub, ClaimAud, ClaimExp, ClaimNbf, ClaimIat, ClaimCti, ClaimCnf:
+		return true
+	}
+	return false
 }
 
 // decodeRegistered decodes a claim this package models. It reports

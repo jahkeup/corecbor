@@ -48,10 +48,23 @@ var (
 	// CBOR integer, which deterministic encoding writes as that integer
 	// (bignum 1 as iss). It is returned inside a *ClaimError whose
 	// Key.Raw holds the key's bytes as received, and also wraps
-	// ErrMalformedClaims. eat returns it the same way; for a key inside
+	// ErrMalformedClaims; DecodeOptions.KeepAsReceived keeps such
+	// claims instead. eat returns it the same way; for a key inside
 	// an EAT submodule that *ClaimError is wrapped in the one for the
 	// submods claim, so follow ClaimError.Err to the innermost.
 	ErrAmbiguousClaimKey = errors.New("cwt: ambiguous claim key")
+
+	// ErrNonCanonicalNaN indicates a claim whose key or value holds a
+	// NaN other than the quiet NaN f97e00: one with a payload or the
+	// sign bit set. Core Deterministic encoding writes every NaN as
+	// f97e00, so Encode would change it. It is returned inside a
+	// *ClaimError naming the claim and also wraps ErrMalformedClaims;
+	// DecodeOptions.KeepAsReceived keeps such claims instead. eat
+	// returns it the same way. Encode returns it too for a value a
+	// caller set; note that Go's math.NaN() has a payload bit set (it
+	// is 0x7ff8000000000001), while math.Float64frombits(0x7ff8000000000000)
+	// is the quiet NaN.
+	ErrNonCanonicalNaN = errors.New("cwt: NaN payload would not survive encoding")
 )
 
 // ClaimError reports which claim failed and why. Err wraps a cwt

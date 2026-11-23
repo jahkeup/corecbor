@@ -176,8 +176,10 @@ goroutine (for example from a `sync.Pool`).
   `TagEnterpriseOID`, `TagExtendedTime`, `TagDuration`, `TagPeriod`,
   `TagCBORSequenceFile`, `TagCBORLabeledData`.
 - Errors for data that can't be re-encoded as received (036 item 25):
-  `cwt.ErrAmbiguousClaimKey`, `cose.ErrNonFiniteKeyParam`,
-  `cose.KeyParamError`.
+  `cwt.ErrAmbiguousClaimKey`, `cwt.ErrNonCanonicalNaN`,
+  `cose.ErrNonFiniteKeyParam`, `cose.KeyParamError`; and opt-ins that
+  keep such data byte for byte instead: `cwt.DecodeOptions.KeepAsReceived`
+  with `cwt.ClaimsSet.ReceivedClaims`, `eat.WithKeepAsReceived()`.
 - `registry`: refreshed from IANA (2026-11-13). Every generated
   constant from v0.2.2 keeps its name and value
   (`registry/names_frozen.txt`); new tags get new constants.
@@ -315,7 +317,9 @@ Existing identifiers keep their meaning (034). Changes to them (031):
 | `aud` may be an array (RFC 9200); it decodes into `Audiences` (`Audience` stays the single-string form) | rejected | n/a |
 | `cnf`: one method per claim (RFC 8747 §3.1); OKP keys need `crv` (X25519 is no longer read as Ed25519); oversize EC2 coordinates rejected; symmetric keys and COSE_Encrypt0/COSE_Encrypt in member 2 accepted | several methods kept; OKP assumed Ed25519; oversize truncated | none |
 | `Encode` rejects a claim set twice with different values (e.g. `Issuer` and `Private[int64(1)]`) | emitted duplicate keys | n/a |
-| `DecodeClaimsSet` rejects a claim key that is a bignum (tag 2/3) with an integer value, e.g. `c24101`, with `ErrAmbiguousClaimKey` inside a `*ClaimError` whose `Key.Raw` is the key as received; claim keys are integers or text (RFC 8392 §7.1), and deterministic encoding writes such a bignum as the integer, so it re-encoded as another claim (bignum 1 as `iss`). Larger bignums are still private claims | kept as a private claim | none yet (safety defect, 034; a byte-preserving opt-in is planned) |
+| `DecodeClaimsSet` rejects a claim key that is a bignum (tag 2/3) with an integer value, e.g. `c24101`, with `ErrAmbiguousClaimKey` inside a `*ClaimError` whose `Key.Raw` is the key as received; claim keys are integers or text (RFC 8392 §7.1), and deterministic encoding writes such a bignum as the integer, so it re-encoded as another claim (bignum 1 as `iss`). Larger bignums are still private claims | kept as a private claim | `DecodeOptions{KeepAsReceived: true}` keeps it verbatim in `ReceivedClaims` (safety defect, 034) |
+| `DecodeClaimsSet` rejects a claim whose key or value holds a NaN other than `f97e00` (a payload or the sign bit), with `ErrNonCanonicalNaN` in a `*ClaimError`; `Encode` returns the same for such a value set by a caller (Go's `math.NaN()` has a payload bit) (036 item 25) | decoded; `Encode` rejected every NaN | `DecodeOptions{KeepAsReceived: true}` keeps unmodeled claims verbatim in `ReceivedClaims` |
+| `Encode` accepts ±Inf and the quiet NaN `f97e00` in claim values, which it writes exactly (036 item 25) | error, though decoding accepted them | n/a (newly accepted) |
 
 New, recommended:
 
@@ -414,7 +418,8 @@ Existing identifiers keep their meaning (034). Changes to them:
 | Submodules are appraised in sorted name order | map order | n/a |
 | `cnf`, private and unknown claims are preserved (embedded `cwt.ClaimsSet`, `PrivateClaims`) | dropped | n/a |
 | Duplicate claim keys are rejected (via `cwt`, 031) | last one won | none |
-| A claim key that is a bignum with an integer value is rejected, in submodules too (same reason as in `cwt`: bignum 10 re-encoded as `nonce`), with `cwt.ErrAmbiguousClaimKey` and `ErrMalformedEAT` in a `*cwt.ClaimError` naming the key as received; inside a submodule it is the innermost `*cwt.ClaimError` | kept as an unknown claim | none yet (safety defect, 034; a byte-preserving opt-in is planned) |
+| A claim key that is a bignum with an integer value is rejected, in submodules too (same reason as in `cwt`: bignum 10 re-encoded as `nonce`), with `cwt.ErrAmbiguousClaimKey` and `ErrMalformedEAT` in a `*cwt.ClaimError` naming the key as received; inside a submodule it is the innermost `*cwt.ClaimError` | kept as an unknown claim | `WithKeepAsReceived()` keeps it verbatim in `ReceivedClaims` (safety defect, 034) |
+| A claim whose key or value holds a NaN other than `f97e00` is rejected with `cwt.ErrNonCanonicalNaN`, in submodules too; `Encode` returns the same for a typed field such as `Location` holding one (036 item 25) | decoded, then re-encoded as `f97e00` | `WithKeepAsReceived()` for unmodeled claims; a modeled claim such as `location` is always checked |
 | `eat_profile` may be an OID (`ProfileOID`) | bstr form rejected | n/a |
 | A negative `SecurityLevel` or `Debug` encodes as a CBOR negative integer | wrapped to a large uint | none |
 

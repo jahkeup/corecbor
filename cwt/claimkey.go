@@ -4,12 +4,13 @@
 package cwt
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"strconv"
 
 	"github.com/jahkeup/corecbor"
+	"github.com/jahkeup/corecbor/internal/asreceived"
+	"github.com/jahkeup/corecbor/internal/rawvalue"
 )
 
 // Registered claim keys (IANA "CBOR Web Token (CWT) Claims").
@@ -74,21 +75,7 @@ func (k ClaimKey) String() string {
 	}
 }
 
-// integerBignumKey reports whether k is a tag 2/3 bignum whose value
-// fits a CBOR integer. Deterministic encoding writes such a bignum as
-// the plain integer (RFC 8949 §3.4.3), so as a claim key it would
-// re-encode as a different claim (bignum 1 as iss). Claim keys are
-// integers or text (RFC 8392 §7.1), so these are rejected.
-func integerBignumKey(k corecbor.Value) bool {
-	if k.Kind != corecbor.KindTag ||
-		(k.TagID() != corecbor.TagUnsignedBignum && k.TagID() != corecbor.TagNegativeBignum) {
-		return false
-	}
-	in := k.TagInner()
-	return in.Kind == corecbor.KindBytes && len(bytes.TrimLeft(in.BytesVal(), "\x00")) <= 8
-}
-
-// receivedKey returns a key integerBignumKey matched as a Raw ClaimKey
+// receivedKey returns a key asreceived.IntegerBignum matched as a Raw ClaimKey
 // in its received form. Tags 2 and 3 have one-byte heads (0xc2, 0xc3)
 // and a byte string encodes as received, so this is the key's original
 // encoding (normalizing it would yield the integer it collides with).
@@ -100,7 +87,7 @@ func receivedKey(k corecbor.Value) ClaimKey {
 	return ClaimKey{Raw: string(enc)}
 }
 
-// ambiguousKeyErr is the error for a key integerBignumKey reports.
+// ambiguousKeyErr is the error for a key asreceived.IntegerBignum reports.
 func ambiguousKeyErr(k corecbor.Value) error {
 	return &ClaimError{Key: receivedKey(k), Err: fmt.Errorf("%w: %w: bignum with an integer value", ErrMalformedClaims, ErrAmbiguousClaimKey)}
 }
@@ -123,6 +110,18 @@ func claimKeyOf(v corecbor.Value) ClaimKey {
 		return ClaimKey{Raw: "\x00invalid"}
 	}
 	return ClaimKey{Raw: string(enc)}
+}
+
+// receivedValue returns k as written for ReceivedClaims: a Raw key is
+// spliced verbatim instead of decoded and re-encoded.
+func (k ClaimKey) receivedValue() (corecbor.Value, error) {
+	if k.Raw == "" {
+		return k.value()
+	}
+	if !asreceived.OneItem([]byte(k.Raw)) {
+		return corecbor.Value{}, fmt.Errorf("%w: Raw is not one CBOR data item", ErrMalformedClaims)
+	}
+	return rawvalue.Make([]byte(k.Raw)), nil
 }
 
 // value returns the CBOR form of k.

@@ -22,6 +22,7 @@ func fuzzSeeds(f *testing.F) {
 		"a1041bffffffffffffffff", "a104f97e00", "a103826161626262", "a108a102420102",
 		"a108a10343010203", "a4096a72656164207772697465182602182741011828190e10",
 		"d90259a1016161", "d83dd28440a0f640", "80", "ff", "",
+		"a3c24101f61864fa7fc00001016161", "a1c2580101f6", "bf1864f97e01ff", "a11864f9fe00",
 	} {
 		b, _ := hex.DecodeString(s)
 		f.Add(b)
@@ -33,7 +34,7 @@ func fuzzSeeds(f *testing.F) {
 func FuzzDecodeClaimsSet(f *testing.F) {
 	fuzzSeeds(f)
 	f.Fuzz(func(t *testing.T, data []byte) {
-		for _, opts := range []cwt.DecodeOptions{{}, {AllowDuplicateClaims: true, RejectUnknownCnf: true}} {
+		for _, opts := range []cwt.DecodeOptions{{}, {AllowDuplicateClaims: true, RejectUnknownCnf: true}, {KeepAsReceived: true}} { //nolint:staticcheck // the deprecated option is fuzzed too
 			cs, err := cwt.DecodeClaimsSetWith(data, opts)
 			if err != nil {
 				continue
@@ -46,12 +47,21 @@ func FuzzDecodeClaimsSet(f *testing.F) {
 			if err != nil {
 				continue // e.g. a cnf key the encoder reduces differently
 			}
-			cs2, err := cwt.DecodeClaimsSet(out)
+			cs2, err := cwt.DecodeClaimsSetWith(out, cwt.DecodeOptions{KeepAsReceived: opts.KeepAsReceived})
 			if err != nil {
 				t.Fatalf("re-decode of %x: %v", out, err)
 			}
 			if cs2.Issuer != cs.Issuer || !bytes.Equal(cs2.CWTID, cs.CWTID) || len(cs2.PrivateClaims) != len(cs.PrivateClaims) {
 				t.Fatalf("round trip changed claims: %+v vs %+v", cs, cs2)
+			}
+			// Kept claims come back byte for byte.
+			if len(cs2.ReceivedClaims) != len(cs.ReceivedClaims) {
+				t.Fatalf("round trip changed ReceivedClaims: %x vs %x", cs.ReceivedClaims, cs2.ReceivedClaims)
+			}
+			for k, v := range cs.ReceivedClaims {
+				if !bytes.Equal(cs2.ReceivedClaims[k], v) {
+					t.Fatalf("ReceivedClaims[%v] = %x after round trip, want %x", k, cs2.ReceivedClaims[k], v)
+				}
 			}
 		}
 		_, _ = cwt.DecodeUCCS(data)

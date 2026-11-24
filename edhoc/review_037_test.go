@@ -828,6 +828,66 @@ func TestE18_CriticalEADMessageNumber(t *testing.T) {
 	}
 }
 
+// E20: message size, EAD item count and certificate count are bounded,
+// by default and as configured.
+func TestE20_Limits(t *testing.T) {
+	// Message size: a message_1 over the default is refused unread.
+	_, res := pair(t, nil, []byte{2}, nil)
+	if _, err := res.ProcessMessage1(make([]byte, DefaultMaxMessageSize+1)); !errors.Is(err, ErrMessageFormat) || !strings.Contains(err.Error(), "MaxMessageSize") {
+		t.Errorf("oversized message_1: %v", err)
+	}
+	// EAD items: the default allows DefaultMaxEADItems.
+	many := func(n int) []EADItem {
+		items := make([]EADItem, n)
+		for i := range items {
+			items[i] = EADItem{Label: uint64(100 + i)}
+		}
+		return items
+	}
+	for _, c := range []struct {
+		n, limit int
+		ok       bool
+	}{{DefaultMaxEADItems, 0, true}, {DefaultMaxEADItems + 1, 0, false}, {3, 2, false}, {2, 2, true}} {
+		ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
+			ic.EAD1 = many(c.n)
+			rc.Limits.MaxEADItems = c.limit
+		})
+		m1, _ := ini.CreateMessage1()
+		_, err := res.ProcessMessage1(m1)
+		if c.ok != (err == nil) || (!c.ok && !strings.Contains(err.Error(), "MaxEADItems")) {
+			t.Errorf("%d EAD items, limit %d: %v", c.n, c.limit, err)
+		}
+	}
+	// Certificates in x5chain.
+	pki := newTestPKI(t)
+	iKey, chain := pki.leaf(t, "initiator")
+	long := append(chain, chain[1], chain[1]) // leaf + 3 intermediates
+	iCred, _ := X509Credential(long, false)
+	rKey, rChain := pki.leaf(t, "responder")
+	rCred, _ := X509Credential(rChain, false)
+	for _, c := range []struct {
+		limit int
+		ok    bool
+	}{{0, true}, {3, false}, {4, true}} {
+		ini, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iKey, ConnectionID: []byte{1}, Credential: iCred, Peers: X509Resolver(pki.policy())})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite0}, PrivateKey: rKey, ConnectionID: []byte{2}, Credential: rCred, Peers: X509Resolver(pki.policy()),
+			Limits: Limits{MaxCertificates: c.limit}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = handshake(t, ini, res)
+		if c.ok != (err == nil) || (!c.ok && !strings.Contains(err.Error(), "MaxCertificates")) {
+			t.Errorf("4 certificates, limit %d: %v", c.limit, err)
+		}
+	}
+	if _, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iKey, PeerPublic: iKey.Public(), Limits: Limits{MaxMessageSize: -1}}); !errors.Is(err, ErrStateViolation) {
+		t.Errorf("negative limit: %v", err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

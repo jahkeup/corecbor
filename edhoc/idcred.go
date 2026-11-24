@@ -399,11 +399,14 @@ func encodeEAD(items []EADItem) ([]byte, error) {
 }
 
 // decodeEAD reads the EAD items remaining in r, from message number
-// msg. accept decides whether a critical item is understood; without
+// msg, at most maxItems of them. accept decides whether a critical item is understood; without
 // it, any critical item fails.
-func decodeEAD(r *seqReader, msg int, accept func(int, EADItem) bool) ([]EADItem, error) {
+func decodeEAD(r *seqReader, msg, maxItems int, accept func(int, EADItem) bool) ([]EADItem, error) {
 	var items []EADItem
 	for r.more() {
+		if len(items) == maxItems {
+			return nil, fmt.Errorf("%w: EAD_%d has more than %d items (Limits.MaxEADItems)", ErrMessageFormat, msg, maxItems)
+		}
 		v, _, err := r.next()
 		if err != nil {
 			return nil, err

@@ -414,6 +414,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | Intermediate values (ephemeral keys, PRK_2e/3e2m/4e3m, TH_2–TH_4, H(message_1)) are zeroized as soon as nothing derives from them; a completed session keeps only PRK_out, PRK_exporter and, until message_4, K_4/IV_4 | kept until `Close` or failure | none (safety defect, 034; RFC 9528 §9) |
 | `Rand` is documented as INSECURE and for tests only (its bytes become the ephemeral private key); behavior unchanged | documented only as "deterministic tests" | n/a (documentation) |
 | New `AcceptCriticalEADInMessage(message, item)` gives the critical-EAD decision the message number (1–4); it takes precedence over `AcceptCriticalEAD`, which is unchanged. `ErrCriticalEAD` errors now name the EAD field | the callback could not tell EAD_1 from EAD_3 | n/a (additive) |
+| Received messages are bounded by the new `Limits` config field: `MaxMessageSize` (default 64 KiB), `MaxEADItems` per message (default 32), `MaxCertificates` in an x5chain (default 8); over-limit input fails with `ErrMessageFormat` naming the limit, before decoding where possible | unbounded apart from the decoder's nesting depth | `Limits` (raise any bound; zero selects the default) (safety defect, 034) |
 
 ## eat (032)
 

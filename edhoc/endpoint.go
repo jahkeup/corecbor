@@ -43,8 +43,13 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 	if err := checkMethodKey(cfg.Method.initiatorSigns(), cfg.PrivateKey != nil, cfg.DHKey != nil); err != nil {
 		return nil, err
 	}
+	lim, err := cfg.Limits.withDefaults()
+	if err != nil {
+		return nil, err
+	}
 	s := &session{
 		initiator: true,
+		lim:       lim,
 		method:    cfg.Method,
 		rand:      cfg.Rand,
 		accept:    acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
@@ -258,7 +263,12 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 			return nil, err
 		}
 	}
+	lim, err := cfg.Limits.withDefaults()
+	if err != nil {
+		return nil, err
+	}
 	s := &session{
+		lim:      lim,
 		method:   cfg.Method,
 		rand:     cfg.Rand,
 		accept:   acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),

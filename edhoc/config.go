@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdh"
+	"fmt"
 	"io"
 
 	"github.com/jahkeup/corecbor/cose"
@@ -127,6 +128,9 @@ type InitiatorConfig struct {
 	// received. Indefinite lengths and duplicate map keys are always
 	// rejected.
 	AcceptNonDeterministicEncoding bool
+	// Limits bound the size of received messages and the number of EAD
+	// items and certificates in them; zero fields select the defaults.
+	Limits Limits
 	// Rand is INSECURE and for tests only: deterministic runs such as
 	// the RFC 9529 traces. When set, it replaces crypto/rand for the
 	// ephemeral key, whose private bytes are read from it directly, and
@@ -173,6 +177,9 @@ type ResponderConfig struct {
 	AcceptCriticalEADInMessage func(message int, item EADItem) bool
 	// AcceptNonDeterministicEncoding is as for InitiatorConfig.
 	AcceptNonDeterministicEncoding bool
+	// Limits bound the size of received messages and the number of EAD
+	// items and certificates in them; zero fields select the defaults.
+	Limits Limits
 	// Rand is INSECURE and for tests only: deterministic runs such as
 	// the RFC 9529 traces. When set, it replaces crypto/rand for the
 	// ephemeral key, whose private bytes are read from it directly, and
@@ -180,6 +187,43 @@ type ResponderConfig struct {
 	// reader exposes every session key derived from that ephemeral key.
 	// Leave it nil in production. (Signatures always use crypto/rand.)
 	Rand io.Reader
+}
+
+// Limits bound the work a peer's messages can cause. A zero field
+// selects its default; a negative one is a configuration error.
+type Limits struct {
+	// MaxMessageSize is the largest message_1–message_4 or error message
+	// accepted, in bytes. Default DefaultMaxMessageSize.
+	MaxMessageSize int
+	// MaxEADItems is the most EAD items accepted in one message.
+	// Default DefaultMaxEADItems.
+	MaxEADItems int
+	// MaxCertificates is the most certificates accepted in a peer's
+	// x5chain. Default DefaultMaxCertificates.
+	MaxCertificates int
+}
+
+// Default Limits.
+const (
+	DefaultMaxMessageSize  = 64 << 10
+	DefaultMaxEADItems     = 32
+	DefaultMaxCertificates = 8
+)
+
+func (l Limits) withDefaults() (Limits, error) {
+	if l.MaxMessageSize < 0 || l.MaxEADItems < 0 || l.MaxCertificates < 0 {
+		return l, fmt.Errorf("%w: Limits must not be negative", ErrStateViolation)
+	}
+	if l.MaxMessageSize == 0 {
+		l.MaxMessageSize = DefaultMaxMessageSize
+	}
+	if l.MaxEADItems == 0 {
+		l.MaxEADItems = DefaultMaxEADItems
+	}
+	if l.MaxCertificates == 0 {
+		l.MaxCertificates = DefaultMaxCertificates
+	}
+	return l, nil
 }
 
 // Option configures an Initiator or Responder.

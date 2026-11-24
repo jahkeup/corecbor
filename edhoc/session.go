@@ -63,6 +63,7 @@ type session struct {
 	// lenient accepts received messages that are not deterministically
 	// encoded (AcceptNonDeterministicEncoding).
 	lenient  bool
+	lim      Limits
 	allocCID func(peer ConnectionID) (ConnectionID, error)
 	cidHold  *cidHold          // this session's hold on ownCID (default allocator)
 	ownEAD   map[int][]EADItem // by message number
@@ -199,6 +200,9 @@ func (s *session) processMessage1(msg1 []byte, supported []CipherSuite, acceptMe
 	if err := s.want(stateInit); err != nil {
 		return nil, err
 	}
+	if err := s.checkSize(1, msg1); err != nil {
+		return nil, s.fail(err)
+	}
 	r := s.reader(msg1)
 	method, err := r.nextInt("METHOD")
 	if err != nil {
@@ -224,7 +228,7 @@ func (s *session) processMessage1(msg1 []byte, supported []CipherSuite, acceptMe
 	if err != nil {
 		return nil, s.fail(err)
 	}
-	ead1, err := decodeEAD(r, 1, s.accept)
+	ead1, err := decodeEAD(r, 1, s.lim.MaxEADItems, s.accept)
 	if err != nil {
 		return nil, s.fail(err)
 	}
@@ -360,6 +364,9 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, err
 	}
 	su := s.suite
+	if err := s.checkSize(2, msg2); err != nil {
+		return nil, s.fail(err)
+	}
 	if err := receivedError(msg2, s.lenient); err != nil {
 		return nil, s.fail(err)
 	}
@@ -421,7 +428,7 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, s.fail(err)
 	}
 	ead2Raw := pr.rest
-	ead2, err := decodeEAD(pr, 2, s.accept)
+	ead2, err := decodeEAD(pr, 2, s.lim.MaxEADItems, s.accept)
 	if err != nil {
 		return nil, s.fail(err)
 	}
@@ -472,6 +479,14 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 	return s.createMessage3()
 }
 
+// checkSize applies Limits.MaxMessageSize to received message n.
+func (s *session) checkSize(n int, msg []byte) error {
+	if len(msg) > s.lim.MaxMessageSize {
+		return fmt.Errorf("%w: message_%d is %d bytes; Limits.MaxMessageSize is %d", ErrMessageFormat, n, len(msg), s.lim.MaxMessageSize)
+	}
+	return nil
+}
+
 // reader reads a received message or plaintext.
 func (s *session) reader(b []byte) *seqReader { return newMessageReader(b, s.lenient) }
 
@@ -493,7 +508,14 @@ func (s *session) idCred(v cbor.Value, raw []byte) (IDCred, error) {
 			return IDCred{}, err
 		}
 	}
-	return parseIDCred(v, raw)
+	id, err := parseIDCred(v, raw)
+	if err != nil {
+		return IDCred{}, err
+	}
+	if len(id.X5Chain) > s.lim.MaxCertificates {
+		return IDCred{}, fmt.Errorf("%w: x5chain has %d certificates; Limits.MaxCertificates is %d", ErrMessageFormat, len(id.X5Chain), s.lim.MaxCertificates)
+	}
+	return id, nil
 }
 
 // receivedError returns the peer's error message when msg is one in
@@ -649,6 +671,9 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 		return err
 	}
 	su := s.suite
+	if err := s.checkSize(3, msg3); err != nil {
+		return s.fail(err)
+	}
 	if err := receivedError(msg3, s.lenient); err != nil {
 		return s.fail(err)
 	}
@@ -678,7 +703,7 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 		return s.fail(err)
 	}
 	ead3Raw := pr.rest
-	ead3, err := decodeEAD(pr, 3, s.accept)
+	ead3, err := decodeEAD(pr, 3, s.lim.MaxEADItems, s.accept)
 	if err != nil {
 		return s.fail(err)
 	}
@@ -823,6 +848,9 @@ func (s *session) processMessage4(msg4 []byte) error {
 	if s.message4OK {
 		return fmt.Errorf("%w: message_4 already processed", ErrStateViolation)
 	}
+	if err := s.checkSize(4, msg4); err != nil {
+		return s.fail(err)
+	}
 	if err := receivedError(msg4, s.lenient); err != nil {
 		return s.fail(err)
 	}
@@ -839,7 +867,7 @@ func (s *session) processMessage4(msg4 []byte) error {
 		return s.fail(err)
 	}
 	drop(&s.k4, &s.iv4, &s.a4)
-	ead4, err := decodeEAD(s.reader(pt4), 4, s.accept)
+	ead4, err := decodeEAD(s.reader(pt4), 4, s.lim.MaxEADItems, s.accept)
 	if err != nil {
 		return s.fail(err)
 	}

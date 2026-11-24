@@ -11,6 +11,15 @@ import (
 	"github.com/jahkeup/corecbor/wire"
 )
 
+// RawMessage is an item's encoded CBOR bytes. Unmarshal stores an
+// item's bytes exactly as received; Marshal checks that the bytes are
+// one well-formed item and then, in ModePermissive, writes them
+// verbatim, so the encoder's options (WithInvalidUTF8,
+// CheckDuplicateMapKeys, CheckTagContent) don't apply to what they
+// contain: text that isn't valid UTF-8 stays as it is (proposal 037
+// C20). The deterministic modes decode and re-encode the bytes, which
+// applies those options and the mode's rules. A nil RawMessage
+// marshals as null.
 type RawMessage []byte
 
 func (r RawMessage) MarshalCBOR() ([]byte, error) {
@@ -29,6 +38,8 @@ func (r *RawMessage) UnmarshalCBOR(data []byte) error {
 	return nil
 }
 
+// RawTag is a tag number with its content's encoded bytes, marshaled
+// and unmarshaled as RawMessage is.
 type RawTag struct {
 	ID      uint64
 	Content RawMessage

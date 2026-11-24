@@ -6,6 +6,7 @@ package rfc8949
 import (
 	"errors"
 	"fmt"
+	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/internal/decerr"
@@ -21,6 +22,7 @@ var (
 
 type cursorFrame struct {
 	remaining int  // items left (-1 for indefinite)
+	start     int  // offset of the container's first item
 	isMap     bool // true if map (items are key-value pairs)
 }
 
@@ -274,7 +276,7 @@ func (c *Cursor) enter(major byte) (int, error) {
 	c.pos += h.N
 	// The nested container is one item of its parent.
 	c.consumeFromFrame()
-	c.push(cursorFrame{remaining: items, isMap: isMap})
+	c.push(cursorFrame{remaining: items, start: c.pos, isMap: isMap})
 	return count, nil
 }
 
@@ -313,10 +315,25 @@ func (c *Cursor) ExitMap() error {
 	return nil
 }
 
-// FindMapKey scans forward in the current map for a text key matching
-// key. On success, the cursor is positioned at the value for that key.
-// Returns ErrKeyNotFound if the key is not found before the map ends.
-// Only scans forward — cannot find keys already passed.
+// FindMapKey positions the cursor at the value that Decode would keep
+// for the text key key in the current map, scanning forward from the
+// cursor. Keys are resolved as Decode resolves them (proposal 037 C7):
+//
+//   - Under the default KeyIdentityValue, any encoding of the text
+//     matches: a non-shortest length, or an indefinite-length text
+//     string. Under KeyIdentityEncoded only the shortest definite-length
+//     encoding matches, since other encodings are other keys.
+//   - When the key repeats, the last occurrence wins, as in Decode, so
+//     FindMapKey scans to the end of the map. Under
+//     RejectDuplicateMapKeys a repeat anywhere in the map, including
+//     before the cursor, returns ErrDuplicateMapKey. Under
+//     KeepDuplicateMapKeys, which resolves nothing, it stops at the next
+//     occurrence; call it again for the one after.
+//
+// It returns ErrKeyNotFound, with the cursor at the end of the map, if
+// the key's value is not at or after the cursor. Only the key it looks
+// for is checked for repeats; Cursor.Decode of a whole map applies the
+// duplicate policy to every key.
 func (c *Cursor) FindMapKey(key string) error {
 	if c.depth() == 0 {
 		return ErrNotInContainer
@@ -325,41 +342,39 @@ func (c *Cursor) FindMapKey(key string) error {
 	if !top.isMap {
 		return fmt.Errorf("%w: not in a map", ErrNotInContainer)
 	}
+	o := &c.opts
+	reject := o.RejectDuplicateMapKeys && !o.KeepDuplicateMapKeys
+	seen := false // the key occurs before the cursor
+	if reject && top.start < c.pos {
+		var err error
+		if seen, err = c.keyBefore(top.start, key); err != nil {
+			return err
+		}
+	}
 
-	for {
-		if top.remaining == 0 {
-			return ErrKeyNotFound
-		}
-		if top.remaining < 0 && c.AtBreak() {
-			return ErrKeyNotFound
-		}
+	found := false
+	var valPos, valRemaining int
+	for top.remaining != 0 && (top.remaining > 0 || !c.AtBreak()) {
 		if c.pos >= len(c.src) {
 			return decodeErr(cbor.ErrTruncated, c.pos)
 		}
-
 		keyStart := c.pos
-		h := wire.ParseHead(c.src[c.pos:])
-		if h.N == 0 {
-			return decodeErr(cbor.ErrTruncated, c.pos)
+		if wire.ParseHead(c.src[keyStart:]).N == 0 {
+			return decodeErr(cbor.ErrTruncated, keyStart)
 		}
-
-		if h.Major == wire.MajorText && h.AI != wire.AIIndefinite {
-			start := c.pos + h.N
-			// Compare in uint64: a huge length would wrap as an int.
-			if h.Arg <= uint64(len(c.src)-start) {
-				end := start + int(h.Arg)
-				candidate := c.src[start:end]
-				if len(candidate) == len(key) && string(candidate) == key {
-					c.pos = end
-					if top.remaining > 0 {
-						top.remaining--
-					}
-					return nil
-				}
+		if match, keyEnd := c.matchTextKey(keyStart, key); match {
+			if reject && (found || seen) {
+				return decodeErr(cbor.ErrDuplicateMapKey, keyStart)
+			}
+			found = true
+			valPos, valRemaining = keyEnd, top.remaining
+			if valRemaining > 0 {
+				valRemaining--
+			}
+			if o.KeepDuplicateMapKeys {
+				break
 			}
 		}
-
-		c.pos = keyStart
 		if err := c.skipItem(); err != nil {
 			return err
 		}
@@ -370,6 +385,90 @@ func (c *Cursor) FindMapKey(key string) error {
 			top.remaining -= 2
 		}
 	}
+	if !found {
+		return ErrKeyNotFound
+	}
+	c.pos, top.remaining = valPos, valRemaining
+	return nil
+}
+
+// keyBefore reports whether key occurs among the current map's keys
+// from start up to the cursor. The cursor doesn't move.
+func (c *Cursor) keyBefore(start int, key string) (bool, error) {
+	end := c.pos
+	defer func() { c.pos = end }()
+	c.pos = start
+	for c.pos < end {
+		if match, _ := c.matchTextKey(c.pos, key); match {
+			return true, nil
+		}
+		for range 2 { // the key and its value
+			if c.pos >= end {
+				break
+			}
+			if err := c.skipItem(); err != nil {
+				return false, err
+			}
+		}
+	}
+	return false, nil
+}
+
+// matchTextKey reports whether the item at off is a text string that
+// decodes to key under the cursor's options, and returns the offset
+// just past it. Anything it can't match (another type, or a malformed
+// text item) is no match; skipping the item reports any error.
+func (c *Cursor) matchTextKey(off int, key string) (bool, int) {
+	src := c.src
+	h := wire.ParseHead(src[off:])
+	if h.N == 0 || h.Major != wire.MajorText || (h.AI >= 28 && h.AI <= 30) {
+		return false, 0
+	}
+	start := off + h.N
+	if h.AI != wire.AIIndefinite {
+		// Compare in uint64: a huge length would wrap as an int.
+		if h.Arg > uint64(len(src)-start) {
+			return false, 0
+		}
+		if c.opts.KeyIdentity == KeyIdentityEncoded && !h.IsShortest() {
+			return false, 0
+		}
+		end := start + int(h.Arg)
+		return c.textIs(src[start:end], key), end
+	}
+	if c.opts.KeyIdentity == KeyIdentityEncoded {
+		return false, 0
+	}
+	// Indefinite length: the text is the concatenation of the chunks.
+	var text []byte
+	for pos := start; pos < len(src); {
+		if src[pos] == wire.BreakCode {
+			return c.textIs(text, key), pos + 1
+		}
+		ch := wire.ParseHead(src[pos:])
+		if ch.N == 0 || ch.Major != wire.MajorText || ch.AI > wire.AI8Bytes || ch.Arg > uint64(len(src)-pos-ch.N) {
+			return false, 0
+		}
+		next := pos + ch.N + int(ch.Arg)
+		text = append(text, src[pos+ch.N:next]...)
+		if len(text) > len(key) && !c.opts.ReplaceInvalidUTF8 {
+			return false, 0
+		}
+		pos = next
+	}
+	return false, 0
+}
+
+// textIs reports whether text decodes to key: Decode keeps text bytes
+// as they are, unless ReplaceInvalidUTF8 rewrites invalid ones.
+func (c *Cursor) textIs(text []byte, key string) bool {
+	if string(text) == key {
+		return true
+	}
+	if c.opts.ReplaceInvalidUTF8 && !utf8.Valid(text) {
+		return replaceInvalidText(string(text), &c.opts) == key
+	}
+	return false
 }
 
 func (c *Cursor) skipRemaining(frame *cursorFrame) error {

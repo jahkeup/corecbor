@@ -90,7 +90,7 @@ var decodeFromSentinels = []error{
 	cbor.ErrDuplicateMapKey, cbor.ErrUnknownTag, cbor.ErrNonFiniteFloat,
 	cbor.ErrNullMapKey, cbor.ErrTruncated, cbor.ErrMaxNestingDepth,
 	cbor.ErrMaxArrayLength, cbor.ErrMaxByteStringLength, cbor.ErrReservedAI,
-	cbor.ErrUnexpectedBreak, cbor.ErrMemoryBudgetExceeded,
+	cbor.ErrUnexpectedBreak, cbor.ErrMemoryBudgetExceeded, cbor.ErrInvalidChunk,
 }
 
 func errClass(err error) error {
@@ -111,6 +111,7 @@ var structuralEarlyStop = map[error]bool{
 	cbor.ErrReservedAI:          true,
 	cbor.ErrUnexpectedBreak:     true,
 	cbor.ErrTruncated:           true,
+	cbor.ErrInvalidChunk:        true, // 037 C6: was reported as ErrTruncated
 }
 
 // FuzzDecodeFromMatchesDecode checks that DecodeFrom over a reader

@@ -36,10 +36,17 @@ func errClass(err error) string {
 	for _, s := range []error{
 		ErrTruncated, ErrUnexpectedBreak, ErrReservedAI, ErrNonShortest,
 		ErrMaxNestingDepth, ErrMaxArrayLength, ErrMaxByteStringLength,
+		ErrInvalidChunk,
 	} {
 		if errors.Is(err, s) {
 			return s.Error()
 		}
+	}
+	// Offsets differ by caller (037 C19: DecodeSequence reports them in
+	// the whole input), so compare a DecodeError by its sentinel.
+	var de *DecodeError
+	if errors.As(err, &de) {
+		return "other: " + de.Err.Error()
 	}
 	return "other: " + err.Error()
 }

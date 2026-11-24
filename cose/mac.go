@@ -21,7 +21,9 @@ type macOpts struct {
 	externalAAD []byte
 	policy      headerPolicy
 	shortKey    bool // InsecureAllowShortMACKeys
-	legacy      legacyEncoding
+
+	allowProtRecipient bool // AllowMACProtectedRecipientHeaders
+	legacy             legacyEncoding
 }
 
 func WithMACExternalAAD(aad []byte) MACOption {
@@ -58,6 +60,12 @@ func WithStrictMACKeyLength() MACOption {
 // ErrInvalidKey.
 func InsecureAllowShortMACKeys() MACOption {
 	return func(o *macOpts) { o.shortKey = true }
+}
+
+// AllowMACProtectedRecipientHeaders is AllowProtectedRecipientHeaders
+// for VerifyMACMulti.
+func AllowMACProtectedRecipientHeaders() MACOption {
+	return func(o *macOpts) { o.allowProtRecipient = true }
 }
 
 // WithLegacyMACPBES2Labels reads and writes PBES2 COSE_Mac recipients

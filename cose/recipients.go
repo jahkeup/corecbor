@@ -3,7 +3,10 @@
 
 package cose
 
-import "fmt"
+import (
+	"fmt"
+	"maps"
+)
 
 // recipientAlg is the algorithm a deriver's COSE_Recipient carries:
 // its own Algorithm(), except PBES2 under WithLegacyPBES2Labels (-11).
@@ -12,6 +15,19 @@ func recipientAlg(r KeyDeriver, legacy legacyEncoding) Algorithm {
 		return AlgPBES2_HS256_A128KW
 	}
 	return r.Algorithm()
+}
+
+// emptyProtectedRecipient reports whether a recipient with alg must have
+// an empty protected bucket, with alg unprotected: direct encryption
+// (RFC 9052 §8.5.1) and AE key wrap, AES-KW and PBES2 (§8.5.2, §5.4).
+// The v0.2 PBES2 identifier (-11) keeps v0.2's layout.
+func emptyProtectedRecipient(alg Algorithm) bool {
+	switch alg {
+	case AlgDirect, AlgA128KW, AlgA192KW, AlgA256KW, AlgPrivatePBES2_HS256_A128KW:
+		return true
+	default:
+		return false
+	}
 }
 
 // newRecipientLayer returns a recipient's protected bucket holding alg,
@@ -92,6 +108,24 @@ func directEncryption(recipients []KeyDeriver, contentAlg Algorithm, keyLen int)
 func sealRecipients(cek []byte, contentAlg Algorithm, recipients []KeyDeriver, legacy legacyEncoding) ([]Recipient, error) {
 	out := make([]Recipient, len(recipients))
 	for i, r := range recipients {
+		alg := recipientAlg(r, legacy)
+		if emptyProtectedRecipient(alg) {
+			ciphertext, headers, err := r.WrapKey(cek, KeyWrapOpts{
+				CEKAlgorithm: contentAlg, CEKLength: len(cek), legacy: legacy,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("recipient %d: %w", i, err)
+			}
+			params := maps.Clone(headers.params)
+			if params == nil {
+				params = make(map[any]any, 1)
+			}
+			if _, ok := params[headerLabelAlgorithm]; !ok {
+				params[headerLabelAlgorithm] = int64(alg)
+			}
+			out[i] = Recipient{Unprotected: Headers{params: params}, Ciphertext: ciphertext}
+			continue
+		}
 		var prot Headers
 		var protBytes []byte
 		var err error
@@ -151,6 +185,9 @@ func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLe
 			}
 			return nil, fmt.Errorf("%w: recipient alg %s, key implies %s", ErrAlgorithmMismatch, a, want)
 		}
+	}
+	if emptyProtectedRecipient(recipientAlg(deriver, o.legacy)) && !r.Protected.IsEmpty() && !o.allowProtRecipient {
+		return nil, fmt.Errorf("%w: a %s recipient's protected bucket must be empty (RFC 9052 §5.4, §8.5; see AllowProtectedRecipientHeaders, AllowMACProtectedRecipientHeaders)", ErrMalformed, deriver.Algorithm())
 	}
 	if deriver.Algorithm() == AlgDirect && len(r.Ciphertext) != 0 {
 		return nil, fmt.Errorf("%w: direct recipient ciphertext must be empty (RFC 9052 §8.5.1)", ErrDecryption)

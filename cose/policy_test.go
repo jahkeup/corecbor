@@ -334,8 +334,13 @@ func TestDecryptMultiPolicy(t *testing.T) {
 		if _, err := DecryptMulti(msg, recipient, 0); !errors.Is(err, ErrCriticalHeader) {
 			t.Fatalf("err = %v, want ErrCriticalHeader", err)
 		}
-		if _, err := DecryptMulti(msg, recipient, 0, WithEncryptKnownCriticalHeaders(99)); err != nil {
-			t.Fatalf("declared: %v", err)
+		// An AES-KW recipient's protected bucket must be empty (037 S2),
+		// so a declared crit there still needs the opt-in.
+		if _, err := DecryptMulti(msg, recipient, 0, WithEncryptKnownCriticalHeaders(99)); !errors.Is(err, ErrMalformed) {
+			t.Fatalf("declared: err = %v, want ErrMalformed", err)
+		}
+		if _, err := DecryptMulti(msg, recipient, 0, WithEncryptKnownCriticalHeaders(99), AllowProtectedRecipientHeaders()); err != nil {
+			t.Fatalf("declared, allowed: %v", err)
 		}
 	})
 }

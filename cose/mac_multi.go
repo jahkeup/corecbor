@@ -152,9 +152,9 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...
 	}
 
 	cekLen := hmacKeyLen(alg)
-	cek, err := openRecipient(&r, recipient, alg, cekLen, &encryptOpts{policy: o.policy, legacy: o.legacy})
+	cek, err := openRecipient(&r, recipient, alg, cekLen, &encryptOpts{policy: o.policy, legacy: o.legacy, allowProtRecipient: o.allowProtRecipient})
 	if err != nil {
-		if errors.Is(err, ErrAlgorithmMismatch) || errors.Is(err, ErrCriticalHeader) {
+		if errors.Is(err, ErrAlgorithmMismatch) || errors.Is(err, ErrCriticalHeader) || errors.Is(err, ErrMalformed) {
 			return err
 		}
 		if errors.Is(err, ErrUnsupportedAlgorithm) {

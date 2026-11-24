@@ -22,6 +22,17 @@ type encryptOpts struct {
 	nonce             []byte // WithNonce
 	baseIV, partialIV []byte // WithPartialIV
 	hpkeInfo          []byte // WithHPKEInfo
+
+	allowProtRecipient bool // AllowProtectedRecipientHeaders
+}
+
+// AllowProtectedRecipientHeaders lets DecryptMulti open a direct or AE
+// key-wrap recipient (AES-KW, PBES2) whose protected bucket isn't empty,
+// as corecbor v0.2 wrote them (alg in the protected bucket). RFC 9052
+// §5.4 and §8.5 require that bucket to be empty; AE key wrap doesn't
+// authenticate it, so anything in it is unprotected in fact.
+func AllowProtectedRecipientHeaders() EncryptOption {
+	return func(o *encryptOpts) { o.allowProtRecipient = true }
 }
 
 // WithLegacyPBES2Labels uses the v0.2 PBES2 identifiers, alg -11 and

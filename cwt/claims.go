@@ -55,6 +55,37 @@ type EncryptedKey struct {
 	Encrypt  *cose.Encrypt
 }
 
+// members reports which understood proof-of-possession members c
+// carries: a COSE_Key (1), an Encrypted_COSE_Key (2), a kid (3). An
+// empty Encrypted or KeyID carries nothing.
+func (c *Confirmation) members() (key, enc, kid bool) {
+	return c.Key != nil, c.EncryptedKey != nil || len(c.Encrypted) > 0, len(c.KeyID) > 0
+}
+
+// checkMethod is Validator.RequireConfirmation: c must carry exactly
+// one understood proof-of-possession method (RFC 8747 §3.1). A cnf that
+// is empty or holds only members this package doesn't understand
+// (which decoding ignores) carries none.
+func (c *Confirmation) checkMethod() error {
+	if c == nil {
+		return &ClaimError{Key: IntKey(ClaimCnf), Err: ErrMissingConfirmation}
+	}
+	n := 0
+	key, enc, kid := c.members()
+	for _, set := range []bool{key, enc, kid} {
+		if set {
+			n++
+		}
+	}
+	switch {
+	case n == 0:
+		return &ClaimError{Key: IntKey(ClaimCnf), Err: fmt.Errorf("%w: cnf carries no understood proof-of-possession method", ErrMissingConfirmation)}
+	case n > 1:
+		return claimErr(IntKey(ClaimCnf), "more than one confirmation method", nil)
+	}
+	return nil
+}
+
 // Match reports whether k is the key bound by c: the same key ID, or
 // for a key by value, the same RFC 9679 thumbprint (public parameters
 // only).

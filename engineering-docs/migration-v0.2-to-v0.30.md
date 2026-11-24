@@ -324,6 +324,7 @@ Existing identifiers keep their meaning (034). Changes to them (031):
 | `DecodeClaimsSet` rejects a claim whose key or value holds a NaN other than `f97e00` (a payload or the sign bit), with `ErrNonCanonicalNaN` in a `*ClaimError`; `Encode` returns the same for such a value set by a caller (Go's `math.NaN()` has a payload bit) (036 item 25) | decoded; `Encode` rejected every NaN | `DecodeOptions{KeepAsReceived: true}` keeps unmodeled claims verbatim in `ReceivedClaims` |
 | `Encode` accepts ±Inf and the quiet NaN `f97e00` in claim values, which it writes exactly (036 item 25) | error, though decoding accepted them | n/a (newly accepted) |
 | Every `Validator` (zero value included) rejects a token carrying `aud` unless `Audience` or the new `Audiences` holds one of its audiences (RFC 7519 §4.1.3), with `ErrAudienceMismatch` in a `*ClaimError` for `aud`; `Audiences` accepts several audiences (037 W1) | with `Audience` unset, any `aud` was accepted | none (safety defect, 034); `Validator.IgnoreAudience` for applications that don't use `aud` |
+| `RequireConfirmation` needs a `cnf` with an understood proof-of-possession method (COSE_Key, Encrypted_COSE_Key or a non-empty kid; RFC 8747 §3.1); `{8:{}}` or a `cnf` of only unknown members fails with `ErrMissingConfirmation` in a `*ClaimError` for `cnf` (037 W2) | any `cnf` map passed, even empty | none (safety defect, 034) |
 
 New, recommended:
 

@@ -23,9 +23,14 @@ type Validator struct {
 	Audience string
 	// Leeway is the clock-skew tolerance applied to exp, nbf and iat. It
 	// must not be negative; Validate returns ErrInvalidValidator if it is.
-	Leeway              time.Duration
-	Now                 func() time.Time
-	RequireExpiration   bool
+	Leeway            time.Duration
+	Now               func() time.Time
+	RequireExpiration bool
+	// RequireConfirmation requires a cnf claim carrying exactly one
+	// understood proof-of-possession method (RFC 8747 §3.1): a COSE_Key,
+	// an Encrypted_COSE_Key or a non-empty kid. A cnf that is empty or
+	// holds only unknown members fails with ErrMissingConfirmation in a
+	// *ClaimError for cnf.
 	RequireConfirmation bool
 
 	// Issuers, when non-empty, lists the accepted iss values.
@@ -93,8 +98,10 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 		return ErrMissingExpiration
 	}
 
-	if v.RequireConfirmation && claims.Confirmation == nil {
-		return ErrMissingConfirmation
+	if v.RequireConfirmation {
+		if err := claims.Confirmation.checkMethod(); err != nil {
+			return err
+		}
 	}
 
 	if (v.RequireIssuedAt || v.MaxAge > 0) && claims.IssuedAt.IsZero() {

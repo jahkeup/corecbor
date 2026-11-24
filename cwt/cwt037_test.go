@@ -76,3 +76,44 @@ func TestValidator_Audience037(t *testing.T) {
 		t.Fatalf("NewValidator, expected aud: %v", err)
 	}
 }
+
+// W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
+// package doesn't understand, carries no proof-of-possession key.
+func TestValidator_RequireConfirmation037(t *testing.T) {
+	v := cwt.Validator{RequireConfirmation: true}
+	for name, in := range map[string]string{
+		"empty cnf":          "a108a0",     // {8: {}}
+		"unknown member":     "a108a104a0", // {8: {4: {}}}
+		"unknown int member": "a108a10a01", // {8: {10: 1}}
+	} {
+		t.Run(name, func(t *testing.T) {
+			cs, err := cwt.DecodeClaimsSet(h(t, in))
+			if err != nil {
+				t.Fatalf("decode: %v (unknown members are ignored, RFC 8747 §3.1)", err)
+			}
+			err = v.Validate(cs)
+			if !errors.Is(err, cwt.ErrMissingConfirmation) {
+				t.Fatalf("Validate = %v, want ErrMissingConfirmation", err)
+			}
+			if k, ok := claimKeyOf(err); !ok || k != cwt.IntKey(cwt.ClaimCnf) {
+				t.Fatalf("error %v does not name cnf", err)
+			}
+		})
+	}
+	for name, c := range map[string]*cwt.Confirmation{
+		"empty Encrypted": {Encrypted: []byte{}},
+		"empty KeyID":     {KeyID: []byte{}},
+	} {
+		if err := v.Validate(&cwt.ClaimsSet{Confirmation: c}); !errors.Is(err, cwt.ErrMissingConfirmation) {
+			t.Errorf("%s: Validate = %v, want ErrMissingConfirmation", name, err)
+		}
+	}
+	for name, c := range map[string]*cwt.Confirmation{
+		"kid":       {KeyID: []byte{1}},
+		"encrypted": {Encrypted: []byte{1}},
+	} {
+		if err := v.Validate(&cwt.ClaimsSet{Confirmation: c}); err != nil {
+			t.Errorf("%s: Validate = %v", name, err)
+		}
+	}
+}

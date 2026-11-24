@@ -165,6 +165,74 @@ func TestVerifyToken037(t *testing.T) {
 	}
 }
 
+// eat.VerifyMACToken: the COSE_Mac0 counterpart of VerifyToken.
+func TestVerifyMACToken037(t *testing.T) {
+	ctx := context.Background()
+	key := bytes.Repeat([]byte{0x5a}, 32)
+	mac := func(payload []byte, alg cose.Algorithm, prot cose.Headers) []byte {
+		t.Helper()
+		msg, err := cose.ComputeMAC0(payload, key, alg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, l := range []int64{16, 3} {
+			if v := prot.Get(l); v != nil {
+				if err := msg.Protected.SetChecked(l, v); err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+		b, err := cose.MarshalMac0(msg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	opts := func() eat.VerifyOptions { return verifyOpts(t) }
+	good := mac(encodeClaimsT(t, fullClaims()), cose.AlgHMAC256, cose.Headers{})
+	for name, data := range map[string][]byte{"tag17": good, "tag61(tag17)": append([]byte{0xd8, 0x3d}, good...)} {
+		if tok, err := eat.VerifyMACToken(ctx, data, key, opts()); err != nil || tok.Claims.Issuer != "attester" {
+			t.Errorf("%s: %+v, %v", name, tok, err)
+		}
+	}
+	if _, err := eat.VerifyMACToken(ctx, append([]byte{0xd8, 0x3d}, good[1:]...), key, opts()); !errors.Is(err, eat.ErrMalformedEAT) {
+		t.Errorf("61(untagged): %v", err)
+	}
+	if _, err := eat.VerifyMACToken(ctx, mac(encodeClaimsT(t, fullClaims()), cose.AlgHMAC256_64, cose.Headers{}), key, opts()); !errors.Is(err, cose.ErrAlgorithmMismatch) {
+		t.Errorf("HMAC 256/64 by default: %v, want cose.ErrAlgorithmMismatch", err)
+	}
+	o := opts()
+	o.AllowedAlgorithms = []cose.Algorithm{cose.AlgHMAC256_64}
+	if _, err := eat.VerifyMACToken(ctx, mac(encodeClaimsT(t, fullClaims()), cose.AlgHMAC256_64, cose.Headers{}), key, o); err != nil {
+		t.Errorf("HMAC 256/64 listed: %v", err)
+	}
+	if _, err := eat.VerifyMACToken(ctx, mac(encodeClaimsT(t, fullClaims()), cose.AlgHMAC256, typHeaders(t, "application/json")), key, opts()); !errors.Is(err, cwt.ErrUnexpectedType) {
+		t.Errorf("typ json: %v", err)
+	}
+	if _, err := eat.VerifyMACToken(ctx, good, key, eat.VerifyOptions{}); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("real clock: %v, want cwt.ErrTokenExpired", err)
+	}
+	short := fullClaims()
+	short.Nonce = [][]byte{{1}}
+	if _, err := eat.VerifyMACToken(ctx, mac(encodeClaimsT(t, short), cose.AlgHMAC256, cose.Headers{}), key, opts()); !errors.Is(err, eat.ErrInvalidNonce) {
+		t.Errorf("1-byte nonce: %v", err)
+	}
+	var big cose.Headers
+	if err := big.SetChecked(int64(-70000), bytes.Repeat([]byte{1}, 2<<20)); err != nil {
+		t.Fatal(err)
+	}
+	m, _ := cose.ComputeMAC0(encodeClaimsT(t, fullClaims()), key, cose.AlgHMAC256)
+	m.Unprotected = big
+	hb, _ := cose.MarshalMac0(m)
+	if _, err := eat.VerifyMACToken(ctx, hb, key, opts()); !errors.Is(err, eat.ErrMalformedEAT) {
+		t.Errorf("2 MiB header: %v", err)
+	}
+	nested := mac(good, cose.AlgHMAC256, cose.Headers{})
+	if _, err := eat.VerifyMACToken(ctx, nested, key, opts()); !errors.Is(err, cwt.ErrUnexpectedType) {
+		t.Errorf("nested: %v, want cwt.ErrUnexpectedType", err)
+	}
+}
+
 // W8: the v0.2.2 entry point accepts tag 61 (RFC 9711 §3) and bounds
 // the envelope.
 func TestVerify_Legacy037(t *testing.T) {

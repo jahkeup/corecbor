@@ -4,6 +4,8 @@
 package psa_test
 
 import (
+	"bytes"
+	"context"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -31,6 +33,50 @@ func examplePSA(t *testing.T) *psa.Claims {
 		t.Fatal(err)
 	}
 	return p
+}
+
+// RFC 9783 §5.1.1: with a symmetric key, a PSA token is a COSE_Mac0.
+// eat.VerifyMACToken verifies, bounds and validates it; psa.Validate
+// then checks the profile.
+func TestPSAOverMac0037(t *testing.T) {
+	ctx := context.Background()
+	p := examplePSA(t)
+	payload, err := p.ToEAT().Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := bytes.Repeat([]byte{0x5a}, 32)
+	msg, err := cose.ComputeMAC0(payload, key, cose.AlgHMAC256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := cose.MarshalMac0(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// PSA has no exp; freshness is the nonce, checked by the appraiser.
+	v := cwt.NewValidator()
+	v.RequireExpiration = false
+	tok, err := eat.VerifyMACToken(ctx, data, key, eat.VerifyOptions{Validator: v})
+	if err != nil {
+		t.Fatalf("VerifyMACToken: %v", err)
+	}
+	got, err := psa.FromEAT(tok.Claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := got.Validate(); err != nil {
+		t.Errorf("psa.Validate over COSE_Mac0: %v", err)
+	}
+	a := eat.NewAppraiser()
+	a.AllowNonceInsteadOfExpiration = true
+	a.RequireNonce = tok.Claims.Nonce[0]
+	if err := a.Appraise(tok.Claims); err != nil {
+		t.Errorf("Appraise: %v", err)
+	}
+	if _, err := eat.VerifyMACToken(ctx, data, bytes.Repeat([]byte{1}, 32), eat.VerifyOptions{Validator: v}); !errors.Is(err, cose.ErrMACVerification) {
+		t.Errorf("wrong key: %v, want cose.ErrMACVerification", err)
+	}
 }
 
 // W26: RFC 9783 §4 and §5.2 — the PSA profile's mandatory claims and

@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"mime"
+	"slices"
 	"strings"
 
 	"github.com/jahkeup/corecbor/cose"
@@ -118,7 +119,76 @@ func verifyToken(ctx context.Context, data []byte, opts VerifyOptions, depth int
 		tok.Nested, tok.Claims = in, in.Claims
 		return tok, nil
 	}
-	claims, err := DecodeClaims(msg.Payload, opts.Options...)
+	claims, err := decodeAndValidate(msg.Payload, opts)
+	if err != nil {
+		return nil, err
+	}
+	tok.Claims = claims
+	return tok, nil
+}
+
+// defaultMACAlgs are the MAC algorithms VerifyMACToken accepts unless
+// VerifyOptions.AllowedAlgorithms lists others: the full-length HMACs.
+var defaultMACAlgs = []cose.Algorithm{cose.AlgHMAC256, cose.AlgHMAC384, cose.AlgHMAC512}
+
+// VerifyMACToken is the COSE_Mac0 counterpart of VerifyToken, for EATs
+// protected with a symmetric key (RFC 9783 §5.1.1 for PSA). It unwraps
+// an optional tag 61 (a COSE tag must follow), decodes the envelope
+// with cose.RecommendedDecodeLimits, checks typ as VerifyToken does,
+// verifies the MAC with key under the protected alg, which must be in
+// opts.AllowedAlgorithms (by default the full-length HMACs; list
+// AlgHMAC256_64 explicitly to accept the truncated one), then decodes
+// the claims with opts.Options, refuses a symmetric cnf key by value
+// and validates them (opts.Validator, then Claims.Validate). opts.Keys
+// and opts.MaxNesting are unused: nested tokens inside a MAC are
+// rejected with cwt.ErrUnexpectedType.
+func VerifyMACToken(ctx context.Context, data, key []byte, opts VerifyOptions) (*Token, error) {
+	inner, tagged, err := unwrapCWT(data)
+	if err != nil {
+		return nil, err
+	}
+	if opts.RequireTag && !tagged {
+		return nil, malformed("CWT tag 61 required")
+	}
+	msg, err := cose.UnmarshalMac0With(inner, tokenDecodeLimits)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
+	}
+	nested, err := checkTokenTypes(&msg.Protected, &msg.Unprotected)
+	if err != nil {
+		return nil, err
+	}
+	allowed := opts.AllowedAlgorithms
+	if len(allowed) == 0 {
+		allowed = defaultMACAlgs
+	}
+	alg := msg.Protected.Algorithm()
+	if alg == 0 {
+		return nil, malformed("COSE_Mac0 needs a protected alg")
+	}
+	if !slices.Contains(allowed, alg) {
+		return nil, fmt.Errorf("%w: alg %d not allowed", cose.ErrAlgorithmMismatch, alg)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if err := cose.VerifyMAC0(msg, key, alg, cose.WithMACAlgorithms(alg)); err != nil {
+		return nil, err
+	}
+	if nested || startsWithTag(msg.Payload) {
+		return nil, fmt.Errorf("%w: nested token inside a COSE_Mac0 is not supported", cwt.ErrUnexpectedType)
+	}
+	claims, err := decodeAndValidate(msg.Payload, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &Token{Protected: &msg.Protected, Unprotected: &msg.Unprotected, Claims: claims, Tagged: tagged}, nil
+}
+
+// decodeAndValidate decodes the claims of a signed or MACed EAT and
+// validates them as VerifyToken documents.
+func decodeAndValidate(payload []byte, opts VerifyOptions) (*Claims, error) {
+	claims, err := DecodeClaims(payload, opts.Options...)
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +205,7 @@ func verifyToken(ctx context.Context, data []byte, opts VerifyOptions, depth int
 	if err := claims.Validate(); err != nil {
 		return nil, err
 	}
-	tok.Claims = claims
-	return tok, nil
+	return claims, nil
 }
 
 func maxNesting(n int) int {

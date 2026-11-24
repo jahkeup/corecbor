@@ -509,7 +509,10 @@ New, additive:
   `application/eat+cwt` (with or without parameters), 263,
   `application/cwt` or 61; nested tokens up to `MaxNesting`; claims
   validated with `cwt.NewValidator()` (or `VerifyOptions.Validator`)
-  and `Claims.Validate`. Returns a `Token`.
+  and `Claims.Validate`. Returns a `Token`. `VerifyMACToken(ctx, data,
+  key, opts)` is its COSE_Mac0 counterpart (PSA with a symmetric key,
+  RFC 9783 §5.1.1): same bounds, `typ` and validation; full-length
+  HMACs unless `AllowedAlgorithms` lists more.
 - RFC 9782 media types and content-formats (`MediaTypeEAT*`,
   `ContentFormatEAT*`).
 - `eat/psa`: RFC 9783 PSA claims (`FromEAT`, `ToEAT`, lifecycle

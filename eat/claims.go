@@ -538,6 +538,11 @@ func decodeClaimsValue(v corecbor.Value, raw []byte, cfg config, depth int) (*Cl
 		if ambiguous && spans == nil {
 			return nil, ambiguousKeyErr(entry.Key)
 		}
+		// Never keep an ambiguous key that stands for a claim this
+		// package models (cwt does the same for the CWT claims).
+		if n, ok := asreceived.BignumInt64(entry.Key); ok && cfg.num.models(n) {
+			return nil, ambiguousKeyErr(entry.Key)
+		}
 		k, ok := intKey(entry.Key)
 		if !ambiguous && ok && cfg.num.models(k) {
 			// Modeled: parsed and checked, never kept as received.

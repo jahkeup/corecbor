@@ -62,8 +62,8 @@ func TestNonCanonicalNaNRejected(t *testing.T) {
 // byte in ReceivedClaims and Encode writes them back unchanged, in
 // deterministic key order; everything else decodes as usual.
 func TestKeepAsReceived(t *testing.T) {
-	// {bignum 1: null, 100: NaN payload, iss: "a"}, out of order.
-	in := hexb(t, "a3"+"c24101f6"+"1864fa7fc00001"+"016161")
+	// {bignum 100: null, 100: NaN payload, iss: "a"}, out of order.
+	in := hexb(t, "a3"+"c24164f6"+"1864fa7fc00001"+"016161")
 	cs, err := cwt.DecodeClaimsSetWith(in, keep)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestKeepAsReceived(t *testing.T) {
 		t.Errorf("Issuer = %q", cs.Issuer)
 	}
 	want := map[cwt.ClaimKey]string{
-		{Raw: "\xc2\x41\x01"}: "f6",
+		{Raw: "\xc2\x41\x64"}: "f6",
 		cwt.IntKey(100):       "fa7fc00001",
 	}
 	if len(cs.ReceivedClaims) != len(want) || len(cs.PrivateClaims) != 0 {
@@ -88,7 +88,7 @@ func TestKeepAsReceived(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wantOut := hexb(t, "a3"+"016161"+"1864fa7fc00001"+"c24101f6"); !bytes.Equal(out, wantOut) {
+	if wantOut := hexb(t, "a3"+"016161"+"1864fa7fc00001"+"c24164f6"); !bytes.Equal(out, wantOut) {
 		t.Fatalf("Encode = %x, want %x", out, wantOut)
 	}
 	// Still protected without the option.
@@ -104,8 +104,8 @@ func TestKeepAsReceived(t *testing.T) {
 
 func TestKeepAsReceivedExactBytes(t *testing.T) {
 	for _, tc := range []struct{ name, in, key, val string }{
-		{"non-shortest bignum key", "a1c2580101f6", "c2580101", "f6"},
-		{"leading zeros", "a1c243000001f6", "c243000001", "f6"},
+		{"non-shortest bignum key", "a1c2580164f6", "c2580164", "f6"},
+		{"leading zeros", "a1c243000064f6", "c243000064", "f6"},
 		{"half-float payload", "a11864f97e01", "", "f97e01"},
 		{"self-describe prefix", "d9d9f7a11864f9fe00", "", "f9fe00"},
 		{"indefinite map", "bf1864f97e01ff", "", "f97e01"},
@@ -185,5 +185,16 @@ func TestEncodeRejectsNaNPayload(t *testing.T) {
 	}}
 	if _, err := cs.Encode(); !errors.Is(err, cwt.ErrNonCanonicalNaN) {
 		t.Fatalf("Encode err = %v, want ErrNonCanonicalNaN", err)
+	}
+}
+
+// TestKeepAsReceivedModeledBignumKey: an ambiguous key standing for a
+// modeled claim (bignum 5 = nbf) is rejected even with the option; a
+// peer reading it as nbf would enforce what the Validator ignores.
+func TestKeepAsReceivedModeledBignumKey(t *testing.T) {
+	for _, h := range []string{"a1c241051a00010000", "a1c2420001" + "6161"} {
+		if _, err := cwt.DecodeClaimsSetWith(hexb(t, h), keep); !errors.Is(err, cwt.ErrAmbiguousClaimKey) {
+			t.Errorf("%s: err = %v, want ErrAmbiguousClaimKey", h, err)
+		}
 	}
 }

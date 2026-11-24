@@ -113,3 +113,17 @@ func TestArraySpans(t *testing.T) {
 		t.Error("ArraySpans(map) succeeded")
 	}
 }
+
+func TestBignumInt64(t *testing.T) {
+	for h, want := range map[string]int64{"c240": 0, "c24105": 5, "c243000105": 261, "c3410a": -11, "c340": -1} {
+		_, v := decode(t, h)
+		if n, ok := BignumInt64(v); !ok || n != want {
+			t.Errorf("BignumInt64(%s) = %d, %v; want %d", h, n, ok, want)
+		}
+	}
+	for _, h := range []string{"c248ffffffffffffffff", "c14105", "05"} {
+		if _, v := decode(t, h); func() bool { _, ok := BignumInt64(v); return ok }() {
+			t.Errorf("BignumInt64(%s) ok", h)
+		}
+	}
+}

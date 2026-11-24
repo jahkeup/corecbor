@@ -145,3 +145,22 @@ func ArraySpans(src []byte) ([][]byte, error) {
 }
 
 var errNotArray = errors.New("asreceived: not an array")
+
+// BignumInt64 returns the value of a bignum IntegerBignum matched, when
+// it fits an int64.
+func BignumInt64(k cbor.Value) (int64, bool) {
+	if !IntegerBignum(k) {
+		return 0, false
+	}
+	var u uint64
+	for _, b := range bytes.TrimLeft(k.TagInner().Bstr, "\x00") {
+		u = u<<8 | uint64(b)
+	}
+	if u > math.MaxInt64 {
+		return 0, false
+	}
+	if k.Num == cbor.TagNegativeBignum {
+		return -1 - int64(u), true
+	}
+	return int64(u), true
+}

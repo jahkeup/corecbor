@@ -25,8 +25,9 @@ func newConfig(opts []Option) config {
 // that is a bignum with an integer value (cwt.ErrAmbiguousClaimKey),
 // and an unmodeled claim whose key or value holds a NaN other than
 // f97e00 (cwt.ErrNonCanonicalNaN). This applies in inline submodules
-// too. Claims this package models are still parsed and checked, so a
-// NaN payload in one is an error. Encode writes kept claims verbatim,
+// too. Claims this package and cwt model are still parsed and checked:
+// a NaN payload in one is an error, and so is a bignum key standing for
+// one (bignum 10 for nonce). Encode writes kept claims verbatim,
 // so for them its output is the input, not Core Deterministic.
 func WithKeepAsReceived() Option {
 	return func(c *config) { c.keep = true }

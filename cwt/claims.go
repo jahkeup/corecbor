@@ -339,7 +339,8 @@ type DecodeOptions struct {
 	// rejecting them: a claim key that is a bignum with an integer value
 	// (ErrAmbiguousClaimKey), and a claim whose key or value holds a
 	// NaN other than f97e00 (ErrNonCanonicalNaN). A modeled claim (iss,
-	// sub, aud, exp, nbf, iat, cti, cnf) is still rejected. Opt-in;
+	// sub, aud, exp, nbf, iat, cti, cnf) is still rejected, whether its
+	// key is the integer or a bignum with that value. Opt-in;
 	// without it, and in ClaimsFromHeaders, these claims are errors.
 	KeepAsReceived bool
 
@@ -425,7 +426,13 @@ func (cs *ClaimsSet) keepAsReceived(entry corecbor.MapEntry, spans []asreceived.
 	if ambiguous {
 		key = receivedKey(entry.Key)
 	}
-	if spans == nil || (!ambiguous && modeledClaim(key)) {
+	// A modeled claim is never kept: by its key, or, for an ambiguous
+	// key, by the integer it stands for (bignum 5 is nbf to a peer).
+	modeled := !ambiguous && modeledClaim(key)
+	if n, ok := asreceived.BignumInt64(entry.Key); ok && modeledClaim(IntKey(n)) {
+		modeled = true
+	}
+	if spans == nil || modeled {
 		if ambiguous {
 			return false, ambiguousKeyErr(entry.Key)
 		}

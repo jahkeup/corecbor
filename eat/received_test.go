@@ -47,13 +47,13 @@ func TestNaNPayloadRejected(t *testing.T) {
 // level and in inline submodules, and Encode writes them back exactly.
 func TestWithKeepAsReceived(t *testing.T) {
 	// Deterministic order, so Encode must reproduce it byte for byte:
-	// {nonce: h'0102030405060708', 100: NaN payload, bignum 10: 1,
-	//  submods: {"a": {100: -NaN, bignum 1: null}}}
+	// {nonce: h'0102030405060708', 100: NaN payload, bignum 100: 1,
+	//  submods: {"a": {100: -NaN, bignum 100: null}}}
 	in := hexb(t, "a4"+
 		"0a480102030405060708"+
 		"1864f97e01"+
-		"19010a"+"a1"+"6161"+"a2"+"1864f9fe00"+"c24101f6"+
-		"c2410a01")
+		"19010a"+"a1"+"6161"+"a2"+"1864f9fe00"+"c24164f6"+
+		"c2416401")
 	for _, opts := range [][]eat.Option{
 		{eat.WithKeepAsReceived()},
 	} {
@@ -66,7 +66,7 @@ func TestWithKeepAsReceived(t *testing.T) {
 		}
 		checkReceived(t, "top", c.ReceivedClaims, map[cwt.ClaimKey]string{
 			cwt.IntKey(100):       "f97e01",
-			{Raw: "\xc2\x41\x0a"}: "01",
+			{Raw: "\xc2\x41\x64"}: "01",
 		})
 		sub := c.Submods["a"].Claims
 		if sub == nil {
@@ -74,7 +74,7 @@ func TestWithKeepAsReceived(t *testing.T) {
 		}
 		checkReceived(t, "submod", sub.ReceivedClaims, map[cwt.ClaimKey]string{
 			cwt.IntKey(100):       "f9fe00",
-			{Raw: "\xc2\x41\x01"}: "f6",
+			{Raw: "\xc2\x41\x64"}: "f6",
 		})
 
 		out, err := c.Encode(opts...)
@@ -131,6 +131,16 @@ func checkReceived(t *testing.T, where string, got map[cwt.ClaimKey]corecbor.Raw
 	for k, v := range want {
 		if hex.EncodeToString(got[k]) != v {
 			t.Errorf("%s: ReceivedClaims[%v] = %x, want %s", where, k, got[k], v)
+		}
+	}
+}
+
+// TestKeepAsReceivedModeledBignumKey: bignum 10 stands for nonce and
+// bignum 5 for nbf; neither is kept, at any level.
+func TestKeepAsReceivedModeledBignumKey(t *testing.T) {
+	for _, h := range []string{"a1c2410a4401020304", "a1c241051a00010000", "a119010aa16161a1c2410a4401020304"} {
+		if _, err := eat.DecodeClaims(hexb(t, h), eat.WithKeepAsReceived()); !errors.Is(err, cwt.ErrAmbiguousClaimKey) {
+			t.Errorf("%s: err = %v, want cwt.ErrAmbiguousClaimKey", h, err)
 		}
 	}
 }

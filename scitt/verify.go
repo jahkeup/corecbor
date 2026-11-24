@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cose/receipt"
@@ -33,7 +34,13 @@ type VerifyOptions struct {
 	// ServiceKeys resolves trusted transparency services' receipt keys.
 	// Required.
 	ServiceKeys cose.KeyResolver
-	// MinReceipts is how many receipts must verify; 0 means 1.
+	// MinReceipts is how many receipts from distinct transparency
+	// services must verify; 0 means 1. A service is identified by its
+	// receipt's issuer (the iss of the receipt's protected CWT Claims),
+	// so a receipt attached twice, or several receipts from one
+	// service, count once. ServiceKeys should resolve a key only for
+	// the issuer it belongs to; one key that verifies receipts naming
+	// several issuers would let one service stand for several.
 	MinReceipts int
 	// Payload is a detached statement payload (or, for a hash
 	// envelope, the detached digest). Preimage is a hash envelope's
@@ -42,23 +49,41 @@ type VerifyOptions struct {
 	// IssuerOptions and ServiceOptions apply to the issuer and receipt
 	// signature checks (for example cose.WithAllowedAlgorithms).
 	IssuerOptions, ServiceOptions []cose.VerifierOption
+	// Validator checks the statement's CWT Claims: its validity period
+	// (exp, nbf; RFC 9943 §7.1) and aud. nil means DefaultValidator().
+	// To check a statement as of another time, as an auditor might,
+	// pass a Validator with Now set.
+	Validator *cwt.Validator
+}
+
+// DefaultValidator is the statement validator Verify uses when
+// VerifyOptions.Validator is nil: a statement is rejected on or after
+// its exp and before its nbf, with 60 seconds of leeway; exp is not
+// required, since signed statements commonly carry none. As for every
+// cwt.Validator, a statement carrying aud is rejected unless the
+// Validator lists one of its audiences.
+func DefaultValidator() *cwt.Validator {
+	return &cwt.Validator{Leeway: 60 * time.Second}
 }
 
 // VerifyTransparent verifies a transparent statement: the issuer's
-// signature (keys from issuerKeys) and at least minReceipts receipts
-// from trusted transparency services (keys from serviceKeys; minReceipts
-// <= 0 means 1). Each receipt must carry protected CWT Claims (RFC 9943
-// §6) and prove inclusion of the statement's Entry. The payload must be
-// attached; use Verify for detached payloads.
+// signature (keys from issuerKeys) and receipts from at least
+// minReceipts distinct trusted transparency services (keys from
+// serviceKeys; minReceipts <= 0 means 1; see VerifyOptions.MinReceipts).
+// Each receipt must carry protected CWT Claims (RFC 9943 §6) and prove
+// inclusion of the statement's Entry. The statement's exp and nbf are
+// checked with DefaultValidator. The payload must be attached; use
+// Verify for detached payloads.
 func VerifyTransparent(ctx context.Context, data []byte, issuerKeys, serviceKeys cose.KeyResolver, minReceipts int) (*Statement, error) {
 	return Verify(ctx, data, VerifyOptions{IssuerKeys: issuerKeys, ServiceKeys: serviceKeys, MinReceipts: minReceipts})
 }
 
 // Verify verifies a transparent statement under o. It returns the
 // statement only if its shape is valid, the issuer signature verifies
-// (unless skipped), and at least o.MinReceipts receipts verify; a
-// shortfall is ErrInsufficientReceipts, wrapping the last receipt
-// failure.
+// (unless skipped), its CWT Claims pass o.Validator (by default
+// DefaultValidator: exp and nbf), and receipts from at least
+// o.MinReceipts distinct transparency services verify; a shortfall is
+// ErrInsufficientReceipts, wrapping the last receipt failure.
 func Verify(ctx context.Context, data []byte, o VerifyOptions) (*Statement, error) {
 	st, err := ParseStatement(data)
 	if err != nil {
@@ -68,6 +93,13 @@ func Verify(ctx context.Context, data []byte, o VerifyOptions) (*Statement, erro
 		if err := verifyIssuer(ctx, st, o); err != nil {
 			return nil, err
 		}
+	}
+	v := o.Validator
+	if v == nil {
+		v = DefaultValidator()
+	}
+	if err := v.Validate(st.Claims); err != nil {
+		return nil, fmt.Errorf("scitt: statement claims: %w", err)
 	}
 	if o.ServiceKeys == nil {
 		return nil, fmt.Errorf("%w: service keys: %w", cose.ErrVerification, errNoKeys)
@@ -84,14 +116,19 @@ func Verify(ctx context.Context, data []byte, o VerifyOptions) (*Statement, erro
 	if err != nil {
 		return nil, err
 	}
+	seen := map[string]bool{} // receipt issuers already counted
 	got := 0
 	var last error
 	for i, r := range rs {
-		if err := verifyReceipt(ctx, r, entry, o); err != nil {
+		iss, err := verifyReceipt(ctx, r, entry, o)
+		if err != nil {
 			last = fmt.Errorf("receipt %d: %w", i, err)
 			continue
 		}
-		got++
+		if !seen[iss] {
+			seen[iss] = true
+			got++
+		}
 	}
 	if got < need {
 		if last != nil {
@@ -120,13 +157,18 @@ func verifyIssuer(ctx context.Context, st *Statement, o VerifyOptions) error {
 	return cose.VerifySign1Detached(ctx, msg, o.Payload, o.IssuerKeys, o.IssuerOptions...)
 }
 
-func verifyReceipt(ctx context.Context, r *receipt.Receipt, entry []byte, o VerifyOptions) error {
+// verifyReceipt verifies r and returns its issuer, the identity
+// MinReceipts counts.
+func verifyReceipt(ctx context.Context, r *receipt.Receipt, entry []byte, o VerifyOptions) (string, error) {
 	claims, ok, err := cwt.ClaimsFromHeaders(&r.Msg.Protected)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !ok || claims.Issuer == "" || claims.Subject == "" {
-		return fmt.Errorf("%w: receipt without protected CWT Claims iss and sub", ErrInvalidStatement)
+		return "", fmt.Errorf("%w: receipt without protected CWT Claims iss and sub", ErrInvalidStatement)
 	}
-	return r.VerifyInclusion(ctx, entry, o.ServiceKeys, o.ServiceOptions...)
+	if err := r.VerifyInclusion(ctx, entry, o.ServiceKeys, o.ServiceOptions...); err != nil {
+		return "", err
+	}
+	return claims.Issuer, nil
 }

@@ -499,6 +499,16 @@ Deprecated: `Claims.SecurityLevel`, `Appraiser.RequireSecurityLevel`
 `DecodeClaims`, `(*Claims).Encode`, `Sign` and `Verify` gain
 `...Option`; existing calls compile unchanged.
 
+## scitt
+
+The module is new in v0.30 (030), so nothing here changes v0.2.2
+behavior; these rows change the 030 release candidate (037).
+
+| Change | Old behavior | Restore with |
+|---|---|---|
+| `MinReceipts` (and `VerifyTransparent`'s `minReceipts`) counts distinct transparency services, identified by the receipt's protected CWT `iss`: a receipt attached twice, or several from one service, count once (037 W5) | every verifying receipt counted, duplicates included | none (safety defect, 034); `ServiceKeys` should resolve a key only for its own issuer |
+| `Verify` and `VerifyTransparent` check the statement's `exp` and `nbf` (RFC 9943 §7.1) with the new `DefaultValidator()` (60 s leeway, `exp` optional; a statement carrying `aud` is rejected unless the validator lists it), or `VerifyOptions.Validator` (037 W11) | validity period ignored | none (safety defect, 034); set `Validator.Now` to check a statement as of another time |
+
 ## Deprecated legacy selectors
 
 All are `// Deprecated:` on arrival and removed no earlier than v0.32.0.

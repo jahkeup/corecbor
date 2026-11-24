@@ -265,6 +265,90 @@ func TestE4_X509KeyUsageMatchesMethod(t *testing.T) {
 	}
 }
 
+// E5: the default allocator never hands one identifier to two live
+// endpoints, and frees it on Close.
+func TestE5_DefaultAllocatorAvoidsLiveSessions(t *testing.T) {
+	var live []*Initiator
+	seen := map[string]bool{}
+	for range 64 { // more than the 48 one-byte integer identifiers
+		ini, _ := pair(t, nil, []byte{2}, nil)
+		if _, err := ini.CreateMessage1(); err != nil {
+			t.Fatal(err)
+		}
+		id := string(ini.ConnectionID())
+		if seen[id] {
+			t.Fatalf("C_I %x handed out twice to live sessions", id)
+		}
+		seen[id] = true
+		live = append(live, ini)
+	}
+	for _, ini := range live {
+		ini.Close()
+	}
+
+	// Close releases: with a reader that always draws 0x36, a second
+	// live session gets something else, and a session started after the
+	// first closes gets 0x36 again.
+	draw := func() []byte { return bytes.Repeat([]byte{46}, 1024) } // 46 maps to 0x36
+	start := func() *Initiator {
+		ini, _ := pair(t, nil, []byte{2}, func(ic *InitiatorConfig, _ *ResponderConfig) { ic.Rand = bytes.NewReader(draw()) })
+		// Rand also supplies the ephemeral key: give it room.
+		if _, err := ini.CreateMessage1(); err != nil {
+			t.Fatal(err)
+		}
+		return ini
+	}
+	a := start()
+	if got := a.ConnectionID(); !bytes.Equal(got, []byte{0x36}) {
+		t.Fatalf("first C_I = %x, want 36", got)
+	}
+	b := start()
+	if bytes.Equal(b.ConnectionID(), a.ConnectionID()) {
+		t.Fatal("second live session reused C_I")
+	}
+	a.Close()
+	c := start()
+	if got := c.ConnectionID(); !bytes.Equal(got, []byte{0x36}) {
+		t.Errorf("C_I after Close = %x, want 36 again", got)
+	}
+	b.Close()
+	c.Close()
+}
+
+// E5: a caller-supplied allocator chooses the identifier, sees the
+// peer's, and may not return it.
+func TestE5_AllocatorHook(t *testing.T) {
+	var sawPeer ConnectionID
+	ini, res := pair(t, []byte{7}, nil, func(_ *InitiatorConfig, rc *ResponderConfig) {
+		rc.AllocateConnectionID = func(peer ConnectionID) (ConnectionID, error) {
+			sawPeer = peer
+			return ConnectionID{0xab, 0xcd}, nil
+		}
+	})
+	m1, _ := ini.CreateMessage1()
+	if _, err := res.ProcessMessage1(m1); err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(sawPeer, []byte{7}) || !bytes.Equal(res.ConnectionID(), []byte{0xab, 0xcd}) {
+		t.Fatalf("allocator saw %x, C_R = %x", sawPeer, res.ConnectionID())
+	}
+
+	ini, res = pair(t, []byte{7}, nil, func(_ *InitiatorConfig, rc *ResponderConfig) {
+		rc.AllocateConnectionID = func(peer ConnectionID) (ConnectionID, error) { return peer, nil }
+	})
+	m1, _ = ini.CreateMessage1()
+	if _, err := res.ProcessMessage1(m1); !errors.Is(err, ErrConnectionIDCollision) {
+		t.Errorf("allocator returning C_I: %v, want ErrConnectionIDCollision", err)
+	}
+	boom := errors.New("table full")
+	ini, _ = pair(t, nil, []byte{2}, func(ic *InitiatorConfig, _ *ResponderConfig) {
+		ic.AllocateConnectionID = func(ConnectionID) (ConnectionID, error) { return nil, boom }
+	})
+	if _, err := ini.CreateMessage1(); !errors.Is(err, boom) || !errors.Is(err, ErrStateViolation) {
+		t.Errorf("allocator error: %v", err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

@@ -60,6 +60,8 @@ type session struct {
 	accept    func(EADItem) bool
 
 	ownCID, peerCID []byte
+	allocCID        func(peer ConnectionID) (ConnectionID, error)
+	cidHold         *cidHold          // this session's hold on ownCID (default allocator)
 	ownEAD          map[int][]EADItem // by message number
 	peerEAD         []EADItem
 
@@ -91,6 +93,7 @@ func (s *session) fail(err error) error {
 		s.state = stateFailed
 	}
 	s.zeroize()
+	s.cidHold.release()
 	// Nothing received from an unauthenticated peer stays visible
 	// (RFC 9528 §5.3.3, §5.4.3).
 	s.peerCred, s.peerEAD = nil, nil
@@ -108,6 +111,7 @@ func (s *session) zeroize() {
 
 func (s *session) close() {
 	s.zeroize()
+	s.cidHold.release()
 	s.state = stateClosed
 }
 
@@ -123,33 +127,6 @@ func (s *session) randReader() io.Reader {
 		return s.rand
 	}
 	return rand.Reader
-}
-
-// pickCID returns the configured connection identifier, or a random
-// one-byte-integer identifier different from avoid.
-func (s *session) pickCID(configured, avoid []byte) ([]byte, error) {
-	if configured != nil {
-		if avoid != nil && bytes.Equal(configured, avoid) {
-			return nil, fmt.Errorf("%w: %w: connection identifier equals the peer's", ErrStateViolation, ErrConnectionIDCollision)
-		}
-		return slices.Clone(configured), nil
-	}
-	var b [1]byte
-	for range 64 {
-		if _, err := io.ReadFull(s.randReader(), b[:]); err != nil {
-			return nil, fmt.Errorf("%w: reading connection identifier: %w", ErrStateViolation, err)
-		}
-		// Map onto the 48 one-byte integer encodings (0x00-0x17, 0x20-0x37).
-		v := b[0] % 48
-		if v >= 24 {
-			v += 8
-		}
-		cid := []byte{v}
-		if avoid == nil || !bytes.Equal(cid, avoid) {
-			return cid, nil
-		}
-	}
-	return nil, fmt.Errorf("%w: could not choose a connection identifier", ErrStateViolation)
 }
 
 func (s *session) authPublic(signs bool) (any, error) {

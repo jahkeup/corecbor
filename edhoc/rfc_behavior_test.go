@@ -98,7 +98,9 @@ func TestRFC_ConnectionIDsMustDiffer(t *testing.T) {
 	// A random C_R avoids C_I.
 	for range 50 {
 		ini, res := pair(t, []byte{0x00}, nil, func(_ *InitiatorConfig, rc *ResponderConfig) {
-			rc.Rand = bytes.NewReader(bytes.Repeat([]byte{0, 0, 1}, 64)) // first draw maps to C_I
+			// The first draws map to C_I; 45 maps to 0x35, which no
+			// other test configures.
+			rc.Rand = bytes.NewReader(bytes.Repeat([]byte{0, 0, 45}, 64))
 		})
 		m1, _ := ini.CreateMessage1()
 		m2, err := res.ProcessMessage1(m1)
@@ -112,6 +114,9 @@ func TestRFC_ConnectionIDsMustDiffer(t *testing.T) {
 		if bytes.Equal(o.SenderID, o.RecipientID) {
 			t.Fatal("C_R == C_I")
 		}
+		// Release C_R for the next iteration.
+		ini.Close()
+		res.Close()
 	}
 }
 

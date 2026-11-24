@@ -49,6 +49,7 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		rand:      cfg.Rand,
 		accept:    cfg.AcceptCriticalEAD,
 		ownCID:    slices.Clone(cfg.ConnectionID),
+		allocCID:  cfg.AllocateConnectionID,
 		ownEAD:    map[int][]EADItem{1: cfg.EAD1, 3: cfg.EAD3},
 		party: credParty{
 			signer: cfg.PrivateKey, dhKey: cfg.DHKey, cred: cfg.Credential,
@@ -221,11 +222,12 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 		}
 	}
 	s := &session{
-		method: cfg.Method,
-		rand:   cfg.Rand,
-		accept: cfg.AcceptCriticalEAD,
-		ownCID: slices.Clone(cfg.ConnectionID),
-		ownEAD: map[int][]EADItem{2: cfg.EAD2, 4: cfg.EAD4},
+		method:   cfg.Method,
+		rand:     cfg.Rand,
+		accept:   cfg.AcceptCriticalEAD,
+		ownCID:   slices.Clone(cfg.ConnectionID),
+		allocCID: cfg.AllocateConnectionID,
+		ownEAD:   map[int][]EADItem{2: cfg.EAD2, 4: cfg.EAD4},
 		party: credParty{
 			signer: cfg.PrivateKey, dhKey: cfg.DHKey, cred: cfg.Credential,
 			peerPublic: cfg.PeerPublic, peerCred: cfg.PeerCredential,

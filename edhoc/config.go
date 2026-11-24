@@ -57,8 +57,27 @@ type InitiatorConfig struct {
 	// PeerPublic pins the peer's authentication key when neither Peers
 	// nor PeerCredential is set; the peer must then send its credential
 	// by value (kccs) containing this key.
-	PeerPublic   crypto.PublicKey
+	PeerPublic crypto.PublicKey
+	// ConnectionID is C_I, which is also this party's OSCORE Recipient
+	// ID. When nil, AllocateConnectionID chooses it.
 	ConnectionID []byte
+	// AllocateConnectionID chooses this party's connection identifier
+	// when ConnectionID is nil. It is called once, with the peer's
+	// identifier (nil for the Initiator), and must return one that no
+	// current EDHOC session uses as this party's identifier and no
+	// current OSCORE Security Context uses as its Recipient ID (RFC
+	// 9668 §4.1.1, §4.1.2); back it with the application's session and
+	// OSCORE context tables. A result equal to the peer's identifier is
+	// rejected with ErrConnectionIDCollision.
+	//
+	// When nil, a random identifier is drawn, preferring the 48 sent as
+	// one-byte CBOR integers, that avoids the peer's identifier and
+	// every identifier held by an endpoint in this process that has not
+	// been closed, failed or garbage collected. That is all it can know
+	// about: it does not see OSCORE contexts that outlive their
+	// endpoint, or other processes. Callers running many sessions, or
+	// keeping OSCORE contexts after Close, must supply an allocator.
+	AllocateConnectionID func(peer ConnectionID) (ConnectionID, error)
 
 	Credential     *Credential
 	PeerCredential *Credential
@@ -101,10 +120,15 @@ type ResponderConfig struct {
 	// Suites are the cipher suites the Responder supports, in order of
 	// preference. They are sent as SUITES_R in an error message when
 	// the Initiator's selected suite is not acceptable.
-	Suites       []CipherSuite
-	PrivateKey   crypto.Signer
-	PeerPublic   crypto.PublicKey
+	Suites     []CipherSuite
+	PrivateKey crypto.Signer
+	PeerPublic crypto.PublicKey
+	// ConnectionID is C_R, which is also this party's OSCORE Recipient
+	// ID. When nil, AllocateConnectionID chooses it.
 	ConnectionID []byte
+	// AllocateConnectionID is as for InitiatorConfig; it is called
+	// with C_I from message_1.
+	AllocateConnectionID func(peer ConnectionID) (ConnectionID, error)
 
 	Credential     *Credential
 	PeerCredential *Credential

@@ -68,6 +68,12 @@ func AllowMACEmptyProtectedAsReceived() MACOption {
 	return func(o *macOpts) { o.policy.emptyAsReceived = true }
 }
 
+// RequireMACProtectedAlgorithm is RequireProtectedAlgorithm for
+// VerifyMAC0 (VerifyMACMulti always requires a protected alg).
+func RequireMACProtectedAlgorithm() MACOption {
+	return func(o *macOpts) { o.policy.requireProtectedAlg = true }
+}
+
 // AllowMACProtectedRecipientHeaders is AllowProtectedRecipientHeaders
 // for VerifyMACMulti.
 func AllowMACProtectedRecipientHeaders() MACOption {

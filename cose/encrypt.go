@@ -34,6 +34,14 @@ func AllowEncryptEmptyProtectedAsReceived() EncryptOption {
 	return func(o *encryptOpts) { o.policy.emptyAsReceived = true }
 }
 
+// RequireEncryptProtectedAlgorithm is RequireProtectedAlgorithm for
+// DecryptEncrypt0. Encrypt0Open, DecryptMulti and HPKEOpen always
+// require a protected content alg; recipient layers are unaffected,
+// since key-wrap recipients carry alg unprotected (RFC 9052 §8.5.2).
+func RequireEncryptProtectedAlgorithm() EncryptOption {
+	return func(o *encryptOpts) { o.policy.requireProtectedAlg = true }
+}
+
 // AllowProtectedRecipientHeaders lets DecryptMulti open a direct or AE
 // key-wrap recipient (AES-KW, PBES2) whose protected bucket isn't empty,
 // as corecbor v0.2 wrote them (alg in the protected bucket). RFC 9052

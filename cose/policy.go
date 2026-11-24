@@ -19,7 +19,8 @@ type headerPolicy struct {
 	legacyAlg  bool        // v0.2.2: don't bind the header alg
 	legacyCrit bool        // v0.2.2: ignore crit
 
-	emptyAsReceived bool // Allow…EmptyProtectedAsReceived (037 S14)
+	emptyAsReceived     bool // Allow…EmptyProtectedAsReceived (037 S14)
+	requireProtectedAlg bool // Require…ProtectedAlgorithm (037 S10)
 }
 
 // normalizeLabel converts a caller-supplied label to the form header
@@ -111,6 +112,9 @@ func bindAlg(prot, unprot *Headers, want Algorithm, p *headerPolicy) error {
 	a, loc, err := headerAlg(prot, unprot)
 	if err != nil {
 		return err
+	}
+	if p.requireProtectedAlg && loc != algProtected {
+		return fmt.Errorf("%w: alg must be in the protected bucket (RequireProtectedAlgorithm)", ErrAlgorithmMismatch)
 	}
 	if loc != algAbsent && a != want {
 		return fmt.Errorf("%w: header alg %s, key implies %s", ErrAlgorithmMismatch, a, want)

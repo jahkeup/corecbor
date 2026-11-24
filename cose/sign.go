@@ -382,6 +382,17 @@ func AllowEmptyProtectedAsReceived() VerifierOption {
 	return func(v *Verifier) { v.policy.emptyAsReceived = true }
 }
 
+// RequireProtectedAlgorithm requires the signed layer's alg header to
+// be present and in the protected bucket. By default a missing alg is
+// verified as the key's algorithm, and an alg only in the unprotected
+// bucket is accepted when it equals the key's (it can't change the
+// algorithm used; cose-wg sign-pass-01 relies on it). RFC 9052 §3.1
+// asks senders to protect alg where they can; this makes the verifier
+// insist.
+func RequireProtectedAlgorithm() VerifierOption {
+	return func(v *Verifier) { v.policy.requireProtectedAlg = true }
+}
+
 // WithKnownCriticalHeaders declares header labels (int or string) that
 // the caller processes itself. A message whose crit header (RFC 9052
 // §3.1) lists a label outside this set and the RFC 9052 labels 1-7 is

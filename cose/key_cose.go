@@ -740,13 +740,14 @@ func (k *Key) SymmetricKey() ([]byte, error) {
 // algorithm (for example A128GCM or HMAC 256/256), and the deriver then
 // only works with that content algorithm; key_ops must permit the key's
 // use as a content key: encrypt to seal and decrypt to open, or MAC
-// create and MAC verify.
+// create and MAC verify. For AES-KW, key_ops must permit wrapKey to wrap
+// and unwrapKey to unwrap (RFC 9053 §6.2.1).
 func (k *Key) KeyDeriver(alg Algorithm) (KeyDeriver, error) {
 	if alg == AlgDirect {
 		return k.directDeriver()
 	}
-	if !k.Permits(KeyOpWrapKey) && !k.Permits(KeyOpUnwrapKey) && !k.Permits(KeyOpEncrypt) && !k.Permits(KeyOpDecrypt) {
-		return nil, fmt.Errorf("%w: key_ops forbid key distribution", ErrInvalidKey)
+	if !k.Permits(KeyOpWrapKey) && !k.Permits(KeyOpUnwrapKey) {
+		return nil, fmt.Errorf("%w: key_ops permit neither wrapKey nor unwrapKey", ErrInvalidKey)
 	}
 	if a, ok := k.Algorithm(); ok && a != alg {
 		return nil, fmt.Errorf("%w: key alg %s, requested %s", ErrAlgorithmMismatch, a, alg)
@@ -761,10 +762,35 @@ func (k *Key) KeyDeriver(alg Algorithm) (KeyDeriver, error) {
 		if kw.Algorithm() != alg {
 			return nil, fmt.Errorf("%w: %d-byte key for %s", ErrInvalidKey, len(raw), alg)
 		}
-		return kw, nil
+		if k.get(keyLabelKeyOps) == nil {
+			return kw, nil
+		}
+		return &keyAESKW{AESKWKey: *kw, key: k}, nil
 	default:
 		return nil, fmt.Errorf("%w: %s from a symmetric key", ErrUnsupportedAlgorithm, alg)
 	}
+}
+
+// keyAESKW is an AES-KW recipient made from a COSE_Key with key_ops: it
+// wraps only if they permit wrapKey and unwraps only if they permit
+// unwrapKey (RFC 9053 §6.2.1).
+type keyAESKW struct {
+	AESKWKey
+	key *Key
+}
+
+func (a *keyAESKW) WrapKey(cek []byte, opts KeyWrapOpts) ([]byte, Headers, error) {
+	if !a.key.Permits(KeyOpWrapKey) {
+		return nil, Headers{}, fmt.Errorf("%w: key_ops do not permit wrapKey", ErrInvalidKey)
+	}
+	return a.AESKWKey.WrapKey(cek, opts)
+}
+
+func (a *keyAESKW) UnwrapKey(ct []byte, h Headers, opts KeyUnwrapOpts) ([]byte, error) {
+	if !a.key.Permits(KeyOpUnwrapKey) {
+		return nil, fmt.Errorf("%w: key_ops do not permit unwrapKey", ErrInvalidKey)
+	}
+	return a.AESKWKey.UnwrapKey(ct, h, opts)
 }
 
 func (k *Key) directDeriver() (KeyDeriver, error) {

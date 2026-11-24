@@ -217,6 +217,7 @@ goroutine (for example from a `sync.Pool`).
 | `typ` (16) in an unprotected bucket: `NewSigner`/`SignMulti` with `WithUnprotectedHeaders` holding it return `ErrUnsupportedHeader`, and `Unmarshal*` reject it in any layer with `ErrMalformed` (RFC 9596 §2) (037 S5) | emitted and accepted | received messages: `DecodeLimits{AllowUnprotectedTyp: true}` |
 | `DecryptMulti`/`VerifyMACMulti` reject a recipient with no `alg` header with `ErrAlgorithmMismatch` (RFC 9052 §8.5: every recipient class carries `alg`). Message layers (`Verify`, `VerifyMAC0`, `Encrypt0Open`) still accept a missing `alg` and use the key's or caller's, which §3.1 permits when the algorithm is supplied externally (037 S9) | processed as the deriver's algorithm | `WithLegacyEncryptHeaders()` / `WithLegacyMACHeaders()` (existing) skip the check |
 | An ECDH-ES ephemeral key (header −1) that carries a private key parameter (`d`) is `ErrMalformed` (037 S11) | the private part was ignored | none (the sender exposed the message key) |
+| `(*Key).KeyDeriver(A128KW…)` needs `key_ops` wrapKey or unwrapKey, and the deriver wraps only with wrapKey and unwraps only with unwrapKey (RFC 9053 §6.2.1); a direct deriver seals only with encrypt/MAC create and opens only with decrypt/MAC verify (037 S12) | any of wrapKey, unwrapKey, encrypt, decrypt allowed both directions | none (`key_ops` is the key owner's restriction) |
 
 New in 028 (additive): `WithProtectedHeaders`, `WithUnprotectedHeaders`,
 `Signer.Sign1`/`Sign1Context`, `SignContext`, `SignDetached`,

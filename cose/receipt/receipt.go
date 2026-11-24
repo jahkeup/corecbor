@@ -470,6 +470,9 @@ func issue(ctx context.Context, s *cose.Signer, root []byte, kind int64, proof [
 // unprotected bucket, each encoded as bstr .cbor Receipt (RFC 9942 §4.3).
 // The statement's signature is unaffected.
 func Attach(stmt *cose.Sign1, receipts ...*Receipt) error {
+	if len(receipts) == 0 {
+		return nil // the header holds [+ Receipt]; never write an empty one
+	}
 	existing, err := rawReceipts(&stmt.Unprotected)
 	if err != nil {
 		return err
@@ -490,8 +493,9 @@ func Attach(stmt *cose.Sign1, receipts ...*Receipt) error {
 
 // Receipts parses the receipts attached to stmt (label 394), from the
 // unprotected bucket and then the protected one, in order. A malformed
-// receipts header or receipt is an error; receipts are returned
-// unverified.
+// receipts header or receipt is an error, including an empty array and
+// a receipt that doesn't begin with tag 18 (RFC 9942 §4.3: [+ bstr
+// .cbor Receipt], tagged COSE_Sign1); receipts are returned unverified.
 func Receipts(stmt *cose.Sign1) ([]*Receipt, error) {
 	var out []*Receipt
 	for _, h := range []*cose.Headers{&stmt.Unprotected, &stmt.Protected} {
@@ -500,6 +504,11 @@ func Receipts(stmt *cose.Sign1) ([]*Receipt, error) {
 			return nil, err
 		}
 		for i, b := range raw {
+			// bstr .cbor Receipt with Receipt = #6.18(COSE_Sign1): the
+			// tag comes first, with no self-describe prefix.
+			if h := wire.ParseHead(b); h.N == 0 || h.Major != wire.MajorTag || h.Arg != corecbor.TagCOSESign1 {
+				return nil, fmt.Errorf("receipt %d: %w: not a tagged COSE_Sign1 (tag 18)", i, cose.ErrMalformed)
+			}
 			r, err := Parse(b)
 			if err != nil {
 				return nil, fmt.Errorf("receipt %d: %w", i, err)
@@ -511,7 +520,7 @@ func Receipts(stmt *cose.Sign1) ([]*Receipt, error) {
 }
 
 // errReceiptsHeader is wrapped by malformed receipts headers.
-var errReceiptsHeader = errors.New("receipts header (394) must be an array of bstr")
+var errReceiptsHeader = errors.New("receipts header (394) must be a non-empty array of bstr")
 
 // rawReceipts returns the bstr elements of h's receipts header, whether
 // decoded (corecbor.Value) or set locally ([]any of []byte).
@@ -520,7 +529,7 @@ func rawReceipts(h *cose.Headers) ([][]byte, error) {
 	case nil:
 		return nil, nil
 	case corecbor.Value:
-		if v.Kind != corecbor.KindArray {
+		if v.Kind != corecbor.KindArray || len(v.Array()) == 0 {
 			return nil, fmt.Errorf("%w: %w", cose.ErrMalformed, errReceiptsHeader)
 		}
 		out := make([][]byte, 0, len(v.Array()))
@@ -532,6 +541,9 @@ func rawReceipts(h *cose.Headers) ([][]byte, error) {
 		}
 		return out, nil
 	case []any:
+		if len(v) == 0 {
+			return nil, fmt.Errorf("%w: %w", cose.ErrMalformed, errReceiptsHeader)
+		}
 		out := make([][]byte, 0, len(v))
 		for _, it := range v {
 			b, ok := it.([]byte)

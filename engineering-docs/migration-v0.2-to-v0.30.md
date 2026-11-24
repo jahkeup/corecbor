@@ -288,7 +288,11 @@ All additive; nothing existing changes.
   - `Receipt.VerifyInclusion`, `VerifyInclusionHash` and
     `VerifyConsistencyFrom`;
   - `VerifyConsistency`;
-  - `Attach` and `Receipts`, which manage label 394;
+  - `Attach` and `Receipts`, which manage label 394. `Receipts`
+    rejects an empty receipts array and an attached receipt that
+    doesn't begin with tag 18 (a self-describe prefix included), per
+    RFC 9942 §4.3's `[+ bstr .cbor Receipt]`; `Attach` with no receipts
+    writes nothing (037);
   - experimental `Issue`, `IssueConsistency` and `Tree`, for log
     operators and tests.
 - New module `github.com/jahkeup/corecbor/scitt` (RFC 9943 signed and

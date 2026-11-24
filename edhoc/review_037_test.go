@@ -552,6 +552,47 @@ func TestE6_ErrorMessageFor(t *testing.T) {
 	}
 }
 
+// E8: an ID_CRED with several parameters, or ones this package does
+// not interpret, reaches the resolver, and the received bytes (in any
+// label order) enter the transcript.
+func TestE8_IDCredOtherAndMultipleParams(t *testing.T) {
+	for name, raw := range map[string][]byte{
+		// {4: h'2a', 10: h'01'}: kid and kid context.
+		"sorted": {0xa2, 0x04, 0x41, 0x2a, 0x0a, 0x41, 0x01},
+		// The same, labels unsorted (RFC 9528 §3.5.3 allows it).
+		"unsorted": {0xa2, 0x0a, 0x41, 0x01, 0x04, 0x41, 0x2a},
+		// A text label.
+		"text label": {0xa2, 0x04, 0x41, 0x2a, 0x61, 'p', 0xf5},
+	} {
+		var saw IDCred
+		iPriv, iPub := edPair(t)
+		ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
+			ic.PrivateKey = iPriv
+			v, err := corecbor.NewDecoder(seqDecOpts...).Decode(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			id, err := parseIDCred(v, raw)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			ccs := ccsWith(t, iPub)
+			ic.Credential = &Credential{Raw: ccs, IDCred: id}
+			rc.Peers = resolverFunc(func(_ context.Context, id IDCred) (*Credential, error) {
+				saw = id
+				return &Credential{Raw: ccs, IDCred: id, PublicKey: iPub}, nil
+			})
+		})
+		if err := handshake(t, ini, res); err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if !bytes.Equal(saw.KID, []byte{0x2a}) || len(saw.Other) != 1 || !bytes.Equal(saw.Raw, raw) {
+			t.Errorf("%s: resolver saw %+v", name, saw)
+		}
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

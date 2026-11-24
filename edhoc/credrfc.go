@@ -269,12 +269,7 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 		return c, nil
 	}
 	if pc := p.peerCred; pc != nil && len(pc.Raw) > 0 {
-		match := (id.KCCS != nil && bytes.Equal(id.KCCS, pc.Raw)) || (id.KCWT != nil && bytes.Equal(id.KCWT, pc.Raw))
-		if !match && pc.IDCred.set() == 1 {
-			a, errA := pc.IDCred.full()
-			b, errB := id.full()
-			match = errA == nil && errB == nil && bytes.Equal(a, b)
-		}
+		match := (id.KCCS != nil && bytes.Equal(id.KCCS, pc.Raw)) || (id.KCWT != nil && bytes.Equal(id.KCWT, pc.Raw)) || pc.IDCred.identifies(id)
 		if !match {
 			return nil, unknown
 		}

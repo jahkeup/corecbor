@@ -667,6 +667,28 @@ func TestMultiRecipient037(t *testing.T) {
 	}
 }
 
+// W20: IgnoreExi lets a stateless verifier skip exi explicitly.
+func TestValidator_IgnoreExi037(t *testing.T) {
+	exi := uint64(60)
+	c := validClaims()
+	c.Exi = &exi
+	v := fixedNow(cwt.NewValidator(), t0)
+	v.IgnoreExi = true
+	if err := v.Validate(c); err != nil {
+		t.Errorf("IgnoreExi: %v", err)
+	}
+	v.ExiFirstSeen = func(*cwt.ClaimsSet) (time.Time, error) { return t0, nil }
+	if err := v.Validate(c); !errors.Is(err, cwt.ErrInvalidValidator) {
+		t.Errorf("IgnoreExi with ExiFirstSeen: %v, want ErrInvalidValidator", err)
+	}
+	// exp is still checked.
+	v.ExiFirstSeen = nil
+	c.Expiration = t0.Add(-2 * time.Minute)
+	if err := v.Validate(c); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("IgnoreExi, expired: %v", err)
+	}
+}
+
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
 // package doesn't understand, carries no proof-of-possession key.
 func TestValidator_RequireConfirmation037(t *testing.T) {

@@ -67,6 +67,12 @@ type Validator struct {
 	// can't be checked. A token with exi but no cti is malformed (the
 	// AS MUST add one). Tokens without exi are unaffected.
 	ExiFirstSeen func(claims *ClaimsSet) (time.Time, error)
+
+	// IgnoreExi skips the exi check, for stateless verifiers that can't
+	// record first receipt: such a token is then bounded only by its
+	// other claims (exp). Off by default; combining it with
+	// ExiFirstSeen is ErrInvalidValidator.
+	IgnoreExi bool
 }
 
 // NewValidator returns a Validator with current-standards defaults:
@@ -96,6 +102,9 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 	}
 	if v.IgnoreAudience && (v.Audience != "" || len(v.Audiences) > 0) {
 		return fmt.Errorf("%w: IgnoreAudience with Audience or Audiences set", ErrInvalidValidator)
+	}
+	if v.IgnoreExi && v.ExiFirstSeen != nil {
+		return fmt.Errorf("%w: IgnoreExi with ExiFirstSeen set", ErrInvalidValidator)
 	}
 	if claims == nil {
 		return ErrMalformedClaims
@@ -154,7 +163,7 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 // validateExi applies RFC 9200 §5.10.3: the token expires exi seconds
 // after this processor first received it.
 func (v *Validator) validateExi(claims *ClaimsSet, now time.Time) error {
-	if claims.Exi == nil {
+	if claims.Exi == nil || v.IgnoreExi {
 		return nil
 	}
 	key := IntKey(ClaimExi)

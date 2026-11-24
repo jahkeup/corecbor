@@ -11,7 +11,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [037](037-spec-departure-review-2026-11-23.md) | 1 | Draft | Specification-departure review before v0.3.0 (B items block the release) | corecbor maintainers | 034, 036 | 2026-11-23 |
+| [037](037-spec-departure-review-2026-11-23.md) | 1 | Implemented | Specification-departure review before v0.3.0 (all rows implemented; five decisions open) | corecbor maintainers | 034, 036 | 2026-11-23 |
 | [036](036-deferred-follow-ups-2026-11.md) | 2 | Draft | Deferred follow-ups from the 2026-11 batch | corecbor maintainers | 021–035 | 2026-11-22 |
 | [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling (root module only) | corecbor maintainers | 001 | 2026-11-22 |
 

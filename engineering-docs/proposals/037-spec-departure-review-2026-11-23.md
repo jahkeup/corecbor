@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 037 |
 | **Tier** | 1 |
-| **Status** | Draft |
+| **Status** | Implemented (pending the maintainer decisions below) |
 | **Filed** | 2026-11-23 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 034, 036 |
@@ -126,8 +126,82 @@ selector when v0.2.2 behaved that way. Verification-weakening
 selectors stay out of `CompatV02` bundles. Schedule the rest for
 v0.3.x/v0.4 with the same rule.
 
+## Results (2026-11-23)
+
+Every row above is handled on local main, one commit per item, each
+starting from a failing test (`*037*_test.go` in each module). No
+`Legacy…` or `CompatV02` selector was added. Where a default moved to
+the correct behavior and callers may need the old one, a plainly named
+opt-in exists (`Allow…`, `Insecure…`, `Ignore…`); crashes, unbounded
+work and fail-open checks have none. The migration guide has a row
+per change.
+
+- **Root (C1–C22):** all fixed. Beyond the rows:
+  - quadratic map-key comparison and `Value.Equal` on large maps
+    (`internal/pairmatch`);
+  - keyed per-process hashing against hash flooding
+    (`internal/seedhash`);
+  - `DefaultMaxItemSize` (64 MiB) for reader-based decoding;
+  - RFC 8746 complete: typed, float16/128, multi-dimensional and
+    homogeneous arrays;
+  - `UnmarshalStrict`.
+  Benchmarks are within ±3% apart from `CursorFindMapKey` on a middle
+  key (+61%, the cost of last-wins); large-map decode −4–5%.
+  Golden change: `root/stream/scalars` (C13).
+- **cose (S1–S21):** all fixed, plus:
+  - RFC 9338 countersignatures on all six message types, on
+    COSE_Signature and COSE_recipient, and on detached content (RFC
+    vendored; Appendix A vectors pass);
+  - decryption and MAC verification through nested recipients (RFC
+    9052 Appendix B decrypts);
+  - `RequireProtectedAlgorithm` (S10 opt-in).
+  Golden changes: `cose/multi/mac-direct` (S1), `cose/mac0/short-key`
+  (S6).
+- **cwt/eat/scitt (W1–W33):** all fixed, plus:
+  - COSE_Sign/COSE_Mac/COSE_Encrypt CWTs;
+  - `eat.VerifyToken`, `eat.VerifyMACToken` (PSA over COSE_Mac0);
+  - RFC 10013 CBOR and JSON forms;
+  - PSA profile validation;
+  - receipt framing and validity.
+  Golden change: `cwt/validate/audience-unset-token-has-aud` (W1).
+- **edhoc (E1–E20):** all fixed. E1 also applies under
+  `WithLegacyPreRFCProtocol`. The RFC 9529 traces are unchanged.
+- **Integration:** `cwt.MAC`/`VerifyMAC` take `...cose.MACOption`
+  (allowlisted). `VerifyOptions.MACOptions` and `DecodeLimits` in cwt
+  and eat, and `Appraiser.DecodeLimits`, carry the cose opt-ins
+  through.
+
+Checks on the integrated tree:
+- `make check` passes, apicheck included;
+- the Go 1.26 vet is clean in every module;
+- the full fuzz sweep passes;
+- the consumer format-stability test and suite pass.
+
+### Decisions for the maintainer
+
+1. **W30:** eat `Encode` truncates NumericDates to whole seconds, its
+   documented v0.2.2 behavior. Keep it, or reject sub-second times, or
+   encode floats?
+2. **Default bounds:**
+   - `DefaultMaxItemSize` 64 MiB (reader decoding);
+   - cose 1 MiB / depth 16 / 32 signatures / 64 recipients;
+   - edhoc 64 KiB messages / 32 EAD items / 8 certificates.
+3. **Strength defaults:**
+   - PBES2 seal count 600,000 (OWASP);
+   - minimum HMAC key length per RFC 9053;
+   - strict decoders reject invalid tag content (no opt-out other than
+     composing the old preset).
+4. **edhoc:**
+   - the default connection-ID allocator is process-wide;
+   - ERR_CODE 3 for unknown credentials, as RFC 9528 defines it, can
+     tell an active prober which kids exist.
+5. **RFC 9711 Appendix A.2.2** has oemboot without oemid, which the
+   normative text forbids; `Validate` follows the text. Erratum
+   candidate.
+
 ## Changelog
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-11-23 | Filed from the four module reviews | corecbor maintainers |
+| 2026-11-23 | All rows implemented; status Implemented pending five decisions | corecbor maintainers |

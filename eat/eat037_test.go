@@ -137,7 +137,9 @@ func TestVerifyToken037(t *testing.T) {
 
 	// Envelope limits (cose.RecommendedDecodeLimits: 1 MiB).
 	var big cose.Headers
-	big.Set(int64(-70000), bytes.Repeat([]byte{1}, 2<<20))
+	if err := big.SetChecked(int64(-70000), bytes.Repeat([]byte{1}, 2<<20)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := eat.VerifyToken(ctx, signWith(t, good, cose.Headers{}, big), verifyOpts(t)); !errors.Is(err, eat.ErrMalformedEAT) {
 		t.Errorf("2 MiB header: %v, want ErrMalformedEAT", err)
 	}
@@ -172,7 +174,9 @@ func TestVerify_Legacy037(t *testing.T) {
 		t.Errorf("Verify(61(18(...))): %v", err)
 	}
 	var big cose.Headers
-	big.Set(int64(-70000), bytes.Repeat([]byte{1}, 9<<20))
+	if err := big.SetChecked(int64(-70000), bytes.Repeat([]byte{1}, 9<<20)); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := eat.Verify(signWith(t, encodeClaimsT(t, fullClaims()), cose.Headers{}, big), verifier); !errors.Is(err, eat.ErrMalformedEAT) {
 		t.Errorf("9 MiB header: %v, want ErrMalformedEAT", err)
 	}
@@ -269,7 +273,9 @@ func TestAppraise_SubmodVerifierValidates037(t *testing.T) {
 
 	// Limits: the envelope is decoded with cose.RecommendedDecodeLimits.
 	var big cose.Headers
-	big.Set(int64(-70000), bytes.Repeat([]byte{1}, 2<<20))
+	if err := big.SetChecked(int64(-70000), bytes.Repeat([]byte{1}, 2<<20)); err != nil {
+		t.Fatal(err)
+	}
 	huge := signWith(t, encodeClaimsT(t, &eat.Claims{UEID: ueid}), cose.Headers{}, big)
 	if err := (&eat.Appraiser{SubmodPolicy: accept, SubmodVerifier: verifier}).Appraise(sub(huge)); !errors.Is(err, eat.ErrMalformedEAT) {
 		t.Errorf("2 MiB nested envelope: %v, want ErrMalformedEAT", err)

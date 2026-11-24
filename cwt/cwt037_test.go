@@ -175,7 +175,9 @@ func TestSymmetricCnf_PlaintextRejected037(t *testing.T) {
 // claims decoder's budget) instead of decoding it with no limit.
 func TestLegacyPaths_Bounded037(t *testing.T) {
 	var big cose.Headers
-	big.Set(int64(-70000), bytes.Repeat([]byte{1}, 9<<20))
+	if err := big.SetChecked(int64(-70000), bytes.Repeat([]byte{1}, 9<<20)); err != nil {
+		t.Fatal(err)
+	}
 	payload, err := validClaims().Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -214,7 +216,9 @@ func TestLegacyPaths_Bounded037(t *testing.T) {
 
 	// Anything well within the budget still verifies.
 	var ok cose.Headers
-	ok.Set(int64(-70000), bytes.Repeat([]byte{1}, 2<<20))
+	if err := ok.SetChecked(int64(-70000), bytes.Repeat([]byte{1}, 2<<20)); err != nil {
+		t.Fatal(err)
+	}
 	sig.Unprotected = ok
 	signed, _ = cose.MarshalSign1(sig)
 	if _, err := cwt.Verify(signed, verifier); err != nil {

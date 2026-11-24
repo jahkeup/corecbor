@@ -478,10 +478,13 @@ Existing identifiers keep their meaning (034). Changes to them:
 | With `SubmodPolicy` set, the submodules of an inline submodule and of a verified nested token are appraised too, fail-closed, to 16 levels (deeper is `ErrMalformedEAT`) (RFC 9711 §4.2.18; 037 W3) | only the top level was appraised; nested tokens below an inline submodule were never verified | none (safety defect, 034) |
 | A nested token verified with `SubmodVerifier` is decoded with `cose.RecommendedDecodeLimits` and the new `Appraiser.Options`, its `typ` checked, and validated with `CWTValidator` (when set) and, with `ValidateValues`, `Claims.Validate` (037 W4) | `Verify` only: no limits, no claims validation, RFC 9711 numbering regardless | none (safety defect, 034) |
 
-`DecodeClaims` accepts the same values as before. The RFC 9711 value
-rules (nonce 8–64 bytes, UEID form, dbgstat 0–4, profile URI or OID)
-are opt-in: `Claims.Validate()`, or `NewAppraiser()`, which also sets
-`cwt.NewValidator()`. A zero-value `Appraiser{}` behaves as in v0.2.
+`DecodeClaims` accepts the same values as before, apart from the
+shapes listed above that `Encode` would rewrite. The RFC 9711 value
+rules (nonce 8–64 bytes, UEID form, sizes and dependencies, dbgstat
+0–4, profile URI or OID, ...) are applied by `Claims.Validate()`, which
+the recommended entry points run: `VerifyToken`, and `NewAppraiser()`,
+which also sets `cwt.NewValidator()`. A zero-value `Appraiser{}` skips
+them as in v0.2, but fails closed on submodules (032, 037 W3/W4).
 
 New, additive:
 

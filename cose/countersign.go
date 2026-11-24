@@ -31,11 +31,15 @@ type Countersignature struct {
 	Signature   []byte
 }
 
-// CountersignTarget is a message a countersignature can cover: *Sign1,
-// *Sign, *Mac0, *Mac, *Encrypt0 or *Encrypt (RFC 9338 §3.3). The
-// countersignature covers the message's protected bucket, its payload
-// (the ciphertext, for encrypted messages) and, for COSE_Sign1 and the
-// MAC messages, its signature or tag.
+// CountersignTarget is a structure a countersignature can cover (RFC
+// 9338 §2, §3.3): a message, *Sign1, *Sign, *Mac0, *Mac, *Encrypt0 or
+// *Encrypt, or a layer inside one, *Signature (an entry of
+// Sign.Signatures) or *Recipient. The countersignature covers the
+// target's protected bucket and its bstr fields after it: for a message,
+// the payload (the ciphertext, for encrypted messages) and, for
+// COSE_Sign1 and the MAC messages, the signature or tag; for a
+// COSE_Signature, the signature value; for a COSE_recipient, its
+// ciphertext.
 type CountersignTarget interface {
 	countersignLayer() csLayer
 }
@@ -43,33 +47,65 @@ type CountersignTarget interface {
 // csLayer is the part of a target the Countersign_structure covers.
 type csLayer struct {
 	prot, unprot *Headers
-	payload      []byte
+	payload      []byte   // the target's second bstr field
 	other        [][]byte // bstr fields after the second (RFC 9338 §3.3)
 	finished     bool     // the target's own signature or tag is present
+	detachable   bool     // payload is message content that may be detached
 }
 
 func (m *Sign1) countersignLayer() csLayer {
-	return csLayer{&m.Protected, &m.Unprotected, m.Payload, [][]byte{m.Signature}, len(m.Signature) > 0}
+	return csLayer{&m.Protected, &m.Unprotected, m.Payload, [][]byte{m.Signature}, len(m.Signature) > 0, true}
 }
 
 func (m *Sign) countersignLayer() csLayer {
-	return csLayer{&m.Protected, &m.Unprotected, m.Payload, nil, len(m.Signatures) > 0}
+	return csLayer{&m.Protected, &m.Unprotected, m.Payload, nil, len(m.Signatures) > 0, true}
 }
 
 func (m *Mac0) countersignLayer() csLayer {
-	return csLayer{&m.Protected, &m.Unprotected, m.Payload, [][]byte{m.Tag}, len(m.Tag) > 0}
+	return csLayer{&m.Protected, &m.Unprotected, m.Payload, [][]byte{m.Tag}, len(m.Tag) > 0, true}
 }
 
 func (m *Mac) countersignLayer() csLayer {
-	return csLayer{&m.Protected, &m.Unprotected, m.Payload, [][]byte{m.Tag}, len(m.Tag) > 0}
+	return csLayer{&m.Protected, &m.Unprotected, m.Payload, [][]byte{m.Tag}, len(m.Tag) > 0, true}
 }
 
 func (m *Encrypt0) countersignLayer() csLayer {
-	return csLayer{&m.Protected, &m.Unprotected, m.Ciphertext, nil, true}
+	return csLayer{&m.Protected, &m.Unprotected, m.Ciphertext, nil, true, true}
 }
 
 func (m *Encrypt) countersignLayer() csLayer {
-	return csLayer{&m.Protected, &m.Unprotected, m.Ciphertext, nil, true}
+	return csLayer{&m.Protected, &m.Unprotected, m.Ciphertext, nil, true, true}
+}
+
+// A COSE_Signature, [protected, unprotected, signature], has two bstr
+// fields, so the Countersign_structure's payload is the signature value
+// and other_fields is absent (RFC 9338 §3.3): the countersignature
+// attests to that signature.
+func (s *Signature) countersignLayer() csLayer {
+	return csLayer{&s.Protected, &s.Unprotected, s.Signature, nil, len(s.Signature) > 0, false}
+}
+
+// A COSE_recipient, [protected, unprotected, ciphertext, ? recipients],
+// likewise covers its ciphertext (the encrypted key; empty when it
+// carries none, as for direct recipients).
+func (r *Recipient) countersignLayer() csLayer {
+	ct := r.Ciphertext
+	if ct == nil {
+		ct = []byte{}
+	}
+	return csLayer{&r.Protected, &r.Unprotected, ct, nil, true, false}
+}
+
+// withDetached returns l with payload as the detached content.
+func (l csLayer) withDetached(payload []byte) (csLayer, error) {
+	if !l.detachable {
+		return csLayer{}, fmt.Errorf("%w: a COSE_Signature or COSE_recipient has no detached content to supply", ErrMalformed)
+	}
+	if payload == nil {
+		payload = []byte{}
+	}
+	l.payload = payload
+	return l, nil
 }
 
 // check returns the layer ready for countersigning or verification: the
@@ -81,11 +117,11 @@ func (l csLayer) check() error {
 			return fmt.Errorf("%w: countersignature label %d in the protected bucket (RFC 9338 §2)", ErrMalformed, label)
 		}
 	}
-	if l.payload == nil {
-		return ErrMissingPayload
-	}
 	if !l.finished {
 		return fmt.Errorf("%w: the target has no signature or tag yet; countersign it after it is finished (RFC 9338 §3.3)", ErrMalformed)
+	}
+	if l.payload == nil {
+		return ErrMissingPayload
 	}
 	return nil
 }
@@ -125,7 +161,8 @@ func countersignTBS(enc *corecbor.Encoder, abbreviated bool, body, signProtected
 // §3.1): a COSE_Countersignature carrying the Signer's headers, appended
 // to the target's unprotected label 11. The target must be finished
 // (signed, MACed or encrypted) and its payload or ciphertext attached
-// (ErrMissingPayload otherwise). The Signer's external AAD is used.
+// (ErrMissingPayload otherwise; see CountersignDetached). The Signer's
+// external AAD is used.
 // Countersigning doesn't change the target's own signature or tag.
 func (s *Signer) Countersign(target CountersignTarget) error {
 	return s.CountersignContext(context.Background(), target)
@@ -134,7 +171,23 @@ func (s *Signer) Countersign(target CountersignTarget) error {
 // CountersignContext is Countersign with a context, passed to the key
 // when it implements ContextSigner.
 func (s *Signer) CountersignContext(ctx context.Context, target CountersignTarget) error {
-	l := target.countersignLayer()
+	return s.countersign(ctx, target.countersignLayer())
+}
+
+// CountersignDetached is Countersign for a target whose payload (or
+// ciphertext) is detached: payload is the content the countersignature
+// covers, and the target's own payload field is ignored. A
+// COSE_Signature or COSE_recipient has no detached content
+// (ErrMalformed).
+func (s *Signer) CountersignDetached(target CountersignTarget, payload []byte) error {
+	l, err := target.countersignLayer().withDetached(payload)
+	if err != nil {
+		return err
+	}
+	return s.countersign(context.Background(), l)
+}
+
+func (s *Signer) countersign(ctx context.Context, l csLayer) error {
 	if err := l.check(); err != nil {
 		return err
 	}
@@ -191,7 +244,20 @@ func (s *Signer) Countersign0(target CountersignTarget) error {
 
 // Countersign0Context is Countersign0 with a context.
 func (s *Signer) Countersign0Context(ctx context.Context, target CountersignTarget) error {
-	l := target.countersignLayer()
+	return s.countersign0(ctx, target.countersignLayer())
+}
+
+// Countersign0Detached is Countersign0 for a target whose payload (or
+// ciphertext) is detached; see CountersignDetached.
+func (s *Signer) Countersign0Detached(target CountersignTarget, payload []byte) error {
+	l, err := target.countersignLayer().withDetached(payload)
+	if err != nil {
+		return err
+	}
+	return s.countersign0(context.Background(), l)
+}
+
+func (s *Signer) countersign0(ctx context.Context, l csLayer) error {
 	if err := l.check(); err != nil {
 		return err
 	}
@@ -265,7 +331,23 @@ func parseCountersignature(v corecbor.Value) (Countersignature, error) {
 // target's crit is checked as Verify checks it; a crit can't list
 // labels 11 or 12, which are unprotected (RFC 9338 §2).
 func (v *Verifier) VerifyCountersignature(target CountersignTarget, cs Countersignature) error {
-	l := target.countersignLayer()
+	return v.verifyCountersignature(target.countersignLayer(), cs)
+}
+
+// VerifyCountersignatureDetached is VerifyCountersignature for a target
+// whose payload (or ciphertext) is detached: payload is the content the
+// countersignature covers, and the target's own payload field is
+// ignored. A COSE_Signature or COSE_recipient has no detached content
+// (ErrMalformed).
+func (v *Verifier) VerifyCountersignatureDetached(target CountersignTarget, cs Countersignature, payload []byte) error {
+	l, err := target.countersignLayer().withDetached(payload)
+	if err != nil {
+		return err
+	}
+	return v.verifyCountersignature(l, cs)
+}
+
+func (v *Verifier) verifyCountersignature(l csLayer, cs Countersignature) error {
 	if err := l.check(); err != nil {
 		return err
 	}
@@ -296,7 +378,21 @@ func (v *Verifier) VerifyCountersignature(target CountersignTarget, cs Countersi
 // the one v's key implies; for an RSA key, WithAllowedAlgorithms must
 // list exactly one. A target without label 12 is ErrVerification.
 func (v *Verifier) VerifyCountersignature0(target CountersignTarget) error {
-	l := target.countersignLayer()
+	return v.verifyCountersignature0(target.countersignLayer())
+}
+
+// VerifyCountersignature0Detached is VerifyCountersignature0 for a
+// target whose payload (or ciphertext) is detached; see
+// VerifyCountersignatureDetached.
+func (v *Verifier) VerifyCountersignature0Detached(target CountersignTarget, payload []byte) error {
+	l, err := target.countersignLayer().withDetached(payload)
+	if err != nil {
+		return err
+	}
+	return v.verifyCountersignature0(l)
+}
+
+func (v *Verifier) verifyCountersignature0(l csLayer) error {
 	if err := l.check(); err != nil {
 		return err
 	}

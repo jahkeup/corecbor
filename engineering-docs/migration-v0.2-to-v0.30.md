@@ -228,6 +228,8 @@ goroutine (for example from a `sync.Pool`).
 | `UnmarshalEncrypt`/`UnmarshalMac` reject an empty recipients array and `UnmarshalSign` an empty signatures array with `ErrMalformed` (RFC 9052 §4.1, §5.1, §6.1: `[+ …]`) (037 S19) | accepted; nothing could decrypt or verify it | none |
 | `crit` may list label 7, the RFC 8152 counter signature, which RFC 9052 §3.1 says new implementations must understand. It is passed through, not verified (it is the RFC 8152 V1 form); labels 11 and 12 stay critical, since crit can only list protected labels and RFC 9338 countersignatures are unprotected (037 S20) | `ErrCriticalHeader` | n/a (newly accepted) |
 | RFC 9338 V2 countersignatures (new, additive): `Signer.Countersign`/`CountersignContext` append a full countersignature to label 11, `Signer.Countersign0`/`Countersign0Context` set the abbreviated one in label 12; `Countersignatures` parses label 11; `Verifier.VerifyCountersignature` and `VerifyCountersignature0` verify them. Targets: `*Sign1`, `*Sign`, `*Mac0`, `*Mac`, `*Encrypt0`, `*Encrypt` (`CountersignTarget`); `Countersignature`, `HeaderCountersignature` (11), `HeaderCountersignature0` (12). The RFC 9338 Appendix A vectors verify (037 S20) | not implemented | n/a (additive) |
+| Countersignatures on a `COSE_Signature` (`*Signature`, an entry of `Sign.Signatures`) and a `COSE_recipient` (`*Recipient`), which RFC 9338 §2 allows; per §3.3 they cover the layer's protected bucket and its second bstr field (the signature value, the recipient ciphertext) (037 S20) | not implemented | n/a (additive) |
+| Detached content: `Signer.CountersignDetached`, `Countersign0Detached`, `Verifier.VerifyCountersignatureDetached`, `VerifyCountersignature0Detached` take the detached payload or ciphertext; the non-`Detached` forms return `ErrMissingPayload` for a detached target (037 S20) | not implemented | n/a (additive) |
 | New `AllowECDSACurveHashMismatch()` lets a Verifier accept a protected ES256/ES384/ES512 with a key on another of P-256/P-384/P-521, which RFC 9053 §2.1 permits (it only suggests the pairing). Default unchanged: the pairing is required (037 S21) | no way to verify such senders | n/a (additive) |
 
 New in 037 (rows above): `ErrLimitExceeded`; `DecodeLimits.MaxSignatures`,
@@ -237,7 +239,10 @@ New in 037 (rows above): `ErrLimitExceeded`; `DecodeLimits.MaxSignatures`,
 `CountersignTarget`, `HeaderCountersignature`, `HeaderCountersignature0`,
 `Signer.Countersign`, `CountersignContext`, `Countersign0`,
 `Countersign0Context`, `Countersignatures`, `Verifier.VerifyCountersignature`,
-`VerifyCountersignature0`); the stricter opt-ins `RequireProtectedAlgorithm`,
+`VerifyCountersignature0`, and the `CountersignDetached`,
+`Countersign0Detached`, `VerifyCountersignatureDetached`,
+`VerifyCountersignature0Detached` forms; `*Signature` and `*Recipient`
+are targets too); the stricter opt-ins `RequireProtectedAlgorithm`,
 `RequireMACProtectedAlgorithm`, `RequireEncryptProtectedAlgorithm`; and the permissive
 opt-ins `InsecureAllowShortMACKeys`, `PBES2Key.InsecureAllowWeakParams`,
 `AllowProtectedRecipientHeaders`, `AllowMACProtectedRecipientHeaders`,

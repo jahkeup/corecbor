@@ -30,18 +30,27 @@ func FuzzCountersign(f *testing.F) {
 		}
 		if m, err := UnmarshalSign(data); err == nil {
 			targets = append(targets, m)
+			for i := range m.Signatures {
+				targets = append(targets, &m.Signatures[i])
+			}
 		}
 		if m, err := UnmarshalMac0(data); err == nil {
 			targets = append(targets, m)
 		}
 		if m, err := UnmarshalMac(data); err == nil {
 			targets = append(targets, m)
+			for i := range m.Recipients {
+				targets = append(targets, &m.Recipients[i])
+			}
 		}
 		if m, err := UnmarshalEncrypt0(data); err == nil {
 			targets = append(targets, m)
 		}
 		if m, err := UnmarshalEncrypt(data); err == nil {
 			targets = append(targets, m)
+			for i := range m.Recipients {
+				targets = append(targets, &m.Recipients[i])
+			}
 		}
 		for _, tg := range targets {
 			css, err := Countersignatures(tg)
@@ -51,8 +60,10 @@ func FuzzCountersign(f *testing.F) {
 			for _, v := range verifiers {
 				for _, cs := range css {
 					_ = v.VerifyCountersignature(tg, cs)
+					_ = v.VerifyCountersignatureDetached(tg, cs, data)
 				}
 				_ = v.VerifyCountersignature0(tg)
+				_ = v.VerifyCountersignature0Detached(tg, nil)
 			}
 		}
 	})

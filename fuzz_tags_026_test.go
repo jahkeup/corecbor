@@ -37,6 +37,7 @@ func FuzzTagHelpersNeverPanic(f *testing.F) {
 		"d903eaa201012239" + "01f3",
 		"d9d9f8da6374021243424f52",
 		"d81847a2616102616201",
+		"d842480000000100000002", "d8464401000000", "d856480000000000000000",
 	} {
 		b, _ := hex.DecodeString(h)
 		f.Add(b)
@@ -48,6 +49,21 @@ func FuzzTagHelpersNeverPanic(f *testing.F) {
 			return
 		}
 		walk026(v, 0, func(n Value) {
+			// RFC 8746 typed arrays (037 C18): the encoded bytes round-trip.
+			if a, err := AsTypedArray[uint32](n); err == nil {
+				enc := TypedArrayTo(a)
+				if n.TagID() == 70 {
+					enc = TypedArrayToLE(a)
+				}
+				if !enc.Equal(n) {
+					t.Fatalf("typed array round trip: %v -> %v", n, enc)
+				}
+			}
+			if a, err := AsTypedArray[float64](n); err == nil {
+				if back, err := AsTypedArray[float64](TypedArrayToLE(a)); err != nil || len(back) != len(a) {
+					t.Fatalf("float64 typed array round trip: %v, %v", back, err)
+				}
+			}
 			if u, err := AsUUID(n); err == nil {
 				if back, err := AsUUID(UUIDTo(u)); err != nil || back != u {
 					t.Fatalf("UUID round trip: %x -> %x, %v", u, back, err)

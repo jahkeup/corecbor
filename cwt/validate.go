@@ -4,16 +4,22 @@
 package cwt
 
 import (
+	"fmt"
 	"slices"
 	"time"
 )
 
 // Validator checks a ClaimsSet's time and audience claims. The zero
-// value keeps its v0.2.2 behavior (exp optional, iat unchecked); use
-// NewValidator for current-standards defaults. Fields added after
-// v0.2.2 change nothing at their zero value.
+// value keeps its v0.2.2 behavior (exp optional, iat unchecked) except
+// for the audience check: a token carrying aud is rejected unless the
+// Validator accepts one of its audiences (RFC 7519 §4.1.3; v0.2.2
+// accepted any aud when Audience was unset, a fail-open defect fixed
+// under proposal 034). Use NewValidator for current-standards defaults.
+// Other fields added after v0.2.2 change nothing at their zero value.
 type Validator struct {
-	// Audience, when set, must be the aud claim or one of its elements.
+	// Audience, when set, is an audience this processor identifies
+	// with: the token's aud claim must be it or contain it. Audiences
+	// adds more.
 	Audience string
 	// Leeway is the clock-skew tolerance applied to exp, nbf and iat. It
 	// must not be negative; Validate returns ErrInvalidValidator if it is.
@@ -32,6 +38,19 @@ type Validator struct {
 	// RejectFutureIssuedAt rejects an iat later than now plus Leeway with
 	// ErrIssuedInFuture.
 	RejectFutureIssuedAt bool
+
+	// Audiences lists further audiences this processor identifies with,
+	// besides Audience. When either is set, the token must carry an aud
+	// that is, or contains, one of them; when neither is, a token
+	// carrying any aud is rejected (RFC 7519 §4.1.3). Failures are a
+	// *ClaimError for aud wrapping ErrAudienceMismatch.
+	Audiences []string
+
+	// IgnoreAudience skips the aud check, for applications that don't
+	// use aud: a token's aud is then not evaluated at all. Set it only
+	// when audience restriction is enforced some other way. Combining
+	// it with Audience or Audiences is ErrInvalidValidator.
+	IgnoreAudience bool
 }
 
 // NewValidator returns a Validator with current-standards defaults:
@@ -58,6 +77,9 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 		// A negative tolerance would silently reject tokens that are
 		// still within their validity window.
 		return ErrInvalidValidator
+	}
+	if v.IgnoreAudience && (v.Audience != "" || len(v.Audiences) > 0) {
+		return fmt.Errorf("%w: IgnoreAudience with Audience or Audiences set", ErrInvalidValidator)
 	}
 	if claims == nil {
 		return ErrMalformedClaims
@@ -104,9 +126,30 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 		return ErrIssuerMismatch
 	}
 
-	if v.Audience != "" && !claims.ContainsAudience(v.Audience) {
-		return ErrAudienceMismatch
-	}
+	return v.validateAudience(claims)
+}
 
-	return nil
+// validateAudience applies RFC 7519 §4.1.3: a token whose aud the
+// processor doesn't identify with is rejected.
+func (v *Validator) validateAudience(claims *ClaimsSet) error {
+	if v.IgnoreAudience {
+		return nil
+	}
+	if v.Audience == "" && len(v.Audiences) == 0 {
+		if claims.Audience != "" || len(claims.Audiences) > 0 {
+			return &ClaimError{Key: IntKey(ClaimAud), Err: fmt.Errorf(
+				"%w: token carries aud but the validator accepts no audience (set Audience or Audiences, or IgnoreAudience)",
+				ErrAudienceMismatch)}
+		}
+		return nil
+	}
+	if v.Audience != "" && claims.ContainsAudience(v.Audience) {
+		return nil
+	}
+	for _, a := range v.Audiences {
+		if claims.ContainsAudience(a) {
+			return nil
+		}
+	}
+	return &ClaimError{Key: IntKey(ClaimAud), Err: ErrAudienceMismatch}
 }

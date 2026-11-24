@@ -108,6 +108,7 @@ func TestVerify_RFC8392_A3(t *testing.T) {
 			}
 			v := cwt.NewValidator()
 			v.Now = func() time.Time { return rfc8392Now }
+			v.Audience = "coap://light.example.com" // RFC 7519 §4.1.3
 			tok, err := cwt.VerifyToken(context.Background(), data, cwt.VerifyOptions{
 				Keys: cose.KeySetResolver(cose.KeySet{key}), Validator: v,
 			})
@@ -146,6 +147,7 @@ func TestVerifyMAC_RFC8392_A4(t *testing.T) {
 
 	v := cwt.NewValidator()
 	v.Now = func() time.Time { return rfc8392Now }
+	v.Audience = "coap://light.example.com"
 	// HMAC 256/64 must be allowed explicitly.
 	if _, err := cwt.VerifyMACToken(context.Background(), data, key, cwt.VerifyOptions{Validator: v}); !errors.Is(err, cose.ErrAlgorithmMismatch) {
 		t.Fatalf("default algorithms: %v, want ErrAlgorithmMismatch", err)

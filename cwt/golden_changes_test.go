@@ -23,4 +23,7 @@ var goldenChanges = map[string]string{
 	"cwt/decode/negint-key-aliases-iss": "proposal 031: an integer key outside int64 no longer wraps onto iss; it is a private claim",
 	"cwt/validate/exp-equals-now":       "proposal 031: a token is rejected on or after exp (RFC 8392 §3.1.4, RFC 7519 §4.1.4)",
 	"cwt/sign/verify-tag61-wrapped":     "proposal 031: an outer CWT tag 61 is accepted (RFC 8392 §6)",
+
+	// Proposal 037 W1 (safety defect, 034): fail-open audience check.
+	"cwt/validate/audience-unset-token-has-aud": "proposal 037 W1: a token carrying aud is rejected unless the Validator accepts one of its audiences (RFC 7519 §4.1.3); IgnoreAudience opts out",
 }

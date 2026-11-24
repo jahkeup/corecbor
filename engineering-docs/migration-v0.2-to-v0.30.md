@@ -225,6 +225,7 @@ goroutine (for example from a `sync.Pool`).
 | `EncryptMulti`/`DecryptMulti` with `WithDraftHPKE27()` refuse the deprecated `HPKEKey` (`ErrUnsupportedAlgorithm`): it labels its recipients alg 35, which draft-27 assigns to HPKE-0. Without the selector `HPKEKey` works as documented (037 S18) | both meanings of 35 could meet in one call | none (use `HPKERecipient` with the draft) |
 | `UnmarshalEncrypt`/`UnmarshalMac` reject an empty recipients array and `UnmarshalSign` an empty signatures array with `ErrMalformed` (RFC 9052 §4.1, §5.1, §6.1: `[+ …]`) (037 S19) | accepted; nothing could decrypt or verify it | none |
 | `crit` may list label 7, the RFC 8152 counter signature, which RFC 9052 §3.1 says new implementations must understand. It is passed through, not verified; countersignatures (RFC 9338, labels 11 and 12) are not implemented and those labels stay critical (037 S20) | `ErrCriticalHeader` | n/a (newly accepted) |
+| New `AllowECDSACurveHashMismatch()` lets a Verifier accept a protected ES256/ES384/ES512 with a key on another of P-256/P-384/P-521, which RFC 9053 §2.1 permits (it only suggests the pairing). Default unchanged: the pairing is required (037 S21) | no way to verify such senders | n/a (additive) |
 
 New in 028 (additive): `WithProtectedHeaders`, `WithUnprotectedHeaders`,
 `Signer.Sign1`/`Sign1Context`, `SignContext`, `SignDetached`,

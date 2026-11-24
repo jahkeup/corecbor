@@ -420,6 +420,24 @@ type Verifier struct {
 	external []byte
 	enc      *corecbor.Encoder
 	policy   headerPolicy
+	anyCurve bool // AllowECDSACurveHashMismatch
+}
+
+// AllowECDSACurveHashMismatch lets an ECDSA Verifier accept ES256,
+// ES384 or ES512 with a key on another of P-256, P-384 and P-521 (for
+// example ES256, SHA-256, with a P-384 key). RFC 9053 §2.1 only
+// suggests pairing each hash with its curve, and by default the
+// Verifier requires the pairing; use this for senders that don't
+// follow it. The alg must be protected. The fully-specified
+// ESP256/384/512 (RFC 9864) name the curve and are unaffected, and
+// WithAllowedAlgorithms still applies.
+func AllowECDSACurveHashMismatch() VerifierOption {
+	return func(v *Verifier) { v.anyCurve = true }
+}
+
+// isPolymorphicECDSA reports whether a is ES256, ES384 or ES512.
+func isPolymorphicECDSA(a Algorithm) bool {
+	return a == AlgES256 || a == AlgES384 || a == AlgES512
 }
 
 func NewVerifier(key crypto.PublicKey, opts ...VerifierOption) (*Verifier, error) {
@@ -496,8 +514,11 @@ func (v *Verifier) checkLayer(prot, unprot *Headers) (Algorithm, error) {
 	// the header's form is the one bound and allow-listed.
 	want := v.alg
 	if !v.policy.legacyAlg {
-		if a, loc, err := headerAlg(prot, unprot); err == nil && loc != algAbsent && sameSignatureFamily(a, v.alg) {
-			want = a
+		if a, loc, err := headerAlg(prot, unprot); err == nil && loc != algAbsent {
+			// A mismatched pairing is taken only from a protected alg.
+			if sameSignatureFamily(a, v.alg) || (v.anyCurve && loc == algProtected && isPolymorphicECDSA(a) && isPolymorphicECDSA(v.alg)) {
+				want = a
+			}
 		}
 	}
 	return want, bindAlg(prot, unprot, want, &v.policy)
@@ -520,11 +541,11 @@ func (v *Verifier) verifyBytes(alg Algorithm, data, sig []byte) error {
 		return nil
 
 	case AlgES256, AlgESP256:
-		return v.ecdsaVerify(data, sig, crypto.SHA256, elliptic.P256())
+		return v.ecdsaVerify(data, sig, crypto.SHA256)
 	case AlgES384, AlgESP384:
-		return v.ecdsaVerify(data, sig, crypto.SHA384, elliptic.P384())
+		return v.ecdsaVerify(data, sig, crypto.SHA384)
 	case AlgES512, AlgESP512:
-		return v.ecdsaVerify(data, sig, crypto.SHA512, elliptic.P521())
+		return v.ecdsaVerify(data, sig, crypto.SHA512)
 
 	default:
 		return ErrUnsupportedAlgorithm
@@ -555,7 +576,7 @@ func (v *Verifier) rsaVerify(alg Algorithm, data, sig []byte) error {
 	return nil
 }
 
-func (v *Verifier) ecdsaVerify(data, sig []byte, hash crypto.Hash, curve elliptic.Curve) error {
+func (v *Verifier) ecdsaVerify(data, sig []byte, hash crypto.Hash) error {
 	ecKey, ok := v.key.(*ecdsa.PublicKey)
 	if !ok {
 		return fmt.Errorf("%w: expected *ecdsa.PublicKey", ErrInvalidKey)
@@ -564,7 +585,9 @@ func (v *Verifier) ecdsaVerify(data, sig []byte, hash crypto.Hash, curve ellipti
 	if err != nil {
 		return err
 	}
-	derSig, err := rawToDerECDSA(sig, curve)
+	// The signature's size follows the key's curve; it differs from the
+	// algorithm's only under AllowECDSACurveHashMismatch.
+	derSig, err := rawToDerECDSA(sig, ecKey.Curve)
 	if err != nil {
 		return ErrVerification
 	}

@@ -591,6 +591,82 @@ func TestVerifyToken_COSESign037(t *testing.T) {
 	}
 }
 
+// W18 (remainder): COSE_Mac and COSE_Encrypt CWTs with several
+// recipients, through VerifyOptions.Recipient.
+func TestMultiRecipient037(t *testing.T) {
+	ctx := context.Background()
+	kek := &cose.AESKWKey{Key: bytes.Repeat([]byte{0x21}, 16)}
+	otherKEK := &cose.AESKWKey{Key: bytes.Repeat([]byte{0x22}, 16)}
+	payload, _ := validClaims().Encode()
+	opts := func(r cose.KeyDeriver) cwt.VerifyOptions {
+		return cwt.VerifyOptions{Validator: fixedNow(cwt.NewValidator(), t0), Recipient: r}
+	}
+
+	mac, err := cose.ComputeMACMulti(payload, macKey, cose.AlgHMAC256, []cose.KeyDeriver{otherKEK, kek})
+	if err != nil {
+		t.Fatal(err)
+	}
+	macked, err := cose.MarshalMac(mac)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, in := range [][]byte{macked, append([]byte{0xd8, 0x3d}, macked...)} {
+		if tok, err := cwt.VerifyMACToken(ctx, in, nil, opts(kek)); err != nil || tok.Claims.Issuer != "as" {
+			t.Errorf("COSE_Mac, second recipient: %+v, %v", tok, err)
+		}
+	}
+	if _, err := cwt.VerifyMACToken(ctx, macked, macKey, opts(nil)); !errors.Is(err, cwt.ErrKeyResolution) {
+		t.Errorf("COSE_Mac without Recipient: %v, want ErrKeyResolution", err)
+	}
+	stranger := &cose.AESKWKey{Key: bytes.Repeat([]byte{0x23}, 16)}
+	if _, err := cwt.VerifyMACToken(ctx, macked, nil, opts(stranger)); err == nil {
+		t.Error("COSE_Mac with an unrelated KEK verified")
+	}
+	only384 := opts(kek)
+	only384.AllowedAlgorithms = []cose.Algorithm{cose.AlgHMAC384}
+	if _, err := cwt.VerifyMACToken(ctx, macked, nil, only384); err == nil {
+		t.Error("COSE_Mac with a disallowed algorithm verified")
+	}
+	trunc, _ := cose.ComputeMACMulti(payload, macKey, cose.AlgHMAC256_64, []cose.KeyDeriver{kek})
+	truncB, _ := cose.MarshalMac(trunc)
+	if _, err := cwt.VerifyMACToken(ctx, truncB, nil, opts(kek)); err == nil {
+		t.Error("COSE_Mac with HMAC 256/64 verified by default")
+	}
+
+	enc, err := cose.EncryptMulti(payload, cose.AlgA128GCM, []cose.KeyDeriver{kek})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, _ := cose.MarshalEncrypt(enc)
+	if tok, err := cwt.OpenToken(ctx, sealed, nil, opts(kek)); err != nil || tok.Claims.Issuer != "as" {
+		t.Errorf("COSE_Encrypt: %+v, %v", tok, err)
+	}
+	if _, err := cwt.OpenToken(ctx, sealed, aesKey, opts(nil)); !errors.Is(err, cwt.ErrKeyResolution) {
+		t.Errorf("COSE_Encrypt without Recipient: %v", err)
+	}
+	if _, err := cwt.OpenToken(ctx, sealed, nil, opts(stranger)); err == nil {
+		t.Error("COSE_Encrypt with an unrelated KEK opened")
+	}
+	onlyA256 := opts(kek)
+	onlyA256.AllowedAlgorithms = []cose.Algorithm{cose.AlgA256GCM}
+	if _, err := cwt.OpenToken(ctx, sealed, nil, onlyA256); err == nil {
+		t.Error("COSE_Encrypt with a disallowed algorithm opened")
+	}
+
+	// A symmetric cnf key may travel in the encrypted form only.
+	sym, _ := symmetricCnf(t).Encode()
+	encSym, _ := cose.EncryptMulti(sym, cose.AlgA128GCM, []cose.KeyDeriver{kek})
+	encSymB, _ := cose.MarshalEncrypt(encSym)
+	if _, err := cwt.OpenToken(ctx, encSymB, nil, opts(kek)); err != nil {
+		t.Errorf("COSE_Encrypt with a symmetric cnf: %v", err)
+	}
+	macSym, _ := cose.ComputeMACMulti(sym, macKey, cose.AlgHMAC256, []cose.KeyDeriver{kek})
+	macSymB, _ := cose.MarshalMac(macSym)
+	if _, err := cwt.VerifyMACToken(ctx, macSymB, nil, opts(kek)); !isSymmetricCnfErr(err) {
+		t.Errorf("COSE_Mac with a symmetric cnf: %v", err)
+	}
+}
+
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
 // package doesn't understand, carries no proof-of-possession key.
 func TestValidator_RequireConfirmation037(t *testing.T) {

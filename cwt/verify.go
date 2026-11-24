@@ -63,6 +63,15 @@ type VerifyOptions struct {
 	// "application/eat+cwt" and 263.
 	Types []any
 
+	// Recipient recovers the content key of a COSE_Mac (VerifyMACToken)
+	// or COSE_Encrypt (OpenToken) CWT with several recipients, for
+	// example a cose.AESKWKey or a key from cose.Key.KeyDeriver. Each
+	// recipient is tried in turn; the token is rejected unless one
+	// yields a key that verifies or decrypts it. The content algorithm
+	// must still be in AllowedAlgorithms (by default the full-length
+	// HMACs, or AES-GCM). Unused for single-recipient messages.
+	Recipient cose.KeyDeriver
+
 	// RequireAllSignatures, for a COSE_Sign CWT (several signers),
 	// requires every signature to verify with a resolved key. Without
 	// it one verifying signature suffices (cose.RequireAny), as RFC
@@ -231,6 +240,10 @@ func verifySignMulti(ctx context.Context, data []byte, tagged bool, opts VerifyO
 // verifies the MAC with key and validates the claims. The algorithm is
 // the protected alg, which must be in opts.AllowedAlgorithms (by
 // default the full-length HMACs).
+//
+// A tagged COSE_Mac (tag 97, several recipients) is verified with
+// opts.Recipient instead of key; without a Recipient it fails with
+// ErrKeyResolution. The MAC algorithm is held to the same allow-list.
 func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions) (*Token, error) {
 	inner, tagged, err := unwrapCWT(data)
 	if err != nil {
@@ -238,6 +251,9 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 	}
 	if opts.RequireTag && !tagged {
 		return nil, fmt.Errorf("%w: CWT tag 61 required", ErrMalformedClaims)
+	}
+	if hasTag(inner, corecbor.TagCOSEMac) {
+		return verifyMACMulti(ctx, inner, tagged, opts)
 	}
 	msg, err := cose.UnmarshalMac0With(inner, cose.RecommendedDecodeLimits)
 	if err != nil {
@@ -267,6 +283,11 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 // decrypts with key, taking the IV from the IV header (label 5, as Seal
 // writes it), and validates the claims. The algorithm is the protected
 // alg, which must be in opts.AllowedAlgorithms (by default AES-GCM).
+//
+// A tagged COSE_Encrypt (tag 96, several recipients) is decrypted with
+// opts.Recipient instead of key; without a Recipient it fails with
+// ErrKeyResolution. The content algorithm is held to the same
+// allow-list.
 func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions) (*Token, error) {
 	inner, tagged, err := unwrapCWT(data)
 	if err != nil {
@@ -274,6 +295,9 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 	}
 	if opts.RequireTag && !tagged {
 		return nil, fmt.Errorf("%w: CWT tag 61 required", ErrMalformedClaims)
+	}
+	if hasTag(inner, corecbor.TagCOSEEncrypt) {
+		return openMulti(ctx, inner, tagged, opts)
 	}
 	msg, err := cose.UnmarshalEncrypt0With(inner, cose.RecommendedDecodeLimits)
 	if err != nil {
@@ -293,6 +317,88 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 		return nil, err
 	}
 	plaintext, err := cose.Encrypt0Open(msg, key, cose.WithEncryptAlgorithms(alg))
+	if err != nil {
+		return nil, err
+	}
+	claims, err := decodeNotNested(plaintext, opts, true)
+	if err != nil {
+		return nil, err
+	}
+	return &Token{Protected: &msg.Protected, Unprotected: &msg.Unprotected, Claims: claims, Tagged: tagged}, nil
+}
+
+func hasTag(b []byte, tag uint64) bool {
+	h := wire.ParseHead(b)
+	return h.N > 0 && h.Major == wire.MajorTag && h.Arg == tag
+}
+
+// eachRecipient calls try with each recipient index until one succeeds.
+// The recipients are tried in order; the error of the last attempt is
+// returned when none succeeds, so the result fails closed.
+func eachRecipient(ctx context.Context, n int, opts VerifyOptions, try func(i int) error) error {
+	if opts.Recipient == nil {
+		return fmt.Errorf("%w: a COSE message with recipients needs VerifyOptions.Recipient", ErrKeyResolution)
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: no recipients", ErrMalformedClaims)
+	}
+	var last error
+	for i := range n {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if last = try(i); last == nil {
+			return nil
+		}
+	}
+	return last
+}
+
+// verifyMACMulti verifies a tagged COSE_Mac CWT with opts.Recipient.
+func verifyMACMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOptions) (*Token, error) {
+	msg, err := cose.UnmarshalMacWith(data, cose.RecommendedDecodeLimits)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
+	}
+	if err := checkNotNested(&msg.Protected, &msg.Unprotected, opts); err != nil {
+		return nil, err
+	}
+	allowed := opts.AllowedAlgorithms
+	if len(allowed) == 0 {
+		allowed = defaultMACAlgs
+	}
+	err = eachRecipient(ctx, len(msg.Recipients), opts, func(i int) error {
+		return cose.VerifyMACMulti(msg, opts.Recipient, i, cose.WithMACAlgorithms(allowed...))
+	})
+	if err != nil {
+		return nil, err
+	}
+	claims, err := decodeNotNested(msg.Payload, opts, false)
+	if err != nil {
+		return nil, err
+	}
+	return &Token{Protected: &msg.Protected, Unprotected: &msg.Unprotected, Claims: claims, Tagged: tagged}, nil
+}
+
+// openMulti decrypts a tagged COSE_Encrypt CWT with opts.Recipient.
+func openMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOptions) (*Token, error) {
+	msg, err := cose.UnmarshalEncryptWith(data, cose.RecommendedDecodeLimits)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
+	}
+	if err := checkNotNested(&msg.Protected, &msg.Unprotected, opts); err != nil {
+		return nil, err
+	}
+	allowed := opts.AllowedAlgorithms
+	if len(allowed) == 0 {
+		allowed = defaultEncryptAlgs
+	}
+	var plaintext []byte
+	err = eachRecipient(ctx, len(msg.Recipients), opts, func(i int) error {
+		pt, err := cose.DecryptMulti(msg, opts.Recipient, i, cose.WithEncryptAlgorithms(allowed...))
+		plaintext = pt
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}

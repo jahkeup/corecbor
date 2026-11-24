@@ -505,6 +505,12 @@ New, additive:
   `ContentFormatEAT*`).
 - `eat/psa`: RFC 9783 PSA claims (`FromEAT`, `ToEAT`, lifecycle
   constants); `psa.SoftwareComponent` is `eat.SWComponent`.
+  `(*psa.Claims).Validate` (037 W26) checks the profile's mandatory
+  claims and value rules (one 32/48/64-byte nonce, client ID, 33-byte
+  RAND instance ID, 32-byte implementation ID, lifecycle, PSA
+  `eat_profile`, boot seed and certification reference forms,
+  software-component hash sizes), with `psa.ErrInvalidPSA` in a
+  `*cwt.ClaimError`.
 - New sentinels: `ErrSubmodUnverified`, `ErrInvalidUEID`,
   `ErrInvalidNonce`, `ErrDebugStatus`, `ErrUnknownDebugStatus`,
   `ErrInvalidProfile`, `ErrClaimNumbering`.

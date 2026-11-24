@@ -229,7 +229,12 @@ func setFloat(f float64, kind cbor.Kind, target reflect.Value) error {
 	switch target.Kind() {
 	case reflect.Float32:
 		if target.OverflowFloat(f) {
-			return overflowErr(kind, target.Type(), "float %g into float32", f)
+			// A float overflow, not an integer one: keep ErrOverflow but
+			// not its "integer overflow" text (037 C22).
+			return &UnmarshalTypeError{
+				CBORKind: kind, GoType: target.Type(), Err: ErrOverflow,
+				msg: fmt.Sprintf("cbor: float %g overflows %s", f, target.Type()),
+			}
 		}
 		target.SetFloat(f)
 		return nil

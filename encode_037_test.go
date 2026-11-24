@@ -12,6 +12,19 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 )
 
+// 037 C22: a float too large for a float32 target says so; it is not an
+// integer overflow, though it still wraps ErrOverflow.
+func TestC22Float32OverflowMessage(t *testing.T) {
+	var f float32
+	err := Unmarshal([]byte{0xfb, 0x7e, 0x37, 0xe4, 0x3c, 0x88, 0x00, 0x75, 0x9c}, &f) // 1e300
+	if !errors.Is(err, ErrOverflow) {
+		t.Fatalf("err = %v, want ErrOverflow", err)
+	}
+	if msg := err.Error(); msg != "cbor: float 1e+300 overflows float32" {
+		t.Fatalf("message %q", msg)
+	}
+}
+
 // 037 C13: StreamEncoder.WriteFloat32/WriteFloat64 write what Encode
 // writes for the same float in every mode.
 func TestC13StreamFloatsFollowMode(t *testing.T) {

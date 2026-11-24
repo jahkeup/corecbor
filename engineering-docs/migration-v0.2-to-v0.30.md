@@ -135,6 +135,9 @@ v0.2.2 and under the new version and diffs the output.
   `Field`). Messages are unchanged, and every existing sentinel still
   matches with `errors.Is`.
 - Reflection type errors now wrap `ErrTypeMismatch` (023).
+- A float too large for a `float32` target reads
+  `cbor: float 1e+300 overflows float32` and still wraps `ErrOverflow`
+  (037 C22); it used to call itself an integer overflow.
 - New sentinels: `ErrTimeRange`, `ErrNotDeterministic`,
   `ErrReservedSimple`, `ErrUnexpectedBreak`, `ErrInvalidKind`,
   `ErrInvalidOption`, `ErrNotPreferred`, `ErrInvalidChunk` (037), and for streams

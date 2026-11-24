@@ -35,7 +35,15 @@ type ErrorMessage struct {
 	// compat is an extra sentinel the error also matches, so callers
 	// that checked v0.2's error for the same condition keep working.
 	compat error
+	// received marks an error message the peer sent; it is never
+	// answered with another (RFC 9528 §6).
+	received bool
 }
+
+// errBadErrorMessage marks a received error message that breaks the
+// field rules of RFC 9528 §6. The session aborts; no error message is
+// sent in reply.
+var errBadErrorMessage = errors.New("edhoc: invalid error message")
 
 func (e *ErrorMessage) Error() string {
 	switch e.Code {
@@ -64,6 +72,8 @@ func (e *ErrorMessage) Unwrap() []error {
 // (ERR_CODE, ERR_INFO).
 func (e *ErrorMessage) MarshalCBOR() ([]byte, error) {
 	switch e.Code {
+	case 0:
+		return nil, fmt.Errorf("%w: ERR_CODE 0 is reserved for success and is never sent (RFC 9528 §6.1)", ErrMessageFormat)
 	case ErrCodeWrongSelectedSuite:
 		if len(e.SuitesR) == 0 {
 			return nil, fmt.Errorf("%w: SUITES_R is empty", ErrMessageFormat)
@@ -115,31 +125,52 @@ func decodeSuitesValue(v cbor.Value) ([]CipherSuite, error) {
 	return []CipherSuite{CipherSuite(n)}, nil
 }
 
-// parseErrorMessage decodes an error message (ERR_CODE, ? ERR_INFO).
+// parseErrorMessage decodes a received error message (ERR_CODE,
+// ERR_INFO) and checks the field rules of RFC 9528 §6: ERR_INFO is
+// present; ERR_CODE 0 is never sent; ERR_CODE 1 carries a text string,
+// 2 SUITES_R, 3 true. Violations wrap ErrMessageFormat.
 func parseErrorMessage(data []byte) (*ErrorMessage, error) {
+	bad := func(format string, args ...any) error {
+		return fmt.Errorf("%w: %w: %s", ErrMessageFormat, errBadErrorMessage, fmt.Sprintf(format, args...))
+	}
 	r := newSeqReader(data)
 	code, err := r.nextInt("ERR_CODE")
 	if err != nil {
-		return nil, err
+		return nil, bad("%v", err)
 	}
-	e := &ErrorMessage{Code: code}
+	if code == 0 {
+		return nil, bad("ERR_CODE 0 (success) received")
+	}
 	if !r.more() {
-		return e, nil
+		return nil, bad("ERR_INFO missing")
 	}
 	info, _, err := r.next()
 	if err != nil {
-		return nil, err
+		return nil, bad("%v", err)
 	}
-	switch {
-	case code == ErrCodeWrongSelectedSuite:
-		if e.SuitesR, err = decodeSuitesValue(info); err != nil {
-			return nil, err
+	e := &ErrorMessage{Code: code, received: true}
+	switch code {
+	case ErrCodeUnspecified:
+		if info.Kind != cbor.KindText {
+			return nil, bad("ERR_CODE 1 needs a text ERR_INFO")
 		}
-	case info.Kind == cbor.KindText:
 		e.Info = info.Str
+	case ErrCodeWrongSelectedSuite:
+		if e.SuitesR, err = decodeSuitesValue(info); err != nil {
+			return nil, bad("SUITES_R: %v", err)
+		}
+	case ErrCodeUnknownCredential:
+		if info.Kind != cbor.KindBool || !info.BoolVal() {
+			return nil, bad("ERR_CODE 3 needs ERR_INFO true")
+		}
+	default:
+		// Codes registered later carry ERR_INFO of their own type.
+		if info.Kind == cbor.KindText {
+			e.Info = info.Str
+		}
 	}
 	if r.more() {
-		return nil, fmt.Errorf("%w: trailing bytes after error message", ErrMessageFormat)
+		return nil, bad("trailing bytes after error message")
 	}
 	return e, nil
 }

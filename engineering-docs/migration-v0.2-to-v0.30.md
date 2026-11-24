@@ -402,6 +402,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | An automatic C_I/C_R (nil `ConnectionID`) avoids the peer's identifier and every identifier held by a live endpoint in the process (released on `Close`, failure or garbage collection), preferring one-byte integers and growing to longer identifiers when those are taken. The new `AllocateConnectionID` hook chooses it instead; callers running many sessions or keeping OSCORE contexts after `Close` must supply one (RFC 9668 §4.1.1–4.1.2) | random among 48 values, avoiding only the peer's | none (safety defect, 034); `AllocateConnectionID` is the caller-owned allocator |
 | Methods on a zero-value or nil `*Initiator`/`*Responder` return `ErrStateViolation` (accessors return nil) | nil pointer panic | none (safety defect, 034) |
 | An error message received in place of message_3 (`ProcessMessage3`) or message_4 (`ProcessMessage4`) is returned as the peer's `*ErrorMessage` (matches `ErrPeerError`) | reported as `ErrMessageFormat` | none (contract defect: RFC 9528 §6) |
+| A received error message must follow RFC 9528 §6: ERR_INFO present, ERR_CODE 0 never sent, ERR_CODE 1 text, 2 SUITES_R, 3 `true`; otherwise `ErrMessageFormat` (no `*ErrorMessage`). `MarshalCBOR` refuses ERR_CODE 0 | missing or mistyped ERR_INFO accepted; ERR_CODE 0 accepted and emitted | none (contract defect: RFC 9528 §6) |
 
 ## eat (032)
 

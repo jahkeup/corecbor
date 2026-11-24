@@ -427,6 +427,47 @@ func TestE7_ErrorInPlaceOfMessage3And4(t *testing.T) {
 	}
 }
 
+// E11: received error messages follow RFC 9528 §6's field rules, and
+// ERR_CODE 0 is never sent.
+func TestE11_ErrorMessageFieldRules(t *testing.T) {
+	for name, raw := range map[string][]byte{
+		"ERR_CODE 0":             {0x00, 0xf5},
+		"ERR_INFO missing":       {0x01},
+		"ERR_CODE 1 not text":    {0x01, 0x05},
+		"ERR_CODE 3 not true":    {0x03, 0xf4},
+		"ERR_CODE 3 missing":     {0x03},
+		"ERR_CODE 2 empty array": {0x02, 0x80},
+	} {
+		ini, _ := pair(t, []byte{1}, []byte{2}, nil)
+		if _, err := ini.CreateMessage1(); err != nil {
+			t.Fatal(err)
+		}
+		_, err := ini.ProcessMessage2(raw)
+		var em *ErrorMessage
+		if errors.As(err, &em) || !errors.Is(err, ErrMessageFormat) {
+			t.Errorf("%s: %v, want ErrMessageFormat and no *ErrorMessage", name, err)
+		}
+	}
+	for name, raw := range map[string][]byte{
+		"ERR_CODE 1":        {0x01, 0x60},
+		"ERR_CODE 3":        {0x03, 0xf5},
+		"unregistered":      {0x18, 0x63, 0x01},
+		"negative ERR_CODE": {0x20, 0x61, 'x'},
+	} {
+		ini, _ := pair(t, []byte{1}, []byte{2}, nil)
+		if _, err := ini.CreateMessage1(); err != nil {
+			t.Fatal(err)
+		}
+		var em *ErrorMessage
+		if _, err := ini.ProcessMessage2(raw); !errors.As(err, &em) {
+			t.Errorf("%s: %v, want *ErrorMessage", name, err)
+		}
+	}
+	if _, err := (&ErrorMessage{Code: 0}).MarshalCBOR(); !errors.Is(err, ErrMessageFormat) {
+		t.Errorf("MarshalCBOR(ERR_CODE 0): %v, want ErrMessageFormat", err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

@@ -407,6 +407,8 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | An ID_CRED map with several parameters, or ones the package doesn't model (kid context, text labels), is accepted: modeled ones fill their fields, the rest go to the new `IDCred.Other`, and the received map is kept in the new `IDCred.Raw` and used byte-for-byte in the transcript (labels need not be sorted, RFC 9528 §3.5.3). `ParseIDCred` accepts the same. A pinned `PeerCredential` matches by kid, x5t or leaf | rejected unless exactly one parameter; the transcript used a re-encoding | none (contract defect: RFC 9528 §3.5.3) |
 | An x5chain holding one certificate in an array is rejected with `ErrMessageFormat` (RFC 9360 §2: a single certificate is a byte string) | accepted, then re-encoded as a byte string in the transcript | none (contract defect: RFC 9360 §2) |
 | A CWT sent with the CWT tag (61) in kcwt, or configured that way in `CWTBytes`, enters the transcript untagged as CRED_x (RFC 9528 §3.5.2); `IDCred.KCWT` keeps the bytes as sent | the tagged bytes were used as CRED_x, so the MAC differed from a conforming peer's | none (contract defect: RFC 9528 §3.5.2) |
+| Received messages (and error messages) must be deterministically encoded CBOR; ID_CRED maps need only preferred serialization (labels unsorted is fine, §3.5.3). Duplicate map keys are always rejected | non-shortest heads and unsorted maps accepted | `AcceptNonDeterministicEncoding` (RFC 9528 §9 RECOMMENDs aborting) |
+| A received C_I, C_R or compact kid that is a one-byte CBOR integer encoding sent as a byte string (`41 01` for `01`) is rejected with `ErrMessageFormat` (RFC 9528 §3.3.2) | accepted, though the docs said such identifiers are sent as integers | `AcceptNonDeterministicEncoding` |
 
 ## eat (032)
 

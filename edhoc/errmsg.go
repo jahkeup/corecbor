@@ -177,11 +177,11 @@ func decodeSuitesValue(v cbor.Value) ([]CipherSuite, error) {
 // ERR_INFO) and checks the field rules of RFC 9528 §6: ERR_INFO is
 // present; ERR_CODE 0 is never sent; ERR_CODE 1 carries a text string,
 // 2 SUITES_R, 3 true. Violations wrap ErrMessageFormat.
-func parseErrorMessage(data []byte) (*ErrorMessage, error) {
+func parseErrorMessage(data []byte, lenient bool) (*ErrorMessage, error) {
 	bad := func(format string, args ...any) error {
 		return fmt.Errorf("%w: %w: %s", ErrMessageFormat, errBadErrorMessage, fmt.Sprintf(format, args...))
 	}
-	r := newSeqReader(data)
+	r := newMessageReader(data, lenient)
 	code, err := r.nextInt("ERR_CODE")
 	if err != nil {
 		return nil, bad("%v", err)

@@ -60,10 +60,13 @@ type session struct {
 	accept    func(EADItem) bool
 
 	ownCID, peerCID []byte
-	allocCID        func(peer ConnectionID) (ConnectionID, error)
-	cidHold         *cidHold          // this session's hold on ownCID (default allocator)
-	ownEAD          map[int][]EADItem // by message number
-	peerEAD         []EADItem
+	// lenient accepts received messages that are not deterministically
+	// encoded (AcceptNonDeterministicEncoding).
+	lenient  bool
+	allocCID func(peer ConnectionID) (ConnectionID, error)
+	cidHold  *cidHold          // this session's hold on ownCID (default allocator)
+	ownEAD   map[int][]EADItem // by message number
+	peerEAD  []EADItem
 
 	eph     *ecdh.PrivateKey
 	peerEph *ecdh.PublicKey
@@ -188,7 +191,7 @@ func (s *session) processMessage1(msg1 []byte, supported []CipherSuite, acceptMe
 	if err := s.want(stateInit); err != nil {
 		return nil, err
 	}
-	r := newSeqReader(msg1)
+	r := s.reader(msg1)
 	method, err := r.nextInt("METHOD")
 	if err != nil {
 		return nil, s.fail(err)
@@ -209,7 +212,7 @@ func (s *session) processMessage1(msg1 []byte, supported []CipherSuite, acceptMe
 	if err != nil {
 		return nil, s.fail(err)
 	}
-	ci, err := decodeCIDValue(civ, ciRaw)
+	ci, err := s.cid(civ, ciRaw)
 	if err != nil {
 		return nil, s.fail(err)
 	}
@@ -341,10 +344,10 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, err
 	}
 	su := s.suite
-	if err := receivedError(msg2); err != nil {
+	if err := receivedError(msg2, s.lenient); err != nil {
 		return nil, s.fail(err)
 	}
-	r := newSeqReader(msg2)
+	r := s.reader(msg2)
 	body, err := r.nextBytes("G_Y_CIPHERTEXT_2")
 	if err != nil {
 		return nil, s.fail(err)
@@ -375,22 +378,22 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 	subtle.XORBytes(pt2, ct2, ks)
 	clear(ks)
 
-	pr := newSeqReader(pt2)
+	pr := s.reader(pt2)
 	crv, crRaw, err := pr.next()
 	if err != nil {
 		return nil, s.fail(err)
 	}
-	if s.peerCID, err = decodeCIDValue(crv, crRaw); err != nil {
+	if s.peerCID, err = s.cid(crv, crRaw); err != nil {
 		return nil, s.fail(err)
 	}
 	if bytes.Equal(s.peerCID, s.ownCID) {
 		return nil, s.fail(fmt.Errorf("%w: %w: C_R equals C_I", ErrMessageFormat, ErrConnectionIDCollision))
 	}
-	idv, idRaw, err := pr.next()
+	idv, idRaw, err := pr.nextIDCred()
 	if err != nil {
 		return nil, s.fail(err)
 	}
-	peerID, err := parseIDCred(idv, idRaw)
+	peerID, err := s.idCred(idv, idRaw)
 	if err != nil {
 		return nil, s.fail(err)
 	}
@@ -446,15 +449,39 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 	return s.createMessage3()
 }
 
+// reader reads a received message or plaintext.
+func (s *session) reader(b []byte) *seqReader { return newMessageReader(b, s.lenient) }
+
+// cid decodes a received connection identifier. Unless lenient, a
+// one-byte identifier that is a one-byte CBOR integer must be sent as
+// that integer (RFC 9528 §3.3.2), not as a byte string.
+func (s *session) cid(v cbor.Value, raw []byte) ([]byte, error) {
+	if !s.lenient && v.Kind == cbor.KindBytes && len(v.Bstr) == 1 && isOneByteInt(v.Bstr[0]) {
+		return nil, fmt.Errorf("%w: identifier %#x must be sent as the integer it encodes (RFC 9528 §3.3.2)", ErrMessageFormat, v.Bstr[0])
+	}
+	return decodeCIDValue(v, raw)
+}
+
+// idCred parses a received ID_CRED; a compact kid follows the
+// connection identifier rule.
+func (s *session) idCred(v cbor.Value, raw []byte) (IDCred, error) {
+	if v.Kind == cbor.KindBytes {
+		if _, err := s.cid(v, raw); err != nil {
+			return IDCred{}, err
+		}
+	}
+	return parseIDCred(v, raw)
+}
+
 // receivedError returns the peer's error message when msg is one in
 // place of the expected message (RFC 9528 §6), or nil. message_2,
 // message_3 and message_4 start with a byte string; an error message
 // starts with its integer ERR_CODE.
-func receivedError(msg []byte) error {
+func receivedError(msg []byte, lenient bool) error {
 	if len(msg) == 0 || msg[0]>>5 > 1 {
 		return nil
 	}
-	e, err := parseErrorMessage(msg)
+	e, err := parseErrorMessage(msg, lenient)
 	if err != nil {
 		return err
 	}
@@ -599,10 +626,10 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 		return err
 	}
 	su := s.suite
-	if err := receivedError(msg3); err != nil {
+	if err := receivedError(msg3, s.lenient); err != nil {
 		return s.fail(err)
 	}
-	r := newSeqReader(msg3)
+	r := s.reader(msg3)
 	ct3, err := r.nextBytes("CIPHERTEXT_3")
 	if err != nil {
 		return s.fail(err)
@@ -614,12 +641,12 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 	if err != nil {
 		return s.fail(err)
 	}
-	pr := newSeqReader(pt3)
-	idv, idRaw, err := pr.next()
+	pr := s.reader(pt3)
+	idv, idRaw, err := pr.nextIDCred()
 	if err != nil {
 		return s.fail(err)
 	}
-	peerID, err := parseIDCred(idv, idRaw)
+	peerID, err := s.idCred(idv, idRaw)
 	if err != nil {
 		return s.fail(err)
 	}
@@ -757,10 +784,10 @@ func (s *session) processMessage4(msg4 []byte) error {
 	if s.message4OK {
 		return fmt.Errorf("%w: message_4 already processed", ErrStateViolation)
 	}
-	if err := receivedError(msg4); err != nil {
+	if err := receivedError(msg4, s.lenient); err != nil {
 		return s.fail(err)
 	}
-	r := newSeqReader(msg4)
+	r := s.reader(msg4)
 	ct4, err := r.nextBytes("CIPHERTEXT_4")
 	if err != nil {
 		return s.fail(err)
@@ -772,7 +799,7 @@ func (s *session) processMessage4(msg4 []byte) error {
 	if err != nil {
 		return s.fail(err)
 	}
-	ead4, err := decodeEAD(newSeqReader(pt4), s.accept)
+	ead4, err := decodeEAD(s.reader(pt4), s.accept)
 	if err != nil {
 		return s.fail(err)
 	}

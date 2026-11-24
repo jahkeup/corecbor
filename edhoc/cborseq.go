@@ -5,6 +5,7 @@ package edhoc
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cbor"
@@ -53,23 +54,54 @@ func encSeq(items ...[]byte) []byte {
 	return out
 }
 
-// seqDec decodes protocol messages. Values must outlive the call, so
-// the internal arena is disabled.
+// seqDecOpts decode CBOR this party supplied or already checked
+// (credentials, COSE keys). Values must outlive the call, so the
+// internal arena is disabled.
 var seqDecOpts = []corecbor.DecoderOption{
 	corecbor.WithoutInternalArena(),
 	corecbor.RejectIndefiniteLength(),
+	corecbor.RejectDuplicateMapKeys(),
 	corecbor.WithMaxNestingDepth(16),
 }
 
+// Received messages must be deterministically encoded (RFC 9528 §9:
+// RECOMMENDED to abort otherwise), except that the labels of an
+// ID_CRED map need not be sorted (§3.5.3), and a credential it carries
+// by value is the sender's own encoding (§3.5.2): ID_CRED items are
+// checked for preferred serialization only.
+var (
+	strictDecOpts = slices.Concat(seqDecOpts, []corecbor.DecoderOption{corecbor.RequireDeterministic()})
+	idCredDecOpts = slices.Concat(seqDecOpts, []corecbor.DecoderOption{corecbor.RejectNonShortest()})
+)
+
 // seqReader walks a CBOR sequence item by item, keeping each item's
-// raw bytes.
+// raw bytes. idDec decodes ID_CRED items.
 type seqReader struct {
-	dec  *corecbor.Decoder
-	rest []byte
+	dec, idDec *corecbor.Decoder
+	rest       []byte
 }
 
+// newSeqReader reads CBOR this package built or already checked.
 func newSeqReader(data []byte) *seqReader {
-	return &seqReader{dec: corecbor.NewDecoder(seqDecOpts...), rest: data}
+	d := corecbor.NewDecoder(seqDecOpts...)
+	return &seqReader{dec: d, idDec: d, rest: data}
+}
+
+// newMessageReader reads a received message: deterministic encoding
+// required unless lenient.
+func newMessageReader(data []byte, lenient bool) *seqReader {
+	if lenient {
+		return newSeqReader(data)
+	}
+	return &seqReader{dec: corecbor.NewDecoder(strictDecOpts...), idDec: corecbor.NewDecoder(idCredDecOpts...), rest: data}
+}
+
+// nextIDCred decodes an ID_CRED item: a header map, or a compact kid.
+func (r *seqReader) nextIDCred() (cbor.Value, []byte, error) {
+	d := r.dec
+	r.dec = r.idDec
+	defer func() { r.dec = d }()
+	return r.next()
 }
 
 func (r *seqReader) more() bool { return len(r.rest) > 0 }

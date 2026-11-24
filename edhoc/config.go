@@ -110,6 +110,17 @@ type InitiatorConfig struct {
 	// AcceptCriticalEAD decides whether a received critical EAD item is
 	// understood. When nil, any critical item aborts (RFC 9528 §3.8).
 	AcceptCriticalEAD func(EADItem) bool
+	// AcceptNonDeterministicEncoding accepts received messages that are
+	// not deterministically encoded CBOR (RFC 8949 §4.2.1): non-shortest
+	// heads, unsorted map keys outside ID_CRED, and a connection
+	// identifier or compact kid sent as a one-byte byte string that
+	// should have been the integer it encodes (RFC 9528 §3.3.2). RFC 9528
+	// §9 RECOMMENDs aborting such a session, and by default it fails
+	// with ErrMessageFormat. Set this only to interoperate with a peer
+	// known to encode otherwise; the transcript still uses the bytes as
+	// received. Indefinite lengths and duplicate map keys are always
+	// rejected.
+	AcceptNonDeterministicEncoding bool
 	// Rand overrides crypto/rand for ephemeral keys and connection IDs
 	// (deterministic tests, RFC 9529).
 	Rand io.Reader
@@ -148,7 +159,9 @@ type ResponderConfig struct {
 	// EAD2 and EAD4 are sent in message_2 and message_4.
 	EAD2, EAD4        []EADItem
 	AcceptCriticalEAD func(EADItem) bool
-	Rand              io.Reader
+	// AcceptNonDeterministicEncoding is as for InitiatorConfig.
+	AcceptNonDeterministicEncoding bool
+	Rand                           io.Reader
 }
 
 // Option configures an Initiator or Responder.

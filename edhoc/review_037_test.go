@@ -641,6 +641,42 @@ func TestE15_TaggedKCWTIsUntaggedCRED(t *testing.T) {
 	}
 }
 
+// E9, E10: received messages must be deterministically encoded, and a
+// connection identifier that is a one-byte integer must be sent as one;
+// AcceptNonDeterministicEncoding opts out.
+func TestE9_E10_DeterministicInput(t *testing.T) {
+	ini, _ := pair(t, []byte{1}, []byte{2}, nil)
+	m1, err := ini.CreateMessage1()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// message_1 = METHOD 00, SUITES_I 00, G_X 5820..., C_I 01.
+	nonShortest := append([]byte{0x18, 0x00}, m1[1:]...) // METHOD as 0x1800
+	bstrCI := append(bytes.Clone(m1[:len(m1)-1]), 0x41, 0x01)
+	for name, msg := range map[string][]byte{"non-shortest METHOD": nonShortest, "C_I as h'01'": bstrCI} {
+		for _, lenient := range []bool{false, true} {
+			_, res := pair(t, nil, []byte{2}, func(_ *InitiatorConfig, rc *ResponderConfig) {
+				rc.AcceptNonDeterministicEncoding = lenient
+			})
+			_, err := res.ProcessMessage1(msg)
+			switch {
+			case !lenient && !errors.Is(err, ErrMessageFormat):
+				t.Errorf("%s: %v, want ErrMessageFormat", name, err)
+			case lenient && err != nil:
+				t.Errorf("%s with AcceptNonDeterministicEncoding: %v", name, err)
+			}
+		}
+	}
+	// Error messages too: ERR_CODE 1 encoded as 0x1801.
+	ini, _ = pair(t, []byte{1}, []byte{2}, nil)
+	_, _ = ini.CreateMessage1()
+	_, err = ini.ProcessMessage2([]byte{0x18, 0x01, 0x61, 'x'})
+	var em *ErrorMessage
+	if errors.As(err, &em) || !errors.Is(err, ErrMessageFormat) {
+		t.Errorf("non-shortest ERR_CODE: %v, want ErrMessageFormat", err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

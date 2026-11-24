@@ -86,6 +86,22 @@ func (c *Confirmation) checkMethod() error {
 	return nil
 }
 
+// checkNotExposed returns ErrSymmetricKeyNotEncrypted, in a *ClaimError
+// for cnf, when c carries a symmetric COSE_Key by value: RFC 8747 §3.2
+// permits that only in an encrypted CWT. Callers that put claims in
+// plaintext (signed or MACed CWTs, COSE headers) call it.
+func (c *ClaimsSet) checkNotExposed() error {
+	if c == nil || c.Confirmation == nil || c.Confirmation.Key == nil {
+		return nil
+	}
+	if c.Confirmation.Key.KeyType() == cose.KeyTypeSymmetric {
+		return &ClaimError{Key: IntKey(ClaimCnf), Err: fmt.Errorf(
+			"%w: carry it as an Encrypted_COSE_Key (Confirmation.EncryptedKey) or encrypt the CWT (Seal)",
+			ErrSymmetricKeyNotEncrypted)}
+	}
+	return nil
+}
+
 // Match reports whether k is the key bound by c: the same key ID, or
 // for a key by value, the same RFC 9679 thumbprint (public parameters
 // only).
@@ -723,8 +739,9 @@ func encodeCnf(cnf *Confirmation) ([]corecbor.MapEntry, error) {
 // cnfKeyValue encodes the cnf COSE_Key. Asymmetric keys are reduced to
 // their public parameters, as in v0.2.2, so a signing key passed by
 // mistake doesn't leak its private part. A symmetric key is emitted as
-// is: RFC 8747 §3.3 requires it to be in an encrypted CWT or an
-// Encrypted_COSE_Key, which is the caller's responsibility.
+// is, since Encode also produces the plaintext Seal encrypts; RFC 8747
+// §3.2 allows it only in an encrypted CWT, so Sign, MAC and
+// SetClaimsHeader refuse it (checkNotExposed).
 func cnfKeyValue(k *cose.Key) (corecbor.Value, error) {
 	if k.KeyType() != cose.KeyTypeSymmetric {
 		pub, err := k.Public()

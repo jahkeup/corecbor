@@ -110,7 +110,7 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 		tok.Nested, tok.Claims = innerTok, innerTok.Claims
 		return tok, nil
 	}
-	if tok.Claims, err = decodeAndValidate(msg.Payload, opts); err != nil {
+	if tok.Claims, err = decodeAndValidate(msg.Payload, opts, false); err != nil {
 		return nil, err
 	}
 	return tok, nil
@@ -145,7 +145,7 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 	if err := cose.VerifyMAC0(msg, key, alg, cose.WithMACAlgorithms(alg)); err != nil {
 		return nil, err
 	}
-	claims, err := decodeAndValidate(msg.Payload, opts)
+	claims, err := decodeAndValidate(msg.Payload, opts, false)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 	if err != nil {
 		return nil, err
 	}
-	claims, err := decodeAndValidate(plaintext, opts)
+	claims, err := decodeAndValidate(plaintext, opts, true)
 	if err != nil {
 		return nil, err
 	}
@@ -210,8 +210,17 @@ func Seal(claims *ClaimsSet, key []byte, alg cose.Algorithm, opts ...cose.Encryp
 	return cose.MarshalEncrypt0(msg)
 }
 
-func decodeAndValidate(payload []byte, opts VerifyOptions) (*ClaimsSet, error) {
-	claims, err := DecodeClaimsSetWith(payload, opts.Decode)
+// decodeAndValidate decodes and validates the claims. encrypted reports
+// whether they arrived encrypted, the only case in which a symmetric
+// cnf key by value is acceptable (RFC 8747 §3.2).
+func decodeAndValidate(payload []byte, opts VerifyOptions, encrypted bool) (*ClaimsSet, error) {
+	var claims *ClaimsSet
+	var err error
+	if encrypted {
+		claims, err = DecodeClaimsSetWith(payload, opts.Decode)
+	} else {
+		claims, err = decodePlaintextClaims(payload, opts.Decode)
+	}
 	if err != nil {
 		return nil, err
 	}

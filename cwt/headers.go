@@ -36,8 +36,13 @@ func ClaimsFromHeaders(h *cose.Headers) (*ClaimsSet, bool, error) {
 }
 
 // SetClaimsHeader encodes c into h under label 15 (RFC 9597). Use the
-// protected bucket for claims that must be integrity protected.
+// protected bucket for claims that must be integrity protected. Header
+// parameters are never encrypted, so a symmetric cnf key by value is
+// refused with ErrSymmetricKeyNotEncrypted (RFC 8747 §3.2).
 func SetClaimsHeader(h *cose.Headers, c *ClaimsSet) error {
+	if err := c.checkNotExposed(); err != nil {
+		return err
+	}
 	v, err := c.toValue()
 	if err != nil {
 		return err

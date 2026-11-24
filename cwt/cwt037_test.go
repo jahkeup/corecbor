@@ -4,10 +4,12 @@
 package cwt_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
 )
 
@@ -74,6 +76,95 @@ func TestValidator_Audience037(t *testing.T) {
 	v.Audiences = []string{"rs1"}
 	if err := v.Validate(c); err != nil {
 		t.Fatalf("NewValidator, expected aud: %v", err)
+	}
+}
+
+// symmetricCnf returns claims whose cnf holds the RFC 8392 A.2.1
+// symmetric key by value.
+func symmetricCnf(t *testing.T) *cwt.ClaimsSet {
+	t.Helper()
+	k, err := cose.ParseKey(h(t, rfc8392A21Key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := validClaims()
+	c.Confirmation = &cwt.Confirmation{Key: k}
+	return c
+}
+
+// isSymmetricCnfErr reports whether err is the W7 rejection, naming cnf.
+func isSymmetricCnfErr(err error) bool {
+	k, ok := claimKeyOf(err)
+	return errors.Is(err, cwt.ErrSymmetricKeyNotEncrypted) && ok && k == cwt.IntKey(cwt.ClaimCnf)
+}
+
+// W7: RFC 8747 §3.2 — a symmetric COSE_Key may be carried by value
+// only in an encrypted CWT.
+func TestSymmetricCnf_PlaintextRejected037(t *testing.T) {
+	ctx := context.Background()
+	claims := symmetricCnf(t)
+	signer, _ := cose.NewSigner(edPriv)
+	if _, err := cwt.Sign(claims, signer); !isSymmetricCnfErr(err) {
+		t.Errorf("Sign: %v, want ErrSymmetricKeyNotEncrypted for cnf", err)
+	}
+	if _, err := cwt.MAC(claims, macKey, cose.AlgHMAC256); !isSymmetricCnfErr(err) {
+		t.Errorf("MAC: %v, want ErrSymmetricKeyNotEncrypted for cnf", err)
+	}
+	var hdr cose.Headers
+	if err := cwt.SetClaimsHeader(&hdr, claims); !isSymmetricCnfErr(err) {
+		t.Errorf("SetClaimsHeader: %v, want ErrSymmetricKeyNotEncrypted for cnf", err)
+	}
+
+	// A peer that emitted one anyway: every verifying entry point refuses it.
+	signed := signedWith(t, claims, cose.Headers{})
+	verifier, _ := cose.NewVerifier(edPub)
+	if _, err := cwt.Verify(signed, verifier); !isSymmetricCnfErr(err) {
+		t.Errorf("Verify: %v", err)
+	}
+	opts := cwt.VerifyOptions{Keys: edResolver(t), Validator: fixedNow(cwt.NewValidator(), t0)}
+	if _, err := cwt.VerifyToken(ctx, signed, opts); !isSymmetricCnfErr(err) {
+		t.Errorf("VerifyToken: %v", err)
+	}
+	payload, err := claims.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac, err := cose.ComputeMAC0(payload, macKey, cose.AlgHMAC256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	macked, _ := cose.MarshalMac0(mac)
+	if _, err := cwt.VerifyMAC(macked, macKey, cose.AlgHMAC256); !isSymmetricCnfErr(err) {
+		t.Errorf("VerifyMAC: %v", err)
+	}
+	if _, err := cwt.VerifyMACToken(ctx, macked, macKey, opts); !isSymmetricCnfErr(err) {
+		t.Errorf("VerifyMACToken: %v", err)
+	}
+
+	// Encrypted CWTs may carry it.
+	sealed, err := cwt.Seal(claims, aesKey, cose.AlgA128GCM)
+	if err != nil {
+		t.Fatalf("Seal: %v", err)
+	}
+	if _, err := cwt.OpenToken(ctx, sealed, aesKey, opts); err != nil {
+		t.Errorf("OpenToken: %v", err)
+	}
+	enc, err := cwt.Encrypt(claims, aesKey, nonce, cose.AlgA128GCM) //nolint:staticcheck // deprecated path still encrypts
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	if _, err := cwt.Decrypt(enc, aesKey, nonce, cose.AlgA128GCM); err != nil { //nolint:staticcheck // deprecated path
+		t.Errorf("Decrypt: %v", err)
+	}
+
+	// An asymmetric key by value and a kid are unaffected.
+	k, _ := cose.NewKeyFromPublic(edPub)
+	for _, cnf := range []*cwt.Confirmation{{Key: k}, {KeyID: []byte("k")}} {
+		c := validClaims()
+		c.Confirmation = cnf
+		if _, err := cwt.Sign(c, signer); err != nil {
+			t.Errorf("Sign %+v: %v", cnf, err)
+		}
 	}
 }
 

@@ -65,6 +65,16 @@ var (
 	// is 0x7ff8000000000001), while math.Float64frombits(0x7ff8000000000000)
 	// is the quiet NaN.
 	ErrNonCanonicalNaN = errors.New("cwt: NaN payload would not survive encoding")
+
+	// ErrSymmetricKeyNotEncrypted indicates a cnf claim carrying a
+	// symmetric COSE_Key by value (member 1) in a CWT that is not
+	// encrypted. RFC 8747 §3.2 allows that only in an encrypted CWT;
+	// otherwise the key must be an Encrypted_COSE_Key (member 2,
+	// Confirmation.EncryptedKey). Sign, MAC, SetClaimsHeader and the
+	// signed and MACed verifying entry points return it inside a
+	// *ClaimError for cnf; Seal, Encrypt, OpenToken and Decrypt accept
+	// such a key.
+	ErrSymmetricKeyNotEncrypted = errors.New("cwt: symmetric cnf key in an unencrypted CWT")
 )
 
 // ClaimError reports which claim failed and why. Err wraps a cwt

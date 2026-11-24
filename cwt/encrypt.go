@@ -67,7 +67,12 @@ func Decrypt(data []byte, key []byte, nonce []byte, alg cose.Algorithm) (*Claims
 
 // MAC creates a MAC'd CWT (COSE_Mac0-wrapped claims).
 // The caller must supply a key and an HMAC algorithm (e.g. AlgHMAC256).
+// A symmetric cnf key by value is refused with
+// ErrSymmetricKeyNotEncrypted (RFC 8747 §3.2), as in Sign.
 func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm) ([]byte, error) {
+	if err := claims.checkNotExposed(); err != nil {
+		return nil, err
+	}
 	payload, err := claims.Encode()
 	if err != nil {
 		return nil, err
@@ -83,7 +88,8 @@ func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm) ([]byte, error) {
 
 // VerifyMAC verifies and decodes a MAC'd CWT, returning the embedded
 // claims. An outer CWT tag 61 is accepted (RFC 8392 §6). It checks the
-// MAC only; use VerifyMACToken to also validate claims.
+// MAC only; use VerifyMACToken to also validate claims. Like Verify, it
+// refuses a symmetric cnf key by value (ErrSymmetricKeyNotEncrypted).
 func VerifyMAC(data []byte, key []byte, alg cose.Algorithm) (*ClaimsSet, error) {
 	inner, _, err := unwrapCWT(data)
 	if err != nil {
@@ -98,5 +104,5 @@ func VerifyMAC(data []byte, key []byte, alg cose.Algorithm) (*ClaimsSet, error) 
 		return nil, err
 	}
 
-	return DecodeClaimsSet(msg.Payload)
+	return decodePlaintextClaims(msg.Payload, DecodeOptions{})
 }

@@ -198,6 +198,7 @@ func RejectDuplicateMapKeys() DecoderOption         // RFC 8949 §5.6
 func RejectUnknownTags() DecoderOption              // unknown major-6 IDs
 func RejectNonFiniteFloats() DecoderOption          // NaN/Inf in major 7
 func RejectNullMapKeys() DecoderOption              // some libs emit Null keys
+func RejectInvalidTagContent() DecoderOption        // RFC 8949 §3.4, §5.3.2 (037)
 
 // Resource limits (always enforced; the values are knobs):
 func WithMaxNestingDepth(n int) DecoderOption       // default 256
@@ -229,9 +230,15 @@ func StrictDecoder(opts ...DecoderOption) *Decoder {
         RejectDuplicateMapKeys(),
         RejectNonFiniteFloats(),
         RejectNullMapKeys(),
+        RejectInvalidTagContent(), // proposal 037 C10
     }, opts...)...)
 }
 ```
+
+`RejectInvalidTagContent()` validates the content of the tags RFC 8949
+§3.4 defines, the §4.3 modeled tags and the RFC 8746 typed arrays
+(invalid tag content makes the item invalid, §5.3.2); other tags accept
+any content.
 
 `RejectUnknownTags()` is NOT in the strict preset by default — many
 protocols use registered tags the decoder doesn't natively model, and

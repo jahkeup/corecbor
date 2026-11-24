@@ -34,6 +34,12 @@ type DecodeOpts struct {
 	RejectUnknownTags      bool
 	RejectNonFiniteFloats  bool
 	RejectNullMapKeys      bool
+	// RejectInvalidTagContent rejects a tag whose content is not valid
+	// for it (RFC 8949 §3.4, §5.3.2) with an error wrapping
+	// cbor.ErrMalformedTag. It covers the tags RFC 8949 §3.4 defines,
+	// the modeled tags and the RFC 8746 typed arrays; others accept any
+	// content (proposal 037 C10).
+	RejectInvalidTagContent bool
 	// ReplaceInvalidUTF8 substitutes U+FFFD per invalid byte in decoded
 	// text strings (InvalidUTF8Replace, proposal 035). Ignored when
 	// RejectInvalidUTF8 is set.
@@ -153,6 +159,9 @@ func StrictOpts() DecodeOpts {
 		RejectDuplicateMapKeys: true,
 		RejectNonFiniteFloats:  true,
 		RejectNullMapKeys:      true,
+		// Strict decoding rejects invalid data items, and invalid tag
+		// content makes an item invalid (RFC 8949 §5.3.2, 037 C10).
+		RejectInvalidTagContent: true,
 	}
 }
 
@@ -883,6 +892,11 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	inner, next, err := decodeValue(src, pos, depth+1, opts, false)
 	if err != nil {
 		return cbor.Value{}, next, err
+	}
+	if opts.RejectInvalidTagContent {
+		if p := tagContentProblem(tagID, inner); p != "" {
+			return cbor.Value{}, off, decodeErrDetail(cbor.ErrMalformedTag, off, ": "+p)
+		}
 	}
 	if opts.Arena != nil {
 		// Same layout as MakeTag; the one-item slice is capped so an

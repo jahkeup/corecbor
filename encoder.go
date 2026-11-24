@@ -39,6 +39,7 @@ type encodeConfig struct {
 	bufferPool           *sync.Pool
 	invalidUTF8          rfc8949.InvalidUTF8
 	goNames              bool // WithGoFieldNames (proposal 025)
+	checkTagContent      bool // CheckTagContent (proposal 037)
 }
 
 type Option func(*encodeConfig)
@@ -88,6 +89,15 @@ func WithLegacyBignumPassthrough() Option {
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
 func CompatV02() Option {
 	return func(c *encodeConfig) { c.legacyBignum = true }
+}
+
+// CheckTagContent makes the encoder return an error wrapping
+// ErrMalformedTag for a tag Value whose content is not valid for it,
+// such as tag 2 around a text string or tag 0 around an integer, under
+// the rules RejectInvalidTagContent applies on decode. Without it the
+// encoder writes tag content as given (proposal 037 C10).
+func CheckTagContent() Option {
+	return func(c *encodeConfig) { c.checkTagContent = true }
 }
 
 // WithBufferPool makes Encode build output in a scratch buffer taken
@@ -159,6 +169,8 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 		AllowNonFiniteFloats: e.cfg.allowNonFiniteFloats,
 		AllowInvalidUTF8:     e.cfg.allowInvalidUTF8,
 		InvalidUTF8:          e.cfg.invalidUTF8,
+
+		RejectInvalidTagContent: e.cfg.checkTagContent,
 
 		LegacyBignumPassthrough: e.cfg.legacyBignum, //nolint:staticcheck // plumbing for the deprecated WithLegacyBignumPassthrough selector
 	}

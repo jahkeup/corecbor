@@ -119,6 +119,19 @@ func RejectNonFiniteFloats() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectNonFiniteFloats = true }
 }
 
+// RejectInvalidTagContent rejects a tag whose content is not valid for
+// it (RFC 8949 §3.4, §5.3.2) with an error wrapping ErrMalformedTag:
+// tag 2 around a text string, tag 0 around an integer or a string that
+// isn't an RFC 3339 date/time, tag 24 around bytes that aren't one
+// well-formed item, base64 text with bad padding (tags 33, 34), an
+// RFC 8746 typed array whose length isn't a multiple of its element
+// size, and so on for the tags RFC 8949 §3.4 defines, the modeled tags
+// (TagsModeled) and the typed arrays. Other tags accept any content.
+// StrictDecoder and DeterministicDecoder include it (proposal 037 C10).
+func RejectInvalidTagContent() DecoderOption {
+	return func(c *decodeConfig) { c.opts.RejectInvalidTagContent = true }
+}
+
 func RejectNullMapKeys() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectNullMapKeys = true }
 }
@@ -316,9 +329,10 @@ func newDecoder(cfg decodeConfig, opts []DecoderOption) *Decoder {
 
 // StrictDecoder returns a Decoder with the encoder-decoder-spec.md §3.2
 // strict preset: it rejects indefinite lengths, non-shortest arguments,
-// invalid UTF-8, duplicate map keys, non-finite floats and null map
-// keys. Tags are accepted; add RejectUnknownTags() or WithAllowedTags
-// for closed-world tag validation.
+// invalid UTF-8, duplicate map keys, non-finite floats, null map keys
+// and invalid tag content (RejectInvalidTagContent). Tags are accepted;
+// add RejectUnknownTags() or WithAllowedTags for closed-world tag
+// validation.
 func StrictDecoder(opts ...DecoderOption) *Decoder {
 	return newDecoder(decodeConfig{opts: rfc8949.StrictOpts()}, opts)
 }

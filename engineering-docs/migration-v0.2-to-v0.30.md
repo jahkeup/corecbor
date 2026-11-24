@@ -79,6 +79,7 @@ v0.2.2 and under the new version and diffs the output.
 | A chunk of the wrong type in an indefinite-length string returns the new `ErrInvalidChunk` (037 C6) | `Decode`, `Cursor`, `DecodeFrom`, `Stream` | `ErrTruncated` (and `Stream` ended silently) | none; match `ErrInvalidChunk` |
 | `Cursor.FindMapKey` returns the value `Decode` keeps: it scans to the end of the map and takes the last of repeated keys; under `RejectDuplicateMapKeys` (and so `StrictDecoder`) a repeat of the key anywhere in the map returns `ErrDuplicateMapKey`; keys match under the key identity, so a non-shortest or indefinite-length text key matches by default and only the shortest encoding under `KeyIdentityEncoded`; under `KeepDuplicateMapKeys` it stops at the next occurrence (037 C7) | `Cursor.FindMapKey` | the first occurrence; duplicates never rejected; only a definite-length key compared byte-for-byte | none (parser differential, 034); use `KeepDuplicateMapKeys` to step through every occurrence |
 | `RequireDeterministic` accepts a NaN only as `f97e00`, the NaN the deterministic encoders write, so accepted input re-encodes to the same bytes (037 C9) | `NewDecoder(RequireDeterministic())` | any NaN in the shortest width that kept its payload and sign | `AllowNaNPayloads()` |
+| `StrictDecoder` and `DeterministicDecoder` reject invalid tag content with `ErrMalformedTag` (new knob `RejectInvalidTagContent()`): tag 0 that isn't an RFC 3339 text string, tag 1 that isn't a number, tag 2/3 that isn't a byte string, tag 4/5 that isn't `[exponent, mantissa]`, tag 24 that isn't one well-formed item, bad base64 under tags 33/34, a non-text tag 32/35, a non-array tag 258, a typed array (RFC 8746) whose length isn't a multiple of its element size (037 C10) | `StrictDecoder`, `DeterministicDecoder` | accepted | build the old preset without it: `NewDecoder(RejectIndefiniteLength(), RejectNonShortest(), RejectInvalidUTF8(), RejectDuplicateMapKeys(), RejectNonFiniteFloats(), RejectNullMapKeys())` |
 
 ## Text that is not valid UTF-8 (035)
 
@@ -195,7 +196,10 @@ goroutine (for example from a `sync.Pool`).
   `(*Key).DeleteReceivedParam`. Data kept this way is written back
   verbatim, so it is the one exception to Core Deterministic output.
 - Pre-release review fixes (037): `ErrInvalidChunk`,
-  `AllowNaNPayloads`, `rfc8949.BudgetState.Charge`.
+  `AllowNaNPayloads`, `rfc8949.BudgetState.Charge`; tag content
+  validation with `RejectInvalidTagContent()` (decoder),
+  `CheckTagContent()` (encoder) and `rfc8949.DecodeOpts` /
+  `EncodeOpts.RejectInvalidTagContent`.
 - `registry`: refreshed from IANA (2026-11-13). Every generated
   constant from v0.2.2 keeps its name and value
   (`registry/names_frozen.txt`); new tags get new constants.

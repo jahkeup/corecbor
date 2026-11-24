@@ -89,6 +89,11 @@ type EncodeOpts struct {
 	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
 	LegacyBignumPassthrough bool
 	SortCache               *SortStateCache
+	// RejectInvalidTagContent returns an error wrapping
+	// cbor.ErrMalformedTag for a tag whose content is not valid for it,
+	// under the rules DecodeOpts.RejectInvalidTagContent applies
+	// (proposal 037 C10).
+	RejectInvalidTagContent bool
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
@@ -221,6 +226,11 @@ func encodeTag(dst []byte, v *cbor.Value, opts *EncodeOpts) ([]byte, error) {
 	inner := &v.Items[0]
 	if inner.Kind == cbor.KindInvalid {
 		return dst, fmt.Errorf("encode tag %d: inner is %w", v.Num, cbor.ErrNilValue)
+	}
+	if opts.RejectInvalidTagContent {
+		if p := tagContentProblem(v.Num, *inner); p != "" {
+			return dst, fmt.Errorf("encode tag %d: %w: %s", v.Num, cbor.ErrMalformedTag, p)
+		}
 	}
 	if v.Num-cbor.TagUnsignedBignum < 2 && opts.Deterministic &&
 		inner.Kind == cbor.KindBytes && !opts.LegacyBignumPassthrough {

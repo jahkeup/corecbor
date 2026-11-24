@@ -11,7 +11,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [036](036-deferred-follow-ups-2026-11.md) | 2 | Draft | Deferred follow-ups from the 2026-11 batch | corecbor maintainers | 021–035 | 2026-11-22 |
+| [036](036-deferred-follow-ups-2026-11.md) | 2 | In-Progress | Deferred follow-ups from the 2026-11 batch (done items ship in v0.3; the rest are deferred out of v0.3, each waiting on its trigger) | corecbor maintainers | 021–035 | 2026-11-23 |
 | [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling (root module only) | corecbor maintainers | 001 | 2026-11-22 |
 
 ## Closed proposals
@@ -85,8 +85,8 @@ sequence compactness.
   - CWT / EAT / EDHOC (tier-3): 031 → 032; 033 (supersedes 004)
   - Cross-cutting policy (tier-1): 034 — every proposal above classifies its
     changes and names legacy selectors per 034
-  - Release: deliver as **v0.30.0** or later — see
-    [`../release-notes-v0.30-maintainers.md`](../release-notes-v0.30-maintainers.md)
+  - Release: deliver as **v0.3.0** or later — see
+    [`../release-notes-v0.3-maintainers.md`](../release-notes-v0.3-maintainers.md)
 
 ## Future considerations (not yet proposals)
 

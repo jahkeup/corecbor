@@ -382,7 +382,7 @@ the end of the enum, so existing values are unchanged. `BigIntTo`,
 behavior is opt-in only, documented `Experimental:` with the draft name
 and revision.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | CTAP2 NaN normalized to `fb7ff8000000000000` | Contract defect | spec §2.2 NaN bullet; `doc.go:16-17` (CTAP2 canonical) | normalized | none (034: v0.2 output violated its mode) |
 | Bignum leading zeros stripped by the encoder in deterministic modes | Contract defect | `doc.go:12-15` (modes claim RFC 8949 §4.2.1, which requires preferred serialization, §4.1/§3.4.3) | stripped | `func WithLegacyBignumPassthrough() Option` — Deprecated; emits tag 2/3 contents as supplied |
@@ -430,7 +430,7 @@ lifecycle. That is a separate proposal.
 | `KeepDuplicateMapKeys`: every entry kept in input order for both identities; with `RejectDuplicateMapKeys` → `ErrInvalidOption` | `TestKeepDuplicateMapKeys` | Yes |
 | Decode with each identity × policy agrees with a reference model over random maps | `FuzzMapKeyIdentity` | Yes |
 | `Unmarshal(01, &big.Int)` and `Unmarshal(c2 41 01, &big.Int)` both yield 1 | `TestUnmarshalBigIntFromInt` | Yes |
-| Legacy selectors carry `// Deprecated:` with removal floor v0.32.0; `ModePreferredPlus` and `RequirePreferredPlus` carry `Experimental:` naming draft-ietf-cbor-serialization-13 | doc review + staticcheck SA1019 fixture | Yes |
+| Legacy selectors carry `// Deprecated:` with removal floor v0.5.0; `ModePreferredPlus` and `RequirePreferredPlus` carry `Experimental:` naming draft-ietf-cbor-serialization-13 | doc review + staticcheck SA1019 fixture | Yes |
 | `StrictDecoder()` accepts the unsorted map `a2 6162 01 6161 02`; `DeterministicDecoder()` rejects it | `TestStrictVsDeterministicPreset` | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |

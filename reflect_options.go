@@ -77,7 +77,7 @@ func WithCaseInsensitiveFieldNames() DecoderOption {
 // get a type mismatch.
 //
 // Deprecated: v0.2 compatibility only (proposal 025); removed no
-// earlier than v0.32.0.
+// earlier than v0.5.0.
 func WithLegacyNoTextBinaryUnmarshal() DecoderOption {
 	return func(c *decodeConfig) { c.legacyNoTextBinary = true }
 }

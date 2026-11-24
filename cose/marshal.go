@@ -55,7 +55,7 @@ type DecodeLimits struct {
 	//
 	// Deprecated: duplicate labels are invalid (RFC 9052 §3, proposal
 	// 027 H4). Retained for migration only; removed no earlier than
-	// v0.32.0.
+	// v0.5.0.
 	AllowDuplicateLabels bool
 }
 

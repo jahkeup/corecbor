@@ -255,7 +255,7 @@ func TestCompatLegacyPreRFCTranscript(t *testing.T) {
 	}
 }
 
-// WithLegacyPreRFCProtocol is Deprecated with a v0.32.0 removal floor.
+// WithLegacyPreRFCProtocol is Deprecated with a v0.5.0 removal floor.
 func TestLegacySelectorDeprecated(t *testing.T) {
 	f, err := parser.ParseFile(token.NewFileSet(), "config.go", nil, parser.ParseComments)
 	if err != nil {
@@ -267,8 +267,8 @@ func TestLegacySelectorDeprecated(t *testing.T) {
 			continue
 		}
 		doc := fn.Doc.Text()
-		if !strings.Contains(doc, "Deprecated:") || !strings.Contains(doc, "v0.32.0") {
-			t.Fatalf("doc lacks Deprecated/v0.32.0:\n%s", doc)
+		if !strings.Contains(doc, "Deprecated:") || !strings.Contains(doc, "v0.5.0") {
+			t.Fatalf("doc lacks Deprecated/v0.5.0:\n%s", doc)
 		}
 		return
 	}

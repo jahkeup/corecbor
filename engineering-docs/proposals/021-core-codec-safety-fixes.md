@@ -380,7 +380,7 @@ root `CompatV02()` bundle includes nothing from 021. New identifiers
 `ErrStreamMapOrder`, `ErrReservedSimple`, `ErrUnexpectedBreak`,
 `cwt.ErrInvalidValidator`) are **Additive**.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | D1 package-level `Marshal`/`Unmarshal` concurrency | Safety defect | spec §2.5 "No goroutine-safety footguns" (`encoder-decoder-spec.md:160`); package-level functions are concurrency-safe by Go convention (`encoding/json`) | safe for concurrent use | none |
 | D2 decoded `cbor.Value`/`any` targets no longer alias the internal arena | Safety defect | memory safety; `decoder.go:95-101` scopes arena lifetime to `Decode`, not `Unmarshal` targets | independent copies | none (aliasing remains available through `WithArena`, 018) |

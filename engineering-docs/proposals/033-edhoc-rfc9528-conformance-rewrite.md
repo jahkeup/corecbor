@@ -184,7 +184,7 @@ type Credential struct {
 	Type     CredentialType // unchanged (CredentialRPK, CredentialCWT)
 	CWTBytes []byte         // unchanged
 
-	// --- new in v0.30 ---
+	// --- new in v0.3 ---
 	// Raw is CRED_x exactly as it enters the transcript (TH_3 / TH_4,
 	// MAC context, Sig_structure). For a CCS this is the encoded
 	// claims set; for X.509 the DER certificate; for a CWT the token.
@@ -239,7 +239,7 @@ type Option func(*options)
 // used exactly as v0.2.2 used them.
 //
 // Deprecated: non-interoperable and missing identity binding. Removed
-// no earlier than v0.32.0. Not part of any CompatV02 bundle.
+// no earlier than v0.5.0. Not part of any CompatV02 bundle.
 func WithLegacyPreRFCProtocol() Option
 
 // InitiatorConfig keeps every v0.2.2 field with its type; new fields
@@ -255,7 +255,7 @@ type InitiatorConfig struct {
 	PeerCredential *Credential      // unchanged; pinned peer credential when Peers is nil
 	CWTIssuerKey   crypto.PublicKey // unchanged; no longer falls back to PeerPublic (Safety defect)
 
-	// --- new in v0.30 ---
+	// --- new in v0.3 ---
 	Method     Method
 	Peers      CredentialResolver // when set, takes precedence over PeerPublic/PeerCredential
 	EAD1, EAD3 []EADItem
@@ -421,7 +421,7 @@ suites 0–6 and 24 (25 needs X448, which neither std nor x/crypto has).
   HKDF identifier).
 - **Replace when 028 lands:** `edhoc.X5T` is local and
   `coseKeyOf`/`publicFromCOSEKey` (`edhoc/credrfc.go`) are minimal local
-  COSE_Key helpers. Both should move to cose's key API; since v0.30 is
+  COSE_Key helpers. Both should move to cose's key API; since v0.3 is
   unreleased, swapping `IDCred.X5T` to `*cose.X5T` before release is not
   an API break against v0.2.2.
 
@@ -509,7 +509,7 @@ surface). The package documents RFC 9528 (`edhoc/doc.go:4-5`), so the
 protocol computations behind the existing identifiers are Contract
 defects fixed in place.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | Key schedule, transcripts, message_2 layout, MAC/Sig/AEAD inputs, suite selection, C_ID encoding, P-256 x-only keys | Contract defect | `edhoc/doc.go:4-5` ("implements the EDHOC authenticated key exchange protocol (RFC 9528)"); RFC 9528 §4, §5 | same methods, RFC 9528 wire format | `func WithLegacyPreRFCProtocol() Option` — Deprecated; whole-protocol switch, never per-field. Not bundled |
 | `Export` uses `EDHOC_Exporter`; `ExportOSCORE` follows Appendix A.1 with Sender/Recipient IDs un-swapped | Contract defect | RFC 9528 §4.2.1, Appendix A.1 | same signatures | covered by `WithLegacyPreRFCProtocol()` |
@@ -552,9 +552,9 @@ entries):** `NewInitiator(cfg, opts ...Option)`,
 | `FuzzProcessMessage1/2/3` 60 s, no panic | fuzz | Yes |
 | `golang.org/x/crypto` used only for ChaCha20-Poly1305 | `go list -deps ./edhoc` shows only `x/crypto/chacha20poly1305` (+ its internals) | Yes |
 | Interop smoke test against an external implementation (lakers or uoscore-uedhoc) | manual, documented in PR | No |
-| Default sessions never speak the pre-RFC protocol: a v0.30 initiator against a v0.2.2 responder fixture fails cleanly with an error, never a partial OSCORE context | `TestCompatDefaultRejectsLegacyPeer` | Yes |
-| Two v0.30 peers with `WithLegacyPreRFCProtocol` reproduce the captured v0.2.2 transcripts byte-for-byte (fixed ephemeral keys), and interoperate with a v0.2.2 peer | `TestCompatLegacyPreRFCTranscript` vs `testdata/legacy-v0.2.2/edhoc/` | Yes |
-| `WithLegacyPreRFCProtocol` carries `// Deprecated:` with removal floor v0.32.0 and appears in no bundle | staticcheck SA1019 fixture + API review | Yes |
+| Default sessions never speak the pre-RFC protocol: a v0.3 initiator against a v0.2.2 responder fixture fails cleanly with an error, never a partial OSCORE context | `TestCompatDefaultRejectsLegacyPeer` | Yes |
+| Two v0.3 peers with `WithLegacyPreRFCProtocol` reproduce the captured v0.2.2 transcripts byte-for-byte (fixed ephemeral keys), and interoperate with a v0.2.2 peer | `TestCompatLegacyPreRFCTranscript` vs `testdata/legacy-v0.2.2/edhoc/` | Yes |
+| `WithLegacyPreRFCProtocol` carries `// Deprecated:` with removal floor v0.5.0 and appears in no bundle | staticcheck SA1019 fixture + API review | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 

@@ -280,7 +280,7 @@ Classified per [034](034-standards-currency-and-legacy-compatibility.md).
 No exported identifier changes signature. `rfc8949.ErrTypeMismatch`
 keeps its name and its value (it now aliases `cbor.ErrTypeMismatch`).
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | `StrictDecoder` and `rfc8949.StrictOpts()` stop applying `RejectUnknownTags` | Contract defect | spec §3.2 (`encoder-decoder-spec.md:221-224`: "`RejectUnknownTags()` is NOT in the strict preset") | accept tags | `StrictDecoder(RejectUnknownTags(), WithAllowedTags())` reproduces v0.2.2 by composition; no new legacy API |
 | `RejectUnknownTags()` alone accepts the spec §4.3 tags | Contract defect | spec §3.1 (`:183`, "unknown major-6 IDs") + §4.3 (`:315-332`, tags the library models; "Other tags … `RejectUnknownTags()` turns this into an error") | allowlist `TagsModeled` | `WithAllowedTags()` with no IDs restores {55799} |

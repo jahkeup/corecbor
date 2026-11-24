@@ -25,7 +25,7 @@ sets one rule for every module:
 1. **The exported API is stable in signature *and* semantics.** A
    documented contract (godoc, `encoder-decoder-spec.md`, or an RFC the
    identifier claims to implement) is API. Existing identifiers keep
-   their meaning across v0.30.
+   their meaning across v0.3.
 2. **New identifiers default to the current standards state**: the
    latest published RFC, its verified errata, and the current IANA
    registries. Deployed-ecosystem interop only breaks ties.
@@ -150,7 +150,7 @@ finds every caller relying on legacy behavior.
 //
 // Deprecated: draft-era EAT claim keys conflict with RFC 9711. Retained
 // for reading tokens issued by corecbor <= v0.2. Removed no earlier than
-// v0.32.0.
+// v0.5.0.
 func WithLegacyDraftClaimKeys() eat.Option
 
 // Superseded contract, new identifier. NewSigner keeps emitting the
@@ -185,7 +185,7 @@ Bundles for callers who want an entire earlier behavior set:
 // wire output for this package. It exists to unblock upgrades, not as
 // a long-term mode.
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02() Option
 ```
 
@@ -199,7 +199,7 @@ need no bundle because the old identifiers keep their behavior.
 
 - `Legacy…` and `CompatV02` selectors are `// Deprecated:` from the
   release they appear in and survive at least two minor releases after
-  the v0.30 line (removal no earlier than v0.32.0). Removal needs its
+  the v0.3 line (removal no earlier than v0.5.0). Removal needs its
   own proposal.
 - Identifiers deprecated as **superseded contracts** keep working for
   the life of the v0.x line; deprecation is guidance toward the
@@ -231,7 +231,7 @@ classifying each change per §14."*
 | No `CompatV02*` bundle includes a selector that weakens verification or validation | test enumerating bundle contents | Yes |
 | Every `Legacy…`/`CompatV02` selector carries `// Deprecated:` with a removal floor | `staticcheck` SA1019 fires on use in a fixture | Yes |
 | Every `Draft…` identifier names the draft and revision in its doc comment | grep check in `make lint` | No |
-| `migration-v0.2-to-v0.30.md` lists every selector and new identifier with before/after bytes | doc review | Yes |
+| `migration-v0.2-to-v0.3.md` lists every selector and new identifier with before/after bytes | doc review | Yes |
 
 ---
 
@@ -240,7 +240,7 @@ classifying each change per §14."*
 Recorded here so the per-proposal sections agree. Proposals own the
 details.
 
-| Area (proposal) | Class | Existing identifiers in v0.30 | New / selector |
+| Area (proposal) | Class | Existing identifiers in v0.3 | New / selector |
 |---|---|---|---|
 | Data races, aliasing, panics, embedded structs (021) | Safety defect | fixed | none |
 | `TimeTo` pre-1970 emitting a huge uint (021) | Contract defect | fixed | none (output was not a valid time) |
@@ -301,7 +301,7 @@ details.
 ## Cross-references
 
 - `../upstream-status-2026-11.md` — the drift this policy responds to
-- `../release-notes-v0.30-maintainers.md` — version bump and migration guide
+- `../release-notes-v0.3-maintainers.md` — version bump and migration guide
 - Proposals 021–033
 
 ---

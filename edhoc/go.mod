@@ -3,9 +3,9 @@ module github.com/jahkeup/corecbor/edhoc
 go 1.26.0
 
 require (
-	github.com/jahkeup/corecbor v0.0.0
-	github.com/jahkeup/corecbor/cose v0.0.0
-	github.com/jahkeup/corecbor/cwt v0.0.0
+	github.com/jahkeup/corecbor v0.3.0
+	github.com/jahkeup/corecbor/cose v0.3.0
+	github.com/jahkeup/corecbor/cwt v0.3.0
 	golang.org/x/crypto v0.51.0
 )
 

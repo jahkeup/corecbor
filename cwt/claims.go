@@ -409,7 +409,7 @@ type DecodeOptions struct {
 	// duplicate map keys.
 	//
 	// Deprecated: duplicate claims make exp and nbf ambiguous (RFC 8392
-	// §7.2); removed no earlier than v0.32.0.
+	// §7.2); removed no earlier than v0.5.0.
 	AllowDuplicateClaims bool
 }
 

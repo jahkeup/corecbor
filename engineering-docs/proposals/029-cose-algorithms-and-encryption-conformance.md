@@ -290,18 +290,18 @@ func WithDraftHPKE27() EncryptOption
 // iteration-count label -21) for both seal and open. Both collide with
 // registered COSE values.
 //
-// Deprecated: colliding code points; removed no earlier than v0.32.0.
+// Deprecated: colliding code points; removed no earlier than v0.5.0.
 func WithLegacyPBES2Labels() EncryptOption
 
 // WithLegacyECDHES accepts the v0.2 ECDH-ES encoding: -25 carrying
 // -29 (AES-KW) semantics and a raw-point ephemeral key in label -1.
 //
-// Deprecated: non-conformant to RFC 9053 §6.3; removed no earlier than v0.32.0.
+// Deprecated: non-conformant to RFC 9053 §6.3; removed no earlier than v0.5.0.
 func WithLegacyECDHES() EncryptOption
 
 // CompatV02Encryption bundles WithLegacyPBES2Labels and WithLegacyECDHES.
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02Encryption() EncryptOption
 
 // HPKEKey (v0.2.2) is unchanged: it keeps producing and reading
@@ -427,7 +427,7 @@ No exported constant changes value and no exported identifier changes
 signature. `ECDHESKey` gains fields whose zero values select the RFC
 behavior its existing name claims.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | Polymorphic `-7`/`-8` emission | Superseded contract (RFC 9864) | — | `NewSigner` emits `-7`/`-8` as in v0.2.2; `AlgES256`/`AlgES384`/`AlgES512`/`AlgEdDSA` deprecated; verify accepts both families | `WithFullySpecifiedAlgorithms() SignerOption` (recommended), `AlgESP256`, `AlgESP384`, `AlgESP512`, `AlgEd25519` |
 | ML-DSA, RSA/PS, AES-CCM, ChaCha20-Poly1305, SHA-2 constants | Additive | — | n/a | n/a |
@@ -468,7 +468,7 @@ appended to existing functions.
 | RFC 9053, 9864, 9964 vendored under `engineering-docs/rfcs/` | files + README rows | Yes |
 | Default signer emits `-7` for P-256 and `-8` for Ed25519 keys; `WithFullySpecifiedAlgorithms()` emits `-9`/`-19`; verify accepts all four | `TestCompatAlgorithmEmission` | Yes |
 | v0.2.2-produced PBES2 and ECDH-ES (`-25`) messages decrypt only under `WithLegacyPBES2Labels()` / `WithLegacyECDHES()` respectively, and under `CompatV02Encryption()`; v0.2.2 HPKE (alg 35) messages decrypt with `HPKEKey` and no selector | `TestCompatLegacyEncryption*` vs `testdata/legacy-v0.2.2/` | Yes |
-| Legacy selectors and `CompatV02Encryption` carry `// Deprecated:` with removal floor v0.32.0; `WithDraftHPKE27` carries `Experimental:` naming draft-ietf-cose-hpke-27 | staticcheck SA1019 fixture + doc review | Yes |
+| Legacy selectors and `CompatV02Encryption` carry `// Deprecated:` with removal floor v0.5.0; `WithDraftHPKE27` carries `Experimental:` naming draft-ietf-cose-hpke-27 | staticcheck SA1019 fixture + doc review | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 | `NewSigner` with no options emits `-7` for P-256 and `-8` for Ed25519 (v0.2.2 bytes); with `WithFullySpecifiedAlgorithms()` it emits `-9` / `-19` | `TestSignerAlgEmissionDefault`, `TestSignerFullySpecified` | Yes |

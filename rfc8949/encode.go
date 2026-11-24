@@ -86,7 +86,7 @@ type EncodeOpts struct {
 	// zeros and reducing values that fit major type 0/1 (RFC 8949
 	// §3.4.3).
 	//
-	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
+	// Deprecated: v0.2 compatibility only; removed no earlier than v0.5.0.
 	LegacyBignumPassthrough bool
 	// RejectInvalidTagContent returns an error wrapping
 	// cbor.ErrMalformedTag for a tag whose content is not valid for it,

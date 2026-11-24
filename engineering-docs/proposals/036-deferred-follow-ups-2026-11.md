@@ -113,3 +113,4 @@ focused re-run of anything a full run flagged; the full runs drifted
 | 2026-11-22 | Items 23, 24 done; zero-copy empty-text panic fixed on the way | corecbor maintainers |
 | 2026-11-22 | Items 21, 22 done | corecbor maintainers |
 | 2026-11-22 | Item 25 filed and done (`Cursor` limits; `cwt`/`eat` bignum claim keys) | corecbor maintainers |
+| 2026-11-23 | Done items ship in v0.3.0; the open items are deferred out of v0.3 (each waits on its trigger) | corecbor maintainers |

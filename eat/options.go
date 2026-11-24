@@ -43,7 +43,7 @@ func WithKeepAsReceived() Option {
 //
 // Deprecated: the draft-era keys conflict with RFC 9711 and the IANA
 // CWT registry. Retained for reading and re-issuing tokens produced by
-// corecbor <= v0.2. Removed no earlier than v0.32.0.
+// corecbor <= v0.2. Removed no earlier than v0.5.0.
 func WithLegacyDraftClaimKeys() Option {
 	return func(c *config) { c.num = legacyNumbering }
 }
@@ -51,7 +51,7 @@ func WithLegacyDraftClaimKeys() Option {
 // CompatV02 applies every selector needed to reproduce v0.2.x eat
 // behavior: WithLegacyDraftClaimKeys.
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02() Option {
 	return WithLegacyDraftClaimKeys()
 }

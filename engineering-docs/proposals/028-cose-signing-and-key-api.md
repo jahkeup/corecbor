@@ -354,7 +354,7 @@ Almost all of this proposal is new API. Existing identifiers
 semantics except for the defect rows below. Signing-algorithm emission
 is owned by 029.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | `(*Key).PublicKey` rejects EC2 coordinates longer than the curve size | Safety defect (silent truncation to a different point, `key.go:95-96`) | — | error | none |
 | `(*Key).PublicKey` short coordinates | unchanged | — | left-padded, as v0.2.2 | n/a |

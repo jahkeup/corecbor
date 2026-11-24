@@ -186,7 +186,7 @@ type Claims struct {
 	SWComponents  []SWComponent     // now RFC 9783 claim 2399 (psa-software-components); was 267
 	Submods       map[string]Submod // now 266 (RFC 9711); was 268
 
-	// --- new in v0.30 ---
+	// --- new in v0.3 ---
 	DbgStat      *DebugStatus    // 263 with explicit presence; takes precedence over Debug on encode
 	ProfileOID   []byte          // 265 OID form (RFC 9711 §4.3.2)
 	SUEIDs       map[string][]byte // 257
@@ -280,7 +280,7 @@ type Appraiser struct {
 	SubmodPolicy         func(name string, claims *Claims) error
 	SubmodVerifier       *cose.Verifier
 
-	// --- new in v0.30 ---
+	// --- new in v0.3 ---
 	NonceVerifier     func(nonces [][]byte) error
 	MinDebugStatus    *DebugStatus // unknown values fail
 	RequireProfileOID []byte
@@ -423,12 +423,12 @@ func Verify(data []byte, verifier *cose.Verifier, opts ...Option) (*Claims, erro
 //
 // Deprecated: conflicts with RFC 9711 and the IANA CWT registry.
 // Retained for reading tokens issued by corecbor <= v0.2. Removed no
-// earlier than v0.32.0.
+// earlier than v0.5.0.
 func WithLegacyDraftClaimKeys() Option
 
 // CompatV02 bundles WithLegacyDraftClaimKeys.
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02() Option
 ```
 - The changelog and `eat/doc.go` state the numbering fix. Old test
@@ -457,7 +457,7 @@ name and type, `DebugStatus` stays `int64`, and `Appraise(claims)` keeps
 its signature. The `eat` package documents RFC 9711 (`eat/doc.go:4`), so
 the wire numbering is a Contract defect fixed in place.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | Claim keys renumbered to RFC 9711 / IANA (Uptime 266→261, Submods 268→266) | Contract defect | `eat/doc.go:4` ("Entity Attestation Tokens (EAT) as defined in RFC 9711"); RFC 9711 §10.2 | same fields, RFC keys | `func WithLegacyDraftClaimKeys() Option` — Deprecated; explicit, all-or-nothing |
 | `SWComponents` encoded at RFC 9783 claim 2399 (was 267) | Contract defect | the map shape is RFC 9783's psa-software-components; 267 is bootcount in RFC 9711 | same field, key 2399 | covered by `WithLegacyDraftClaimKeys()` |
@@ -502,7 +502,7 @@ as v0.2.2 except the contract-defect rows above.
 | v0.2.2-issued tokens (uptime, sw-components, submods, `dbgstat` 0) decode to the same values under `WithLegacyDraftClaimKeys()` and fail or decode differently by default; `Encode` under the selector is byte-identical to v0.2.2 | `TestCompatDraftClaimKeys` vs `testdata/legacy-v0.2.2/` | Yes |
 | Under `WithLegacyDraftClaimKeys()`, an RFC 9711 token carrying `submods` at 266 is **not** read as submods (no mixing) | `TestCompatNoMixedNumbering` | Yes |
 | Zero-value `Appraiser{}` behaves as v0.2.2 (nil `CWTValidator` skips validation; no value checks); `NewAppraiser()` validates | `TestAppraiserZeroUnchanged`, `TestNewAppraiserDefaults` | Yes |
-| `WithLegacyDraftClaimKeys` and `CompatV02` carry `// Deprecated:` with removal floor v0.32.0; `SecurityLevel`, `RequireSecurityLevel` carry `// Deprecated:` | staticcheck SA1019 fixture | Yes |
+| `WithLegacyDraftClaimKeys` and `CompatV02` carry `// Deprecated:` with removal floor v0.5.0; `SecurityLevel`, `RequireSecurityLevel` carry `// Deprecated:` | staticcheck SA1019 fixture | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 

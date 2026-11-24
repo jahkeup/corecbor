@@ -596,7 +596,7 @@ func TestAppraiserDefaults(t *testing.T) {
 }
 
 // TestDeprecationMarkers checks the 032 selectors and draft-era fields
-// are marked Deprecated with the v0.32.0 floor where they are selectors.
+// are marked Deprecated with the v0.5.0 floor where they are selectors.
 func TestDeprecationMarkers(t *testing.T) {
 	fset := token.NewFileSet()
 	docs := map[string]string{}
@@ -622,7 +622,7 @@ func TestDeprecationMarkers(t *testing.T) {
 		"SecurityLevel": false, "RequireSecurityLevel": false,
 	} {
 		d := docs[name]
-		if !strings.Contains(d, "Deprecated:") || (floor && !strings.Contains(d, "v0.32.0")) {
+		if !strings.Contains(d, "Deprecated:") || (floor && !strings.Contains(d, "v0.5.0")) {
 			t.Errorf("%s doc lacks Deprecated marker: %q", name, d)
 		}
 	}

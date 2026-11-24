@@ -414,14 +414,14 @@ func cekLenForAlg(alg Algorithm) int {
 //
 // Deprecated: v0.2's non-conformant ECDH-ES encoding (RFC 9053 §6.3);
 // use ECDHESKey as an EncryptMulti recipient, or AgreeKey for direct key
-// agreement. Removed no earlier than v0.32.0.
+// agreement. Removed no earlier than v0.5.0.
 func (e *ECDHESKey) DeriveKey(opts KeyWrapOpts) (cek []byte, headers Headers, err error) {
 	return e.legacyDerive(opts)
 }
 
 // UnderiveKey re-derives DeriveKey's key from the ephemeral key in h.
 //
-// Deprecated: see DeriveKey. Removed no earlier than v0.32.0.
+// Deprecated: see DeriveKey. Removed no earlier than v0.5.0.
 func (e *ECDHESKey) UnderiveKey(h Headers, opts KeyUnwrapOpts) ([]byte, error) {
 	raw, ok := h.Get(headerLabelEphemeralKey).([]byte)
 	if !ok || len(raw) == 0 {

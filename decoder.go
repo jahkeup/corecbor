@@ -177,7 +177,7 @@ func KeepDuplicateMapKeys() DecoderOption {
 // erratum 8589.
 //
 // Deprecated: v0.2 compatibility only (proposal 024); removed no
-// earlier than v0.32.0.
+// earlier than v0.5.0.
 func WithLegacyFloatKeyEquality() DecoderOption {
 	return func(c *decodeConfig) { c.opts.LegacyFloatKeyEquality = true }
 }
@@ -186,7 +186,7 @@ func WithLegacyFloatKeyEquality() DecoderOption {
 // v0.2.x results: WithLegacyFloatKeyEquality (proposal 024) and
 // WithLegacyNoTextBinaryUnmarshal (proposal 025).
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02Decoding() DecoderOption {
 	return func(c *decodeConfig) {
 		c.opts.LegacyFloatKeyEquality = true

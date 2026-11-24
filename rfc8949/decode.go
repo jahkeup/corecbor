@@ -60,7 +60,7 @@ type DecodeOpts struct {
 	// LegacyFloatKeyEquality compares float map keys as v0.2.2 did
 	// (same Kind and ==) instead of per RFC 8949 erratum 8589.
 	//
-	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
+	// Deprecated: v0.2 compatibility only; removed no earlier than v0.5.0.
 	LegacyFloatKeyEquality bool
 
 	// Checking decoder (proposal 024). These run after a successful

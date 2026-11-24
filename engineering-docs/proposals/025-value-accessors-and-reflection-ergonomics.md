@@ -200,7 +200,7 @@ No exported symbol is removed. `cbor` remains import-free of `rfc8949`.
    `Marshal`→`Unmarshal` round-trip for `BinaryMarshaler` types
    (008:170). The only v0.2.2 behavior that changes is a `[]byte`- or
    `string`-kinded type that also implements the Unmarshaler: v0.2
-   stored the raw bytes/text directly, v0.30 calls the method.
+   stored the raw bytes/text directly, v0.3 calls the method.
    `WithLegacyNoTextBinaryUnmarshal() DecoderOption` (Deprecated)
    restores v0.2.
 
@@ -256,14 +256,14 @@ func WithCaseInsensitiveFieldNames() DecoderOption
 // reproduce v0.2.x Marshal/Encode output: WithLegacyBignumPassthrough
 // (024).
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02() Option
 
 // CompatV02Decoding applies every decoder-side Legacy selector needed
 // to reproduce v0.2.x acceptance: WithLegacyFloatKeyEquality (024) and
 // WithLegacyNoTextBinaryUnmarshal (this proposal).
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02Decoding() DecoderOption
 ```
 
@@ -342,7 +342,7 @@ No exported identifier changes signature. `ErrOverflow` moves to
 value, so `errors.Is` matches either). The package-level `Marshal`
 default (lowercase untagged keys) is unchanged.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | `encoding.TextUnmarshaler`/`BinaryUnmarshaler` called on decode | Contract defect | `008-reflective-marshal-unmarshal.md:315-316` (TextUnmarshaler "supported"); 008:170 + round-trip of `BinaryMarshaler` types | called; only `[]byte`/`string`-kinded implementers behave differently | `func WithLegacyNoTextBinaryUnmarshal() DecoderOption` — Deprecated, in `CompatV02Decoding()` |
 | Untagged struct field key = Go field name as-is | Additive (opt-in) | — (no standard; 034 step 3) | lowercase, unchanged | `func WithGoFieldNames() Option` (not deprecated) |
@@ -376,7 +376,7 @@ existing functions.
 | Default decode matches exactly as v0.2.2 (a `"UserID"` key does not populate an untagged `UserID` field); with `WithCaseInsensitiveFieldNames()` it does | `TestDecodeCaseDefault`, `TestDecodeCaseInsensitive` | Yes (Phase D) |
 | `WithLegacyNoTextBinaryUnmarshal()` reproduces v0.2.2 for `[]byte`/`string`-kinded Unmarshaler types | `TestLegacyNoTextBinaryUnmarshal` | Yes |
 | `New(ModeCoreDeterministic, CompatV02()).Marshal(x)` equals v0.2.2 `Marshal(x)` byte-for-byte over the legacy fixture set (excluding 021 defect fixtures) | `TestCompatV02MarshalGolden` vs `testdata/legacy-v0.2.2/` | Yes |
-| `CompatV02` and `CompatV02Decoding` carry `// Deprecated:` with removal floor v0.32.0 | staticcheck SA1019 fixture | Yes |
+| `CompatV02` and `CompatV02Decoding` carry `// Deprecated:` with removal floor v0.5.0 | staticcheck SA1019 fixture | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 

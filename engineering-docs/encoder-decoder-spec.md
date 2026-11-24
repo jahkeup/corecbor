@@ -798,6 +798,6 @@ two behaviors are ambiguous on the wire, accept only the selected one.
 | Draft | defined only by an Internet-Draft | opt-in, Experimental |
 
 `Legacy…` selectors are deprecated on arrival and removed no earlier
-than v0.32.0. Selectors that weaken verification or validation are
+than v0.5.0. Selectors that weaken verification or validation are
 never included in a `CompatV02*` bundle.
 

@@ -9,7 +9,7 @@
 # change is appending a variadic `...Option` parameter to an existing
 # function, and only when a call with no options behaves exactly as
 # before (apart from defect fixes listed in the same proposal). Every
-# entry here must also appear in engineering-docs/migration-v0.2-to-v0.30.md.
+# entry here must also appear in engineering-docs/migration-v0.2-to-v0.3.md.
 #
 # Format: one entry per line, "<module path>: <apidiff line>", copied from
 # the apicheck output, e.g.

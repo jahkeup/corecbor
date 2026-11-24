@@ -83,7 +83,7 @@ func WithInvalidUTF8(p InvalidUTF8) Option {
 // stripped, and values that fit 64 bits as plain integers.
 //
 // Deprecated: v0.2 compatibility only (proposal 024); removed no
-// earlier than v0.32.0.
+// earlier than v0.5.0.
 func WithLegacyBignumPassthrough() Option {
 	return func(c *encodeConfig) { c.legacyBignum = true }
 }
@@ -92,7 +92,7 @@ func WithLegacyBignumPassthrough() Option {
 // output: currently WithLegacyBignumPassthrough. It exists to unblock
 // upgrades, not as a long-term mode (proposal 034).
 //
-// Deprecated: migrate to explicit selectors; removed no earlier than v0.32.0.
+// Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02() Option {
 	return func(c *encodeConfig) { c.legacyBignum = true }
 }

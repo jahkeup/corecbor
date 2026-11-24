@@ -269,7 +269,7 @@ type DecodeLimits struct {
 	MemoryBudget int // 0 → core default (none)
 	MaxDepth     int // 0 → core default (256)
 	// Deprecated: duplicate labels violate RFC 9052 §3; removed no
-	// earlier than v0.32.0.
+	// earlier than v0.5.0.
 	AllowDuplicateLabels bool
 }
 
@@ -496,7 +496,7 @@ nil-vs-empty distinction.
   `VerifyMAC0` and `ComputeMACMulti` (when a key is supplied), and a
   recovered empty key fails `VerifyMACMulti`. `WithStrictMACKeyLength`
   requires a key at least the hash length.
-- **Legacy selectors, deprecated with a v0.32.0 floor, never bundled.**
+- **Legacy selectors, deprecated with a v0.5.0 floor, never bundled.**
   `WithLegacyAlgorithmFromKey` and `WithLegacyIgnoreCritical` (Verifier),
   plus `WithLegacyMACHeaders` and `WithLegacyEncryptHeaders`, which
   restore v0.2.2 header handling (alg unbound, crit ignored) for the
@@ -553,7 +553,7 @@ Classified per [034](034-standards-currency-and-legacy-compatibility.md).
 visible at the call site and in code review. `cose`'s bundles carry only
 interoperability selectors for code points and emission (029).
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | H1 verify/decrypt over the received protected bytes | Contract defect | RFC 9052 §4.4 / §5.3 / §6.3 (ToBeSigned/AAD use the protected bstr as transmitted) | raw bytes | none |
 | H2 header `alg` must be protected and match key + allow-list | Contract defect | RFC 9052 §3.1 (`alg` "MUST be authenticated where the ability to change the algorithm identifier would provide an attack vector") and §4.4 | enforced | `func WithLegacyAlgorithmFromKey() VerifierOption` — Deprecated; v0.2 behavior. Not bundled |
@@ -603,7 +603,7 @@ entries):** `VerifyMulti(msg, verifiers, policy ...VerifyPolicy)`,
 | Fuzz targets run 60s clean in CI | see Test surface | Yes |
 | RFC 9053 vendored to `engineering-docs/rfcs/rfc9053.txt` (cited above) | file present + `rfcs/README.md` row | Yes |
 | Each legacy selector above reproduces v0.2.2 acceptance on its fixture (message with unprotected alg, unknown `crit` label, duplicate label, 16-byte HMAC-256 key) and the default rejects it | `TestCompatLegacyVerify*` vs `testdata/legacy-v0.2.2/` | Yes |
-| Legacy selectors and `DecodeLimits.AllowDuplicateLabels` carry `// Deprecated:` with removal floor v0.32.0; none appears in any `CompatV02*` bundle | staticcheck SA1019 fixture + `TestCompatBundlesExcludeWeakening` | Yes |
+| Legacy selectors and `DecodeLimits.AllowDuplicateLabels` carry `// Deprecated:` with removal floor v0.5.0; none appears in any `CompatV02*` bundle | staticcheck SA1019 fixture + `TestCompatBundlesExcludeWeakening` | Yes |
 | A message with payload `h''` (empty, not detached) verifies | `TestVerifyEmptyPayload` | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |

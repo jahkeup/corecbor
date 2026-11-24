@@ -270,7 +270,7 @@ No exported identifier changes signature. The `RawMessage`/`RawTag`
 changes are **Contract defects**; other `Unmarshaler`/`Marshaler`
 implementations keep their v0.2.2 behavior unless the caller opts in.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | `RawMessage`/`RawTag` content on decode is the exact input bytes | Contract defect | proposal 014 (`014-raw-message-and-tag-wrapping.md:23-24`, `:136-143`: "captured as-is", "without modification") | original bytes | none (014's own contract; callers wanting canonical bytes decode then `Encode` with a deterministic `Encoder`) |
 | `RawMessage`/`RawTag` spliced verbatim on Permissive-mode encode | Contract defect | `014-raw-message-and-tag-wrapping.md:142` ("emitted directly (no re-encoding)") | verbatim in Permissive; deterministic modes still canonicalize (§2.1) | none |

@@ -328,7 +328,7 @@ This proposal adds helpers, constants and data; no existing identifier
 changes signature or semantics, and no existing encode/decode/diagnostic
 output changes.
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | New tag helpers (UUID, dates, extended time, IP, OID, tag 24) and short constants in `cbor/tags.go` | Additive | — | unchanged | n/a |
 | Existing tag helpers' errors also wrap `ErrMalformedTag` | Additive | — | `Error()` text identical; existing `errors.Is` matches unchanged | n/a |

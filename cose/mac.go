@@ -87,7 +87,7 @@ func AllowMACProtectedRecipientHeaders() MACOption {
 // ECDH-ES MAC recipients discarded the MAC key and never verified.
 //
 // Deprecated: interop with corecbor v0.2 only (proposal 029); removed
-// no earlier than v0.32.0.
+// no earlier than v0.5.0.
 func WithLegacyMACPBES2Labels() MACOption {
 	return func(o *macOpts) { o.legacy.pbes2 = true }
 }
@@ -99,7 +99,7 @@ func WithLegacyMACPBES2Labels() MACOption {
 // header-selected HMAC 256/64 in VerifyMACMulti; use WithMACAlgorithms.
 //
 // Deprecated: proposal 027 H2/H3 (RFC 9052 §3.1). Retained for
-// migration only; removed no earlier than v0.32.0.
+// migration only; removed no earlier than v0.5.0.
 func WithLegacyMACHeaders() MACOption {
 	return func(o *macOpts) {
 		o.policy.legacyAlg = true

@@ -259,7 +259,7 @@ type options struct {
 // other new fields are ignored.
 //
 // Deprecated: non-interoperable and missing identity binding. Removed
-// no earlier than v0.32.0. Not part of any CompatV02 bundle.
+// no earlier than v0.5.0. Not part of any CompatV02 bundle.
 func WithLegacyPreRFCProtocol() Option {
 	return func(o *options) { o.legacy = true }
 }

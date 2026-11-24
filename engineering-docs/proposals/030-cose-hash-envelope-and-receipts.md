@@ -280,7 +280,7 @@ so no existing identifier changes signature or semantics and no legacy
 selector is needed. New `Signer`/`Verifier` methods are added to
 existing struct types (allowed: no interface gains a method).
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | `cose` hash envelope (RFC 9995): `SignHashEnvelope`, `SignHashEnvelopeDigest`, `VerifyHashEnvelope` | Additive (published RFC) | — | `Sign`/`Verify` unchanged | n/a |
 | `cose/receipt` (RFC 9942), `scitt` signed statements (RFC 9943) | Additive (new packages) | — | n/a | n/a |

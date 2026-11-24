@@ -9,10 +9,29 @@ A strict-RFC-conformant CBOR encoder plus a forgiving CBOR decoder, with
 the same primitives serving both storage / cryptographic-AAD use cases
 and wire-protocol implementation use cases.
 
-**Status:** Active development. Core codec (encode, decode, streaming,
-deterministic modes), COSE signing/encryption, CWT, EAT, and EDHOC
-sub-modules are implemented. See closed proposals under
+**Status:** Pre-1.0, active development. Core codec (encode, decode,
+streaming, deterministic modes), COSE signing/encryption, CWT, EAT,
+EDHOC and SCITT sub-modules are implemented. See closed proposals under
 [`engineering-docs/proposals/`](engineering-docs/proposals/) for history.
+
+## Install
+
+Each directory below is its own Go module, versioned together
+(`v0.3.0`, `cose/v0.3.0`, …):
+
+```sh
+go get github.com/jahkeup/corecbor@v0.3.0         # CBOR codec
+go get github.com/jahkeup/corecbor/cose@v0.3.0    # COSE (RFC 9052/9053)
+go get github.com/jahkeup/corecbor/cwt@v0.3.0     # CWT (RFC 8392)
+go get github.com/jahkeup/corecbor/eat@v0.3.0     # EAT (RFC 9711)
+go get github.com/jahkeup/corecbor/edhoc@v0.3.0   # EDHOC (RFC 9528)
+go get github.com/jahkeup/corecbor/scitt@v0.3.0   # SCITT signed statements
+```
+
+Upgrading from v0.2: read
+[`migration-v0.2-to-v0.3.md`](engineering-docs/migration-v0.2-to-v0.3.md).
+Defaults follow the current RFCs; each changed default has a selector
+for the previous behavior, deprecated and kept until at least v0.5.0.
 
 ## Documentation
 

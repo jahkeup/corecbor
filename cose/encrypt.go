@@ -57,7 +57,7 @@ func AllowProtectedRecipientHeaders() EncryptOption {
 // no other implementation reads these messages as PBES2.
 //
 // Deprecated: colliding code points (proposal 029); removed no earlier
-// than v0.32.0.
+// than v0.5.0.
 func WithLegacyPBES2Labels() EncryptOption {
 	return func(o *encryptOpts) { o.legacy.pbes2 = true }
 }
@@ -68,7 +68,7 @@ func WithLegacyPBES2Labels() EncryptOption {
 // key. Messages produced this way only interoperate with corecbor v0.2.
 //
 // Deprecated: non-conformant to RFC 9053 §6.3 (proposal 029); removed
-// no earlier than v0.32.0.
+// no earlier than v0.5.0.
 func WithLegacyECDHES() EncryptOption {
 	return func(o *encryptOpts) { o.legacy.ecdh = true }
 }
@@ -78,7 +78,7 @@ func WithLegacyECDHES() EncryptOption {
 // v0.2 encrypted messages. It weakens no verification.
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than
-// v0.32.0.
+// v0.5.0.
 func CompatV02Encryption() EncryptOption {
 	return func(o *encryptOpts) {
 		o.legacy.pbes2 = true
@@ -128,7 +128,7 @@ func WithEncryptKnownCriticalHeaders(labels ...any) EncryptOption {
 // (DecryptMulti), and crit isn't processed.
 //
 // Deprecated: proposal 027 H2/H3 (RFC 9052 §3.1). Retained for
-// migration only; removed no earlier than v0.32.0.
+// migration only; removed no earlier than v0.5.0.
 func WithLegacyEncryptHeaders() EncryptOption {
 	return func(o *encryptOpts) {
 		o.policy.legacyAlg = true

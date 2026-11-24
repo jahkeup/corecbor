@@ -141,7 +141,7 @@ type ClaimsSet struct {
 	// Deprecated: use PrivateClaims.
 	Private map[any]any
 
-	// --- new in v0.30 ---
+	// --- new in v0.3 ---
 
 	// Audiences is the "aud" claim in either form (RFC 9200 §5.10.1:
 	// a StringOrURI or an array of them). For a single-string aud,
@@ -225,7 +225,7 @@ type Validator struct {
 	RequireExpiration   bool // unchanged
 	RequireConfirmation bool // unchanged
 
-	// --- new in v0.30 ---
+	// --- new in v0.3 ---
 	Issuers              []string      // when non-empty, iss MUST be one of these
 	MaxAge               time.Duration // when > 0, iat MUST be within MaxAge of now
 	RequireIssuedAt      bool
@@ -365,7 +365,7 @@ type Confirmation struct {
 	// Deprecated: use EncryptedKey, which encodes per RFC 8747 §3.3.
 	Encrypted []byte
 
-	// EncryptedKey is member 2 as RFC 8747 §3.3 defines it. New in v0.30;
+	// EncryptedKey is member 2 as RFC 8747 §3.3 defines it. New in v0.3;
 	// takes precedence over Encrypted on encode.
 	EncryptedKey *EncryptedKey
 }
@@ -399,7 +399,7 @@ type DecodeOptions struct {
 	// duplicate claim keys.
 	//
 	// Deprecated: duplicate claims make exp/nbf ambiguous (RFC 8392
-	// §7.2); removed no earlier than v0.32.0.
+	// §7.2); removed no earlier than v0.5.0.
 	AllowDuplicateClaims bool
 }
 
@@ -418,7 +418,7 @@ func DecodeClaimsSetWith(data []byte, opts DecodeOptions) (*ClaimsSet, error)
 
 ### Behavior
 
-| Before (v0.2.2) | After (v0.30) |
+| Before (v0.2.2) | After (v0.3) |
 |---|---|
 | `DecodeClaimsSet` panics on a bstr / array / map claim key | No panic; the claim lands in `PrivateClaims` only |
 | −(2^64−1) claim key decodes as `iss` | Decodes as a private claim |
@@ -465,7 +465,7 @@ current behavior arrives in new identifiers (`NewValidator`,
 `VerifyToken`, `VerifyMACToken`, `OpenToken`, `Seal`, `Audiences`,
 `PrivateClaims`, `EncryptedKey`).
 
-| Change | Class | Contract restored | Existing identifiers in v0.30 | Selector |
+| Change | Class | Contract restored | Existing identifiers in v0.3 | Selector |
 |---|---|---|---|---|
 | Non-scalar claim keys no longer panic | Safety defect | — | omitted from `Private`, present in `PrivateClaims` | none |
 | Out-of-range int keys alias registered claims; private/registered key collision on encode | Contract defect | RFC 8392 §4 (claim keys are int or text; registered keys mean the registered claim) | not aliased; collision → `ErrMalformedClaims` | none |
@@ -516,7 +516,7 @@ functions.
 | RFC 8392, 8747, 9200, 9596, 9597, 9781 vendored under `engineering-docs/rfcs/` with inventory rows | file review | Yes |
 | `DecodeOptions{AllowDuplicateClaims: true}` reproduces v0.2.2 acceptance of a duplicate-`exp` token and the default rejects it | `TestCompatDuplicateClaims` vs `testdata/legacy-v0.2.2/` | Yes |
 | `Verify` behaves exactly like v0.2.2 on the RFC 8392 A.3 vector | `TestCompatVerify` | Yes |
-| `DecodeOptions.AllowDuplicateClaims` carries `// Deprecated:` with removal floor v0.32.0; `Private`, `Confirmation.Encrypted`, `Encrypt`, `Decrypt` carry `// Deprecated:` pointing to their replacements | staticcheck SA1019 fixture | Yes |
+| `DecodeOptions.AllowDuplicateClaims` carries `// Deprecated:` with removal floor v0.5.0; `Private`, `Confirmation.Encrypted`, `Encrypt`, `Decrypt` carry `// Deprecated:` pointing to their replacements | staticcheck SA1019 fixture | Yes |
 | No exported identifier present in v0.2.2 is removed, renamed, or retyped, and no method is added to an exported interface (034 API stability) | `apidiff` against `v0.2.2` for this module, run in `make check` | Yes |
 | Existing identifiers called with no new options reproduce the v0.2.2 golden vectors, except the contract-defect fixes listed under Compatibility selection | `testdata/legacy-v0.2.2/` golden tests | Yes |
 | `Validator{}` accepts a token without `exp` and with a future `iat` (v0.2.2); `NewValidator()` rejects both | `TestValidatorZeroUnchanged`, `TestNewValidatorDefaults` | Yes |

@@ -593,6 +593,25 @@ func TestE8_IDCredOtherAndMultipleParams(t *testing.T) {
 	}
 }
 
+// E14: a one-certificate x5chain must be a byte string (RFC 9360 §2);
+// the array form would be re-encoded differently.
+func TestE14_OneElementX5ChainArray(t *testing.T) {
+	cert := []byte{0x30, 0x00}
+	arr := []byte{0xa1, 0x18, 0x21, 0x81, 0x42, 0x30, 0x00} // {33: [h'3000']}
+	v, err := corecbor.NewDecoder(seqDecOpts...).Decode(arr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseIDCred(v, arr); !errors.Is(err, ErrMessageFormat) {
+		t.Errorf("one-element x5chain array: %v, want ErrMessageFormat", err)
+	}
+	bs := []byte{0xa1, 0x18, 0x21, 0x42, 0x30, 0x00} // {33: h'3000'}
+	v, _ = corecbor.NewDecoder(seqDecOpts...).Decode(bs)
+	if id, err := parseIDCred(v, bs); err != nil || len(id.X5Chain) != 1 || !bytes.Equal(id.X5Chain[0], cert) {
+		t.Errorf("byte-string x5chain: %+v, %v", id, err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

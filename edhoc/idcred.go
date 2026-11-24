@@ -276,6 +276,10 @@ func (id *IDCred) setParam(label int64, val cbor.Value, enc func() []byte) error
 			if len(chain) == 0 {
 				return fmt.Errorf("%w: empty x5chain", ErrMessageFormat)
 			}
+			if len(chain) == 1 {
+				// RFC 9360 §2: a single certificate is a byte string.
+				return fmt.Errorf("%w: x5chain with one certificate must be a byte string, not an array", ErrMessageFormat)
+			}
 			id.X5Chain = chain
 		default:
 			return fmt.Errorf("%w: x5chain must be a byte string or array", ErrMessageFormat)

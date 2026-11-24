@@ -121,8 +121,12 @@ type InitiatorConfig struct {
 	// received. Indefinite lengths and duplicate map keys are always
 	// rejected.
 	AcceptNonDeterministicEncoding bool
-	// Rand overrides crypto/rand for ephemeral keys and connection IDs
-	// (deterministic tests, RFC 9529).
+	// Rand is INSECURE and for tests only: deterministic runs such as
+	// the RFC 9529 traces. When set, it replaces crypto/rand for the
+	// ephemeral key, whose private bytes are read from it directly, and
+	// for automatic connection identifiers. A predictable or repeating
+	// reader exposes every session key derived from that ephemeral key.
+	// Leave it nil in production. (Signatures always use crypto/rand.)
 	Rand io.Reader
 }
 
@@ -161,7 +165,13 @@ type ResponderConfig struct {
 	AcceptCriticalEAD func(EADItem) bool
 	// AcceptNonDeterministicEncoding is as for InitiatorConfig.
 	AcceptNonDeterministicEncoding bool
-	Rand                           io.Reader
+	// Rand is INSECURE and for tests only: deterministic runs such as
+	// the RFC 9529 traces. When set, it replaces crypto/rand for the
+	// ephemeral key, whose private bytes are read from it directly, and
+	// for automatic connection identifiers. A predictable or repeating
+	// reader exposes every session key derived from that ephemeral key.
+	// Leave it nil in production. (Signatures always use crypto/rand.)
+	Rand io.Reader
 }
 
 // Option configures an Initiator or Responder.

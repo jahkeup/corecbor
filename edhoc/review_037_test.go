@@ -14,6 +14,9 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 	"time"
@@ -768,6 +771,36 @@ func TestE16_IntermediateValuesDeleted(t *testing.T) {
 		if ini.s.k4 != nil || res.s.k4 != nil {
 			t.Errorf("method %d: K_4 kept after message_4", m)
 		}
+	}
+}
+
+// E17: Rand is documented as insecure and for tests only, on both
+// configs.
+func TestE17_RandFlaggedTestOnly(t *testing.T) {
+	f, err := parser.ParseFile(token.NewFileSet(), "config.go", nil, parser.ParseComments)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	ast.Inspect(f, func(n ast.Node) bool {
+		ts, ok := n.(*ast.TypeSpec)
+		if !ok || (ts.Name.Name != "InitiatorConfig" && ts.Name.Name != "ResponderConfig") {
+			return true
+		}
+		for _, fld := range ts.Type.(*ast.StructType).Fields.List {
+			if len(fld.Names) == 0 || fld.Names[0].Name != "Rand" {
+				continue
+			}
+			found++
+			doc := fld.Doc.Text()
+			if !strings.Contains(doc, "INSECURE") || !strings.Contains(doc, "tests only") {
+				t.Errorf("%s.Rand doc does not flag it as insecure and for tests only:\n%s", ts.Name.Name, doc)
+			}
+		}
+		return false
+	})
+	if found != 2 {
+		t.Fatalf("found %d Rand fields, want 2", found)
 	}
 }
 

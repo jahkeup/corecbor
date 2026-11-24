@@ -6,7 +6,9 @@ package cwt
 import (
 	"context"
 	"fmt"
+	"mime"
 	"slices"
+	"strings"
 
 	"github.com/jahkeup/corecbor/cose"
 )
@@ -40,13 +42,29 @@ type VerifyOptions struct {
 	// accept a truncated MAC.
 	AllowedAlgorithms []cose.Algorithm
 
-	// MaxNesting bounds nested CWTs (cty 61 / "application/cwt",
-	// RFC 8392 §7.1 step 6). 0 means 1; negative forbids nesting.
-	// Nesting is supported for COSE_Sign1 inside COSE_Sign1.
+	// MaxNesting bounds nested CWTs: a payload that begins with a CBOR
+	// tag (RFC 8392 §7.2 step 6), or cty 61 / "application/cwt". 0
+	// means 1; negative forbids nesting. Nesting is supported for
+	// COSE_Sign1 inside COSE_Sign1; VerifyMACToken and OpenToken
+	// reject a nested payload with ErrUnexpectedType.
 	MaxNesting int
 
 	// Decode adjusts claims decoding.
 	Decode DecodeOptions
+
+	// Types, when non-empty, lists the typ header values (RFC 9596)
+	// accepted instead of the default application/cwt and 61: each a
+	// media-type string (compared case-insensitively, parameters
+	// ignored) or a uint64 CoAP Content-Format, as for
+	// cose.Headers.SetType. List MediaTypeCWT too to keep accepting
+	// it. For example, an EAT-aware caller lists
+	// "application/eat+cwt" and 263.
+	Types []any
+
+	// RequireType requires a typ header (explicit typing, RFC 8725
+	// §3.11, RFC 9596), so a token of another kind signed by the same
+	// key can't be substituted. Without it a token with no typ passes.
+	RequireType bool
 }
 
 // Token is a verified CWT and its COSE envelope.
@@ -84,7 +102,7 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
-	nested, err := checkContentTypes(&msg.Protected, &msg.Unprotected)
+	nested, err := checkContentTypes(&msg.Protected, &msg.Unprotected, opts, depth == 0)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +117,7 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 		return nil, err
 	}
 	tok := &Token{Protected: &msg.Protected, Unprotected: &msg.Unprotected, Tagged: tagged}
-	if nested {
+	if nested || startsWithTag(msg.Payload) {
 		if depth+1 > maxNesting(opts) {
 			return nil, fmt.Errorf("%w: nested CWT deeper than MaxNesting", ErrUnexpectedType)
 		}
@@ -132,7 +150,7 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
-	if err := checkNotNested(&msg.Protected, &msg.Unprotected); err != nil {
+	if err := checkNotNested(&msg.Protected, &msg.Unprotected, opts); err != nil {
 		return nil, err
 	}
 	alg, err := protectedAlg(&msg.Protected, opts.AllowedAlgorithms, defaultMACAlgs)
@@ -145,7 +163,7 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 	if err := cose.VerifyMAC0(msg, key, alg, cose.WithMACAlgorithms(alg)); err != nil {
 		return nil, err
 	}
-	claims, err := decodeAndValidate(msg.Payload, opts, false)
+	claims, err := decodeNotNested(msg.Payload, opts, false)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +186,7 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
-	if err := checkNotNested(&msg.Protected, &msg.Unprotected); err != nil {
+	if err := checkNotNested(&msg.Protected, &msg.Unprotected, opts); err != nil {
 		return nil, err
 	}
 	alg, err := protectedAlg(&msg.Protected, opts.AllowedAlgorithms, defaultEncryptAlgs)
@@ -185,7 +203,7 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 	if err != nil {
 		return nil, err
 	}
-	claims, err := decodeAndValidate(plaintext, opts, true)
+	claims, err := decodeNotNested(plaintext, opts, true)
 	if err != nil {
 		return nil, err
 	}
@@ -268,13 +286,60 @@ func isCWTType(format uint64, mediaType string) bool {
 	return mediaType == MediaTypeCWT || (mediaType == "" && format == CoAPContentFormatCWT)
 }
 
-// checkContentTypes applies RFC 9596 typ and RFC 8392 cty rules. It
-// reports whether cty marks a nested CWT.
-func checkContentTypes(prot, unprot *cose.Headers) (bool, error) {
+// typeAccepted reports whether a typ value is accepted under opts.Types
+// (entries already checked to be string or uint64), or, when that is
+// empty, whether it names a CWT.
+func typeAccepted(format uint64, mediaType string, opts VerifyOptions) bool {
+	if len(opts.Types) == 0 {
+		return isCWTType(format, mediaType)
+	}
+	var mt string
+	if mediaType != "" {
+		parsed, _, err := mime.ParseMediaType(mediaType)
+		if err != nil {
+			return false
+		}
+		mt = parsed
+	}
+	for _, t := range opts.Types {
+		switch want := t.(type) {
+		case string:
+			if mt != "" && strings.EqualFold(mt, want) {
+				return true
+			}
+		case uint64:
+			if mediaType == "" && format == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// checkContentTypes applies RFC 9596 typ (opts.Types, opts.RequireType
+// when top is set) and RFC 8392 cty rules. It reports whether cty marks
+// a nested CWT.
+func checkContentTypes(prot, unprot *cose.Headers, opts VerifyOptions, top bool) (bool, error) {
+	for _, t := range opts.Types {
+		switch t.(type) {
+		case string, uint64:
+		default:
+			return false, fmt.Errorf("%w: VerifyOptions.Types entry %v (%T) is not a media type or a uint64 content format", ErrUnexpectedType, t, t)
+		}
+	}
+	seen := false
 	for _, h := range []*cose.Headers{prot, unprot} {
-		if f, mt, ok := h.Type(); ok && !isCWTType(f, mt) {
+		f, mt, ok := h.Type()
+		if !ok {
+			continue
+		}
+		seen = true
+		if !typeAccepted(f, mt, opts) {
 			return false, fmt.Errorf("%w: typ %q/%d", ErrUnexpectedType, mt, f)
 		}
+	}
+	if top && opts.RequireType && !seen {
+		return false, fmt.Errorf("%w: typ header required", ErrUnexpectedType)
 	}
 	for _, h := range []*cose.Headers{prot, unprot} {
 		if f, mt, ok := h.ContentType(); ok {
@@ -287,15 +352,27 @@ func checkContentTypes(prot, unprot *cose.Headers) (bool, error) {
 	return false, nil
 }
 
-func checkNotNested(prot, unprot *cose.Headers) error {
-	nested, err := checkContentTypes(prot, unprot)
+func checkNotNested(prot, unprot *cose.Headers, opts VerifyOptions) error {
+	nested, err := checkContentTypes(prot, unprot, opts, true)
 	if err != nil {
 		return err
 	}
 	if nested {
-		return fmt.Errorf("%w: nested CWT is supported only for COSE_Sign1", ErrUnexpectedType)
+		return errNestedUnsupported
 	}
 	return nil
+}
+
+var errNestedUnsupported = fmt.Errorf("%w: nested CWT is supported only for COSE_Sign1", ErrUnexpectedType)
+
+// decodeNotNested is decodeAndValidate for a MAC or encrypted CWT,
+// whose payload may not be another CWT (RFC 8392 §7.2 step 6; only
+// COSE_Sign1 nesting is supported).
+func decodeNotNested(payload []byte, opts VerifyOptions, encrypted bool) (*ClaimsSet, error) {
+	if startsWithTag(payload) {
+		return nil, errNestedUnsupported
+	}
+	return decodeAndValidate(payload, opts, encrypted)
 }
 
 // resolverWithErr wraps resolver failures in ErrKeyResolution.

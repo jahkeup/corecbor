@@ -264,6 +264,103 @@ func TestNumericDate_Edges037(t *testing.T) {
 	}
 }
 
+// W16: RFC 8392 §7.2 step 2 — tag 61 must be followed by a COSE tag.
+func TestTag61_NeedsCOSETag037(t *testing.T) {
+	ctx := context.Background()
+	signed := signedWith(t, validClaims(), cose.Headers{})
+	untagged := append([]byte{0xd8, 0x3d}, signed[1:]...) // 61([...])
+	verifier, _ := cose.NewVerifier(edPub)
+	if _, err := cwt.Verify(untagged, verifier); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("Verify(61(untagged)): %v", err)
+	}
+	opts := cwt.VerifyOptions{Keys: edResolver(t), Validator: fixedNow(cwt.NewValidator(), t0)}
+	if _, err := cwt.VerifyToken(ctx, untagged, opts); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("VerifyToken(61(untagged)): %v", err)
+	}
+	macked, _ := cwt.MAC(validClaims(), macKey, cose.AlgHMAC256)
+	if _, err := cwt.VerifyMACToken(ctx, append([]byte{0xd8, 0x3d}, macked[1:]...), macKey, opts); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("VerifyMACToken(61(untagged)): %v", err)
+	}
+	if _, err := cwt.VerifyToken(ctx, append([]byte{0xd8, 0x3d}, signed...), opts); err != nil {
+		t.Errorf("VerifyToken(61(18(...))): %v", err)
+	}
+}
+
+// W17: RFC 8392 §7.2 step 6 — a payload that starts with a COSE tag is
+// a nested CWT, with or without cty.
+func TestNested_ByTag037(t *testing.T) {
+	ctx := context.Background()
+	inner := signedWith(t, validClaims(), cose.Headers{})
+	signer, _ := cose.NewSigner(edPriv)
+	msg, err := signer.Sign(inner) // no cty
+	if err != nil {
+		t.Fatal(err)
+	}
+	outer, _ := cose.MarshalSign1(msg)
+	opts := cwt.VerifyOptions{Keys: edResolver(t), Validator: fixedNow(cwt.NewValidator(), t0)}
+	tok, err := cwt.VerifyToken(ctx, outer, opts)
+	if err != nil || tok.Nested == nil || tok.Claims.Issuer != "as" {
+		t.Fatalf("nested by tag: %+v, %v", tok, err)
+	}
+	// Inside a MAC or an encryption, nesting is unsupported: say so.
+	mac, _ := cose.ComputeMAC0(inner, macKey, cose.AlgHMAC256)
+	macked, _ := cose.MarshalMac0(mac)
+	if _, err := cwt.VerifyMACToken(ctx, macked, macKey, opts); !errors.Is(err, cwt.ErrUnexpectedType) {
+		t.Errorf("VerifyMACToken(nested): %v, want ErrUnexpectedType", err)
+	}
+	enc, _ := cose.Encrypt0Seal(inner, aesKey, cose.AlgA128GCM)
+	sealed, _ := cose.MarshalEncrypt0(enc)
+	if _, err := cwt.OpenToken(ctx, sealed, aesKey, opts); !errors.Is(err, cwt.ErrUnexpectedType) {
+		t.Errorf("OpenToken(nested): %v, want ErrUnexpectedType", err)
+	}
+}
+
+// W12: RFC 8725 §3.11 explicit typing — the accepted typ values are
+// selectable, and typ can be required.
+func TestVerifyToken_Types037(t *testing.T) {
+	ctx := context.Background()
+	typed := func(typ any) []byte {
+		var prot cose.Headers
+		if typ != nil {
+			if err := prot.SetType(typ); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return signedWith(t, validClaims(), prot)
+	}
+	base := cwt.VerifyOptions{Keys: edResolver(t), Validator: fixedNow(cwt.NewValidator(), t0)}
+	eatTypes := base
+	eatTypes.Types = []any{"application/eat+cwt", uint64(263)}
+	required := base
+	required.RequireType = true
+	for _, tc := range []struct {
+		name string
+		typ  any
+		opts cwt.VerifyOptions
+		ok   bool
+	}{
+		{"default, EAT typ", "application/eat+cwt", base, false},
+		{"default, no typ", nil, base, true},
+		{"Types, EAT typ", "application/eat+cwt", eatTypes, true},
+		{"Types, EAT typ with parameter", `Application/EAT+CWT; eat_profile="x"`, eatTypes, true},
+		{"Types, EAT content format", uint64(263), eatTypes, true},
+		{"Types, CWT typ not listed", "application/cwt", eatTypes, false},
+		{"Types, no typ", nil, eatTypes, true},
+		{"RequireType, no typ", nil, required, false},
+		{"RequireType, CWT typ", uint64(61), required, true},
+	} {
+		_, err := cwt.VerifyToken(ctx, typed(tc.typ), tc.opts)
+		if tc.ok != (err == nil) || (!tc.ok && !errors.Is(err, cwt.ErrUnexpectedType)) {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+	bad := base
+	bad.Types = []any{1.5}
+	if _, err := cwt.VerifyToken(ctx, typed(nil), bad); !errors.Is(err, cwt.ErrUnexpectedType) {
+		t.Errorf("Types with a float: %v", err)
+	}
+}
+
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
 // package doesn't understand, carries no proof-of-possession key.
 func TestValidator_RequireConfirmation037(t *testing.T) {

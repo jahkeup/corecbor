@@ -52,9 +52,12 @@ type credParty struct {
 
 // validator returns the configured CWT claims validator, or
 // cwt.NewValidator().
-func (p credParty) validator() *cwt.Validator {
-	if p.cwtValidator != nil {
-		return p.cwtValidator
+func (p credParty) validator() *cwt.Validator { return cwtValidatorOrDefault(p.cwtValidator) }
+
+// cwtValidatorOrDefault returns v, or cwt.NewValidator() when v is nil.
+func cwtValidatorOrDefault(v *cwt.Validator) *cwt.Validator {
+	if v != nil {
+		return v
 	}
 	return cwt.NewValidator()
 }

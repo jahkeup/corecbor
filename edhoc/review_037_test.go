@@ -1021,3 +1021,45 @@ func TestE1_CCSTimeClaimsChecked(t *testing.T) {
 		t.Errorf("CCS without time claims: %v", err)
 	}
 }
+
+// E1 in the legacy pre-RFC protocol: a CWT credential's claims are
+// validated there too.
+func TestE1_LegacyCWTClaimsValidated(t *testing.T) {
+	run := func(exp time.Time, v *cwt.Validator) error {
+		iPriv, iPub := edPair(t)
+		rPriv, rPub := edPair(t)
+		set := func(c *cwt.ClaimsSet) { c.Expiration = exp }
+		iCWT, rCWT := cwtFor(t, iPriv, iPub, set), cwtFor(t, rPriv, rPub, set)
+		ini, err := NewInitiator(InitiatorConfig{
+			Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{0x50},
+			Credential:     &Credential{Type: CredentialCWT, CWTBytes: iCWT},
+			PeerCredential: &Credential{Type: CredentialCWT, CWTBytes: rCWT},
+			CWTIssuerKey:   rPub, CWTValidator: v,
+		}, WithLegacyPreRFCProtocol())
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := NewResponder(ResponderConfig{
+			Suites: []CipherSuite{Suite0}, PrivateKey: rPriv, PeerPublic: iPub, ConnectionID: []byte{0x51},
+			Credential:     &Credential{Type: CredentialCWT, CWTBytes: rCWT},
+			PeerCredential: &Credential{Type: CredentialCWT, CWTBytes: iCWT},
+			CWTIssuerKey:   iPub, CWTValidator: v,
+		}, WithLegacyPreRFCProtocol())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return handshake(t, ini, res)
+	}
+	now := time.Now()
+	if err := run(now.Add(time.Hour), nil); err != nil {
+		t.Errorf("valid CWT: %v", err)
+	}
+	if err := run(now.Add(-time.Hour), nil); !errors.Is(err, cwt.ErrTokenExpired) || !errors.Is(err, ErrAuthentication) {
+		t.Errorf("expired CWT: %v, want cwt.ErrTokenExpired", err)
+	}
+	past := cwt.NewValidator()
+	past.Now = func() time.Time { return now.Add(-2 * time.Hour) }
+	if err := run(now.Add(-time.Hour), past); err != nil {
+		t.Errorf("custom clock: %v", err)
+	}
+}

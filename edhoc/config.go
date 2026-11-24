@@ -93,7 +93,8 @@ type InitiatorConfig struct {
 	// (kccs) has no issuer signature; when it carries exp, nbf or iat
 	// they are checked with this validator's clock, leeway and
 	// RejectFutureIssuedAt, but none is required. Credentials returned
-	// by Peers are the resolver's to validate.
+	// by Peers are the resolver's to validate. WithLegacyPreRFCProtocol
+	// validates its CWT credentials with it too.
 	CWTValidator *cwt.Validator
 
 	// Method is the authentication method (default MethodSigSig).
@@ -239,8 +240,11 @@ type options struct {
 // of RFC 9528's credential-binding guarantees. It exists so deployed
 // v0.2 fleets can upgrade both ends in stages. The v0.2 config fields
 // (Suites, PrivateKey, PeerPublic, ConnectionID, Credential,
-// PeerCredential, CWTIssuerKey) are used exactly as v0.2.2 used them;
-// the new fields are ignored.
+// PeerCredential, CWTIssuerKey) are used exactly as v0.2.2 used them,
+// except that a peer's CWT credential is also claims-validated with
+// CWTValidator (default cwt.NewValidator(), so exp is required): an
+// expired credential is a safety defect, fixed in both protocols. The
+// other new fields are ignored.
 //
 // Deprecated: non-interoperable and missing identity binding. Removed
 // no earlier than v0.32.0. Not part of any CompatV02 bundle.

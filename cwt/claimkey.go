@@ -46,10 +46,12 @@ const (
 // ClaimKey is a CWT claim label: an integer or a text string
 // (RFC 8392 §4). It is comparable and safe to use as a map key.
 //
-// Raw is non-empty only for labels that are neither an int64 nor text
-// (for example a byte string, or an integer outside the int64 range).
-// Such labels are malformed per RFC 8392 §4 but are kept, as their
-// Core Deterministic encoding, so decoding never loses a claim.
+// Raw is non-empty only for labels that are neither an int64 nor text:
+// an integer outside the int64 range (kept, as its Core Deterministic
+// encoding, so decoding never loses a claim), a bignum key kept by
+// DecodeOptions.KeepAsReceived, or, in an error, a key that is not a
+// claim label at all (a byte string, array, map, float, tag or simple
+// value), which decoding rejects (RFC 8392 §3).
 type ClaimKey struct {
 	Int    int64
 	Text   string
@@ -90,6 +92,18 @@ func receivedKey(k corecbor.Value) ClaimKey {
 // ambiguousKeyErr is the error for a key asreceived.IntegerBignum reports.
 func ambiguousKeyErr(k corecbor.Value) error {
 	return &ClaimError{Key: receivedKey(k), Err: fmt.Errorf("%w: %w: bignum with an integer value", ErrMalformedClaims, ErrAmbiguousClaimKey)}
+}
+
+// isClaimLabel reports whether v may be a claim key: an integer (major
+// type 0 or 1, any magnitude) or a text string (RFC 8392 §3; RFC 9711
+// Claim-Label = int / text). Bignums, byte strings, other tags, floats
+// and simple values are not.
+func isClaimLabel(v corecbor.Value) bool {
+	switch v.Kind {
+	case corecbor.KindUint, corecbor.KindNegInt, corecbor.KindText:
+		return true
+	}
+	return false
 }
 
 // claimKeyOf maps a decoded map key to a ClaimKey. Integers outside

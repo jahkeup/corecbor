@@ -361,6 +361,54 @@ func TestVerifyToken_Types037(t *testing.T) {
 	}
 }
 
+// W15: RFC 8392 §3 (and RFC 9711's Claim-Label = int / text) — claim
+// keys are integers or text strings.
+func TestClaimKeys_IntOrText037(t *testing.T) {
+	for name, in := range map[string]string{
+		"bytes":         "a1410101",
+		"array":         "a1810101",
+		"map":           "a1a1010101",
+		"float":         "a1f93c0001",
+		"bool":          "a1f501",
+		"null":          "a1f601",
+		"tagged text":   "a1c1616101",
+		"bignum 2^64":   "a1c24901000000000000000001",
+		"neg bignum":    "a1c34901000000000000000001",
+		"inside cnf ok": "a108a1410101", // cnf members are not claims
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := cwt.DecodeClaimsSet(h(t, in))
+			if name == "inside cnf ok" {
+				if err != nil {
+					t.Fatalf("cnf with an unknown member: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, cwt.ErrMalformedClaims) {
+				t.Fatalf("DecodeClaimsSet = %v, want ErrMalformedClaims", err)
+			}
+			if k, ok := claimKeyOf(err); !ok || k.Raw == "" {
+				t.Fatalf("error %v does not name the key as received", err)
+			}
+		})
+	}
+	// Integers beyond int64 are integers: kept as private claims.
+	cs, err := cwt.DecodeClaimsSet(h(t, "a13bfffffffffffffffe6161"))
+	if err != nil || len(cs.PrivateClaims) != 1 {
+		t.Fatalf("negint beyond int64: %+v, %v", cs, err)
+	}
+	// Encode refuses to write such a key, too.
+	for name, c := range map[string]*cwt.ClaimsSet{
+		"Private float key": {Private: map[any]any{float64(1.5): 1}},
+		"Private bool key":  {Private: map[any]any{true: 1}},
+		"PrivateClaims Raw": {PrivateClaims: map[cwt.ClaimKey]corecbor.Value{{Raw: "\x41\x01"}: corecbor.Uint(1)}},
+	} {
+		if _, err := c.Encode(); !errors.Is(err, cwt.ErrMalformedClaims) {
+			t.Errorf("Encode %s: %v, want ErrMalformedClaims", name, err)
+		}
+	}
+}
+
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
 // package doesn't understand, carries no proof-of-possession key.
 func TestValidator_RequireConfirmation037(t *testing.T) {

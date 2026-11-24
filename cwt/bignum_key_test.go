@@ -4,7 +4,6 @@
 package cwt_test
 
 import (
-	"bytes"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -14,8 +13,8 @@ import (
 
 // TestDecodeRejectsIntegerBignumKeys: a bignum claim key with an
 // integer value re-encodes as that integer, so bignum 1 would come back
-// as iss. Such keys are rejected; larger bignums stay distinct and
-// round-trip.
+// as iss. Such keys are rejected as ambiguous; larger bignums are
+// rejected as non-integer keys.
 func TestDecodeRejectsIntegerBignumKeys(t *testing.T) {
 	for name, h := range map[string]string{
 		"bignum 1 (iss)":      "a1c24101f6",
@@ -33,14 +32,12 @@ func TestDecodeRejectsIntegerBignumKeys(t *testing.T) {
 		})
 	}
 
+	// Larger bignums aren't integer keys either (RFC 8392 §3; 037 W15):
+	// rejected, but not as ambiguous.
 	b, _ := hex.DecodeString("a1c249010000000000000000" + "01") // 2^64
-	cs, err := cwt.DecodeClaimsSet(b)
-	if err != nil {
-		t.Fatalf("2^64 key: %v", err)
-	}
-	out, err := cs.Encode()
-	if err != nil || !bytes.Equal(out, b) {
-		t.Fatalf("Encode = %x, %v; want %x", out, err, b)
+	_, err := cwt.DecodeClaimsSet(b)
+	if !errors.Is(err, cwt.ErrMalformedClaims) || errors.Is(err, cwt.ErrAmbiguousClaimKey) {
+		t.Fatalf("2^64 key: %v, want ErrMalformedClaims only", err)
 	}
 }
 

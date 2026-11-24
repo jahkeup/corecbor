@@ -143,9 +143,10 @@ type ClaimsSet struct {
 	Confirmation *Confirmation
 
 	// Private holds claims this package does not model, keyed by int64
-	// or string. Claims whose label is neither (a byte string, array,
-	// map, or an integer outside the int64 range) are not representable
-	// as a Go map key here; they appear only in PrivateClaims. The ACE
+	// or string. Claims labeled by an integer outside the int64 range
+	// are not representable as a Go map key here; they appear only in
+	// PrivateClaims. Other labels (byte strings, arrays, ...) are not
+	// claim keys at all and are rejected (RFC 8392 §3). The ACE
 	// claims 9, 38, 39 and 40 also stay in Private, as in v0.2.2, besides
 	// populating their typed fields.
 	//
@@ -318,6 +319,9 @@ func (c *ClaimsSet) toValue() (corecbor.Value, error) {
 		if err != nil {
 			return corecbor.Value{}, fmt.Errorf("%w: private claim key: %w", ErrMalformedClaims, err)
 		}
+		if !isClaimLabel(kv) {
+			return corecbor.Value{}, fmt.Errorf("%w: private claim key %v (%T) is not an integer or a text string", ErrMalformedClaims, k, k)
+		}
 		val, err := toValue(v)
 		if err != nil {
 			return corecbor.Value{}, fmt.Errorf("%w: private claim value: %w", ErrMalformedClaims, err)
@@ -330,6 +334,9 @@ func (c *ClaimsSet) toValue() (corecbor.Value, error) {
 		kv, err := k.value()
 		if err != nil {
 			return corecbor.Value{}, claimErr(k, "private claim key", err)
+		}
+		if !isClaimLabel(kv) {
+			return corecbor.Value{}, claimErr(k, "private claim key is not an integer or a text string", nil)
 		}
 		if err := b.add(k, kv, v); err != nil {
 			return corecbor.Value{}, err
@@ -401,7 +408,8 @@ type DecodeOptions struct {
 
 // DecodeClaimsSet deserializes a CBOR-encoded claims map into a ClaimsSet.
 //
-// It rejects duplicate map keys (RFC 8392 §7.2) and bounds decode
+// It rejects duplicate map keys (RFC 8392 §7.2) and claim keys that
+// are not integers or text strings (RFC 8392 §3), and bounds decode
 // memory. It never panics on malformed input. Errors wrap
 // ErrMalformedClaims and, where there is one, the underlying corecbor
 // error; errors about one claim are *ClaimError.
@@ -442,6 +450,11 @@ func decodeClaimsValue(v corecbor.Value, spans []asreceived.Span, opts DecodeOpt
 
 	cs := &ClaimsSet{}
 	for i, entry := range v.Map() {
+		// A bignum with an integer value has its own error and may be
+		// kept (KeepAsReceived); any other non-label key is malformed.
+		if !isClaimLabel(entry.Key) && !asreceived.IntegerBignum(entry.Key) {
+			return nil, claimErr(claimKeyOf(entry.Key), "claim key must be an integer or a text string (RFC 8392 §3)", nil)
+		}
 		kept, err := cs.keepAsReceived(entry, spans, i)
 		if err != nil {
 			return nil, err

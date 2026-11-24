@@ -331,6 +331,7 @@ Existing identifiers keep their meaning (034). Changes to them (031):
 | An outer tag 61 must be followed by a COSE tag (RFC 8392 §7.2 step 2) in every entry point; `61([...])` is `ErrMalformedClaims` (037 W16) | `VerifyToken`, `VerifyMACToken`, `OpenToken`, `Verify`, `VerifyMAC`, `Decrypt` accepted it | none (v0.2.2 rejected tag 61 altogether) |
 | `VerifyToken` treats a payload that begins with a CBOR tag as a nested CWT, with or without `cty` (RFC 8392 §7.2 step 6); `VerifyMACToken`/`OpenToken` reject one with `ErrUnexpectedType` (037 W17) | only `cty` marked nesting; a tagged payload failed as malformed claims | n/a |
 | New `VerifyOptions.Types` (accepted `typ` values, e.g. `"application/eat+cwt"`, `uint64(263)`) and `RequireType` (explicit typing, RFC 8725 §3.11) (037 W12) | only `application/cwt`/61 accepted; `typ` optional | n/a (additive) |
+| A claim key that is not an integer or a text string (byte string, array, map, float, simple value, a tag including bignums beyond int64) is rejected with `ErrMalformedClaims` in a `*ClaimError` whose `Key.Raw` is the key; `Encode` refuses such a key in `Private`/`PrivateClaims` (RFC 8392 §3; 037 W15). Integers beyond int64 stay private claims; `KeepAsReceived` still keeps bignums with an integer value | kept in `PrivateClaims` (031) or panicked (v0.2.2) | none |
 | A float NumericDate decodes to the nearest nanosecond, so it re-encodes unchanged (037 W30) | truncated: 2.675 decoded as 2.674999999 and re-encoded as a different float | none |
 
 New, recommended:

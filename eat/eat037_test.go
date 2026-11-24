@@ -274,6 +274,21 @@ func TestAppraise_SubmodVerifierValidates037(t *testing.T) {
 	}
 }
 
+// W15: claim keys are integers or text, in submodules too.
+func TestClaimKeys_IntOrText037(t *testing.T) {
+	for name, in := range map[string]string{
+		"bytes key":           "a1410101",
+		"bignum 2^64 key":     "a1c24901000000000000000001",
+		"bytes key in submod": "a119010aa16161a1410101", // {266: {"a": {h'01': 1}}}
+	} {
+		_, err := eat.DecodeClaims(hx(t, in))
+		var ce *cwt.ClaimError
+		if !errors.Is(err, eat.ErrMalformedEAT) || !errors.Is(err, cwt.ErrMalformedClaims) || !errors.As(err, &ce) {
+			t.Errorf("%s: %v, want a *cwt.ClaimError", name, err)
+		}
+	}
+}
+
 // W7: no symmetric cnf key by value in a signed EAT (RFC 8747 §3.2).
 func TestSymmetricCnf037(t *testing.T) {
 	// RFC 8392 A.2.1 128-bit symmetric COSE_Key.

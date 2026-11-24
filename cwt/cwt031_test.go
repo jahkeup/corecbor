@@ -161,28 +161,16 @@ func TestVerifyMAC_RFC8392_A4(t *testing.T) {
 	checkA1Claims(t, tok.Claims)
 }
 
+// TestDecodeClaims_NonScalarKey: 031 made these keys decode without a
+// panic; 037 W15 rejects them, since claim keys are integers or text
+// (RFC 8392 §3). The error names the key as received.
 func TestDecodeClaims_NonScalarKey(t *testing.T) {
 	for name, in := range map[string]string{"bytes": "a1410101", "array": "a1810101", "map": "a1a1010101"} {
 		t.Run(name, func(t *testing.T) {
-			cs, err := cwt.DecodeClaimsSet(h(t, in))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(cs.Private) != 0 {
-				t.Fatalf("Private = %v, want empty", cs.Private)
-			}
-			if len(cs.PrivateClaims) != 1 {
-				t.Fatalf("PrivateClaims = %v", cs.PrivateClaims)
-			}
-			for k, v := range cs.PrivateClaims {
-				if k.Raw == "" || v.Kind != corecbor.KindUint || v.UintVal() != 1 {
-					t.Fatalf("PrivateClaims = %v: %v", k, v)
-				}
-			}
-			// Round-trips through PrivateClaims.
-			out, err := cs.Encode()
-			if err != nil || !bytes.Equal(out, h(t, in)) {
-				t.Fatalf("Encode = %x, %v; want %s", out, err, in)
+			_, err := cwt.DecodeClaimsSet(h(t, in))
+			var ce *cwt.ClaimError
+			if !errors.Is(err, cwt.ErrMalformedClaims) || !errors.As(err, &ce) || ce.Key.Raw != string(h(t, in)[1:len(h(t, in))-1]) {
+				t.Fatalf("DecodeClaimsSet = %v, want a *ClaimError naming the key", err)
 			}
 		})
 	}

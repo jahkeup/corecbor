@@ -539,8 +539,11 @@ func (c *Cursor) skipChunks(pos int, major byte) (int, error) {
 			return pos + 1, nil
 		}
 		h := wire.ParseHead(src[pos:])
-		if h.N == 0 || h.Major != major || h.AI == wire.AIIndefinite {
+		if h.N == 0 {
 			return pos, decodeErr(cbor.ErrTruncated, pos)
+		}
+		if h.Major != major || h.AI == wire.AIIndefinite {
+			return pos, decodeErr(cbor.ErrInvalidChunk, pos)
 		}
 		if h.AI >= 28 && h.AI <= 30 {
 			return pos, decodeErr(cbor.ErrReservedAI, pos)

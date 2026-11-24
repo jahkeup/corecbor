@@ -377,6 +377,7 @@ forbidden.
 | `ErrNullMapKey` | map key is the Null value | decoder (knob) |
 | `ErrTrailingBytes` | bytes remain after first complete value (single-value mode) | decoder |
 | `ErrTruncated` | input ended mid-value | decoder |
+| `ErrInvalidChunk` | chunk of an indefinite-length string that is not a definite-length string of the same major type (RFC 8949 §3.2.3) | decoder (always, proposal 037) |
 | `ErrMaxNestingDepth` | nesting limit exceeded | decoder (always) |
 | `ErrMaxArrayLength` | array element count exceeds limit | decoder (always) |
 | `ErrMaxByteStringLength` | byte/text string length exceeds limit | decoder (always) |

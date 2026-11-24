@@ -575,7 +575,9 @@ func (s *Stream) Next() bool {
 	s.dec.resetBudget() // the budget covers one item
 	v, err := rfc8949.DecodeFromBuffered(s.br, s.dec.cfg.opts)
 	if err != nil {
-		if !errors.Is(err, cbor.ErrTruncated) && err != io.EOF {
+		// Only a reader that ends between items ends the stream cleanly
+		// (RFC 8742 §2): a partial last item is an error (037 C6).
+		if err != io.EOF {
 			s.err = err
 		}
 		return false
@@ -589,8 +591,10 @@ func (s *Stream) Value() Value {
 	return s.val
 }
 
-// Err returns the error that stopped iteration, if any. io.EOF and
-// truncation at the boundary are not errors (they indicate end of stream).
+// Err returns the error that stopped iteration, if any. A reader that
+// ends between items (io.EOF before an item starts) is the end of the
+// stream, not an error. A reader that ends inside an item is: the error
+// wraps ErrTruncated and io.ErrUnexpectedEOF.
 func (s *Stream) Err() error {
 	return s.err
 }

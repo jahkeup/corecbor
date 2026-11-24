@@ -74,6 +74,8 @@ v0.2.2 and under the new version and diffs the output.
 | `MaxByteStringLength` below 24 applies to short strings inside arrays and to short text map keys (037 C3) | `Decode` with `WithMaxByteStringLength(n)`, n < 24 | short strings in those positions bypassed the limit | none (safety defect, 034) |
 | `WithMemoryBudget` charges what decoding allocates at its real size: indefinite-length arrays, maps and strings, short strings on the inline paths, tag content, `DecodeSequence` items, and `Value` / `MapEntry` slots at their size (104 / 208 bytes on 64-bit) (037 C5) | decoders with `WithMemoryBudget`, `rfc8949.DecodeOpts.Budget` | indefinite-length items, short strings, tags and sequence items were not charged; slots were charged 16 / 32 bytes | none (safety defect, 034); raise the budget if a legitimate input now exceeds it |
 | `DecodeFrom` and `Stream` charge the bytes they buffer for an item to the memory budget as they read them, and each `Decoder.DecodeFrom` call and `Stream.Next` item starts a fresh budget (037 C4) | `DecodeFrom`, `Stream` with `WithMemoryBudget` | an item was read and buffered in full before any charge (400 MB read under a 1 MiB budget); the budget accumulated across items until the stream failed | none (safety defect, 034) |
+| `Stream.Next` stops with an error, wrapping `ErrTruncated` and `io.ErrUnexpectedEOF`, when the reader ends inside an item; only an end between items is a clean end (037 C6) | `Stream` | a truncated last item ended the stream silently, as if it were not there | none (silent data loss, 034) |
+| A chunk of the wrong type in an indefinite-length string returns the new `ErrInvalidChunk` (037 C6) | `Decode`, `Cursor`, `DecodeFrom`, `Stream` | `ErrTruncated` (and `Stream` ended silently) | none; match `ErrInvalidChunk` |
 
 ## Text that is not valid UTF-8 (035)
 
@@ -128,7 +130,7 @@ v0.2.2 and under the new version and diffs the output.
 - Reflection type errors now wrap `ErrTypeMismatch` (023).
 - New sentinels: `ErrTimeRange`, `ErrNotDeterministic`,
   `ErrReservedSimple`, `ErrUnexpectedBreak`, `ErrInvalidKind`,
-  `ErrInvalidOption`, `ErrNotPreferred`, and for streams
+  `ErrInvalidOption`, `ErrNotPreferred`, `ErrInvalidChunk` (037), and for streams
   `ErrContainerOverflow`, `ErrContainerUnderflow`, `ErrNoOpenContainer`,
   `ErrStreamMapOrder`.
 

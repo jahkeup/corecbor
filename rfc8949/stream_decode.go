@@ -326,7 +326,7 @@ func (ir *itemReader) read() error {
 				return err
 			}
 			if h.Major != top.str || h.AI == wire.AIIndefinite {
-				return errAt(cbor.ErrTruncated, off)
+				return errAt(cbor.ErrInvalidChunk, off)
 			}
 			if h.AI >= 28 && h.AI <= 30 {
 				return errAt(cbor.ErrReservedAI, off)

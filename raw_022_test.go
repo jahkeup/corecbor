@@ -90,7 +90,7 @@ func TestCursorSkipWellFormedness(t *testing.T) {
 		"array-claims-too-many": {"9bffffffffffffffff", ErrMaxArrayLength},
 		"map-overlapping":       {"8282" + "0000", ErrTruncated},
 		"bytes-too-long":        {"5bffffffffffffffff", ErrMaxByteStringLength},
-		"chunk-wrong-major":     {"5f6161ff", ErrTruncated},
+		"chunk-wrong-major":     {"5f6161ff", ErrInvalidChunk}, // 037 C6: not truncation
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

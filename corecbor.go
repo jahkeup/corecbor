@@ -95,6 +95,7 @@ var (
 	ErrInvalidKind         = cbor.ErrInvalidKind
 	ErrNotPreferred        = cbor.ErrNotPreferred
 	ErrInvalidOption       = cbor.ErrInvalidOption
+	ErrInvalidChunk        = cbor.ErrInvalidChunk
 )
 
 func AsTime(t Value) (time.Time, error)  { return cbor.AsTime(t) }

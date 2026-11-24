@@ -123,6 +123,15 @@ var (
 	ErrInvalidOption = errors.New("cbor: conflicting options")
 )
 
+// Proposal 037.
+var (
+	// ErrInvalidChunk indicates a chunk of an indefinite-length byte or
+	// text string that is not a definite-length string of the same major
+	// type (RFC 8949 §3.2.3): the input is not well-formed. It used to
+	// be reported as ErrTruncated.
+	ErrInvalidChunk = errors.New("cbor: invalid chunk in indefinite-length string")
+)
+
 // Proposal 025.
 var (
 	// ErrOverflow indicates that a CBOR integer value overflows the

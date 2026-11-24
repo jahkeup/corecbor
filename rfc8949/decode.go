@@ -351,7 +351,7 @@ func decodeIndefiniteBytes(src []byte, off int, opts DecodeOpts) (cbor.Value, in
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if h.Major != wire.MajorBytes || h.AI == wire.AIIndefinite {
-			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrInvalidChunk, off)
 		}
 		if h.AI >= 28 && h.AI <= 30 {
 			return cbor.Value{}, off, decodeErr(cbor.ErrReservedAI, off)
@@ -430,7 +430,7 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if h.Major != wire.MajorText || h.AI == wire.AIIndefinite {
-			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
+			return cbor.Value{}, off, decodeErr(cbor.ErrInvalidChunk, off)
 		}
 		if h.AI >= 28 && h.AI <= 30 {
 			return cbor.Value{}, off, decodeErr(cbor.ErrReservedAI, off)

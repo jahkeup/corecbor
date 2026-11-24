@@ -65,6 +65,63 @@ func TestC4StreamBudgetPerItem(t *testing.T) {
 	}
 }
 
+// C6: Stream.Next reports a truncated last item instead of ending
+// cleanly; only a stream that ends between items ends without error.
+func TestC6StreamTruncatedLastItem(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		src   []byte
+		items int
+		want  error
+	}{
+		{"clean end", []byte{0x01, 0x02}, 2, nil},
+		{"empty", nil, 0, nil},
+		{"truncated head", []byte{0x01, 0x19, 0x01}, 1, ErrTruncated},
+		{"truncated array", []byte{0x01, 0x82, 0x01}, 1, ErrTruncated},
+		{"truncated string", []byte{0x01, 0x43, 0x01}, 1, ErrTruncated},
+		{"truncated indefinite", []byte{0x01, 0x9f, 0x01}, 1, ErrTruncated},
+		{"wrong chunk type", []byte{0x01, 0x5f, 0x61, 0x61, 0xff}, 1, ErrInvalidChunk},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, budget := range []int{0, 1 << 20} {
+				s := NewDecoder(WithMemoryBudget(budget)).Stream(bytes.NewReader(tc.src))
+				n := 0
+				for s.Next() {
+					n++
+				}
+				if n != tc.items {
+					t.Fatalf("budget %d: %d items, want %d", budget, n, tc.items)
+				}
+				if tc.want == nil && s.Err() != nil || tc.want != nil && !errors.Is(s.Err(), tc.want) {
+					t.Fatalf("budget %d: Err() = %v, want %v", budget, s.Err(), tc.want)
+				}
+			}
+		})
+	}
+}
+
+// C6: a chunk of the wrong type in an indefinite-length string is a
+// well-formedness error of its own, not truncation, everywhere.
+func TestC6WrongChunkType(t *testing.T) {
+	for _, src := range [][]byte{
+		{0x5f, 0x61, 0x61, 0xff},       // text chunk in bytes
+		{0x7f, 0x41, 0x61, 0xff},       // bytes chunk in text
+		{0x5f, 0x5f, 0xff, 0xff},       // nested indefinite chunk
+		{0x7f, 0x01, 0xff},             // integer chunk
+		{0x81, 0x7f, 0x60, 0x41, 0x00}, // inside an array
+	} {
+		if _, err := NewDecoder().Decode(src); !errors.Is(err, ErrInvalidChunk) || errors.Is(err, ErrTruncated) {
+			t.Errorf("Decode(%x) = %v, want ErrInvalidChunk", src, err)
+		}
+		if _, err := NewDecoder().DecodeFrom(bytes.NewReader(src)); !errors.Is(err, ErrInvalidChunk) {
+			t.Errorf("DecodeFrom(%x) = %v, want ErrInvalidChunk", src, err)
+		}
+		if _, err := NewDecoder().Cursor(src).Skip(); !errors.Is(err, ErrInvalidChunk) {
+			t.Errorf("Cursor.Skip(%x) = %v, want ErrInvalidChunk", src, err)
+		}
+	}
+}
+
 // C5: a sequence of scalars is charged for its items, and each call
 // starts from a fresh budget.
 func TestC5SequenceBudget(t *testing.T) {

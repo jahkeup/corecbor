@@ -52,6 +52,7 @@ v0.2.2 and under the new version and diffs the output.
 | `StreamEncoder` counts nested containers and rejects out-of-order map keys in deterministic modes (021 D6) | stream encoding | malformed or unsorted output | pre-sort keys, or build a `Value` and use `EncodeTo` |
 | `Marshaler` output (including `RawMessage`, `RawTag`) with repeated map keys returns `ErrDuplicateMapKey` in the deterministic modes, and keeps every entry in Permissive (037 C8) | `Marshal` of a `Marshaler` whose bytes repeat a key | the entries were merged, last one winning (`a2616101616102` → `a1616102`) | none (silent data loss, 034) |
 | `ModePreferredPlus` (Experimental) returns `ErrDuplicateMapKey` for a map whose keys repeat in the data model, as the sorting modes do; `ModePermissive` does the same with the new `CheckDuplicateMapKeys()` (037 C11) | `ModePreferredPlus` `Encode`/`Marshal` of a `Value` with repeated keys | the entries were written (not valid CBOR, RFC 8949 §5.6) | none for `ModePreferredPlus`; `ModePermissive` still writes them by default |
+| `StreamEncoder.WriteFloat32` and `WriteFloat64` write what `Encode` writes for the float in the encoder's mode: the shortest exact width in Core Deterministic, Canonical and PreferredPlus, a double (and the canonical NaN) in CTAP2 (037 C13) | stream encoding of floats in a deterministic mode | the width of the call (`WriteFloat64(1.5)` gave `fb3ff8000000000000`, now `f93e00`); Permissive is unchanged | none (contract defect, 034); use `ModePermissive` to write a chosen width |
 
 ## Decoding changes
 

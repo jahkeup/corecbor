@@ -117,4 +117,7 @@ var goldenChanges = map[string]string{
 	"root/encode-nonfinite/ctap2/float64-nan-payload": "proposal 024: CTAP2 writes every NaN as fb7ff8000000000000 (spec §2.2)",
 	"root/encode-nonfinite/ctap2/float64-nan-neg":     "proposal 024: CTAP2 writes every NaN as fb7ff8000000000000 (spec §2.2)",
 	"root/encode-nonfinite/ctap2/float32-nan-payload": "proposal 024: CTAP2 writes every NaN as fb7ff8000000000000 (spec §2.2)",
+
+	// Proposal 037 — pre-release specification-departure review.
+	"root/stream/scalars": "proposal 037 C13: StreamEncoder.WriteFloat32/64 follow the mode's float rules (shortest width in Core Deterministic, RFC 8949 §4.2.1)",
 }

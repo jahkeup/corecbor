@@ -313,13 +313,8 @@ func (s *StreamEncoder) WriteValue(v Value) error {
 		return s.write(v.Bstr)
 	case cbor.KindFloat32, cbor.KindFloat64:
 		// Same float rules as Encode for this mode (width, NaN
-		// canonicalization, non-finite rejection). A float is at most 9
-		// bytes, so this appends into scratch without allocating.
-		buf, err := rfc8949.Encode(s.scratch[:0], v, s.enc.encodeOpts())
-		if err != nil {
-			return err
-		}
-		return s.write(buf)
+		// canonicalization, non-finite rejection).
+		return s.writeModeFloat(v)
 	case cbor.KindSimple:
 		if v.Num < 24 {
 			s.scratch[0] = wire.MajorOther | byte(v.Num)
@@ -472,8 +467,11 @@ func (s *StreamEncoder) WriteUndefined() error {
 	return s.write(s.scratch[:1])
 }
 
-// WriteFloat32 writes a CBOR float32 directly. Rejects NaN/Inf unless
-// the encoder was constructed with AllowNonFiniteFloats.
+// WriteFloat32 writes a CBOR float. It writes what Encode writes for
+// Float32(v) in the encoder's mode: a single-precision float in
+// Permissive, the shortest exact width in the deterministic modes, and
+// a double in CTAP2 (proposal 037 C13). Rejects NaN/Inf unless the
+// encoder was constructed with AllowNonFiniteFloats.
 func (s *StreamEncoder) WriteFloat32(v float32) error {
 	if err := s.trackWrite(); err != nil {
 		return err
@@ -482,11 +480,17 @@ func (s *StreamEncoder) WriteFloat32(v float32) error {
 	if !s.enc.cfg.allowNonFiniteFloats && (math.IsNaN(f) || math.IsInf(f, 0)) {
 		return cbor.ErrNonFiniteFloat
 	}
+	if s.enc.mode != ModePermissive {
+		return s.writeModeFloat(cbor.Float32(v))
+	}
 	return s.write(wire.AppendFloat32(s.scratch[:0], v))
 }
 
-// WriteFloat64 writes a CBOR float64 directly. Rejects NaN/Inf unless
-// the encoder was constructed with AllowNonFiniteFloats.
+// WriteFloat64 writes a CBOR float. It writes what Encode writes for
+// Float64(v) in the encoder's mode: a double in Permissive and CTAP2,
+// the shortest exact width in the other deterministic modes (proposal
+// 037 C13). Rejects NaN/Inf unless the encoder was constructed with
+// AllowNonFiniteFloats.
 func (s *StreamEncoder) WriteFloat64(v float64) error {
 	if err := s.trackWrite(); err != nil {
 		return err
@@ -494,7 +498,21 @@ func (s *StreamEncoder) WriteFloat64(v float64) error {
 	if !s.enc.cfg.allowNonFiniteFloats && (math.IsNaN(v) || math.IsInf(v, 0)) {
 		return cbor.ErrNonFiniteFloat
 	}
+	if s.enc.mode != ModePermissive {
+		return s.writeModeFloat(cbor.Float64(v))
+	}
 	return s.write(wire.AppendFloat64(s.scratch[:0], v))
+}
+
+// writeModeFloat writes the float v under the mode's float rules (width,
+// NaN canonicalization). A float is at most 9 bytes, so this appends
+// into scratch without allocating.
+func (s *StreamEncoder) writeModeFloat(v Value) error {
+	buf, err := rfc8949.Encode(s.scratch[:0], v, s.enc.encodeOpts())
+	if err != nil {
+		return err
+	}
+	return s.write(buf)
 }
 
 // WriteSimple writes a CBOR simple value (0-19 or 32-255) directly.

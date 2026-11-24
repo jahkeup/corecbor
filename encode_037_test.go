@@ -12,6 +12,36 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 )
 
+// 037 C13: StreamEncoder.WriteFloat32/WriteFloat64 write what Encode
+// writes for the same float in every mode.
+func TestC13StreamFloatsFollowMode(t *testing.T) {
+	for _, mode := range []Mode{ModePermissive, ModeCoreDeterministic, ModeCanonical, ModeCTAP2, ModePreferredPlus} {
+		e := New(mode, AllowNonFiniteFloats())
+		for _, f := range []float64{1, 1.5, 0.1, 65504, 1e300, math.Inf(1), math.NaN(), math.Copysign(0, -1)} {
+			var buf bytes.Buffer
+			s := e.Stream(&buf)
+			if err := s.WriteFloat64(f); err != nil {
+				t.Fatal(err)
+			}
+			want, _ := e.Encode(nil, Float64(f))
+			if !bytes.Equal(buf.Bytes(), want) {
+				t.Errorf("mode %d WriteFloat64(%v) = %x, Encode = %x", mode, f, buf.Bytes(), want)
+			}
+			buf.Reset()
+			if err := s.WriteFloat32(float32(f)); err != nil {
+				t.Fatal(err)
+			}
+			want, _ = e.Encode(nil, Float32(float32(f)))
+			if !bytes.Equal(buf.Bytes(), want) {
+				t.Errorf("mode %d WriteFloat32(%v) = %x, Encode = %x", mode, f, buf.Bytes(), want)
+			}
+		}
+	}
+	if err := New(ModeCoreDeterministic).Stream(&bytes.Buffer{}).WriteFloat64(math.NaN()); !errors.Is(err, ErrNonFiniteFloat) {
+		t.Fatalf("NaN without AllowNonFiniteFloats: %v", err)
+	}
+}
+
 // 037 C12: under InvalidUTF8Reject each chunk of an indefinite-length
 // text string must be valid UTF-8 by itself: a character split across
 // chunks is rejected (RFC 8949 §3.2.3).

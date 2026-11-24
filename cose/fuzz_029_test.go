@@ -53,7 +53,9 @@ func FuzzDecrypt029(f *testing.F) {
 			ecdhRecipients = append(ecdhRecipients, &ECDHESKey{PrivateKey: k, Alg: alg})
 		}
 	}
-	pbes2 := &PBES2Key{Password: []byte("pw"), MaxCount: 64}
+	// Counts up to 64 keep each input fast; the opt-in lets them reach
+	// PBKDF2 below the 1,000 floor.
+	pbes2 := &PBES2Key{Password: []byte("pw"), MaxCount: 64, InsecureAllowWeakParams: true}
 	rsaV, err := NewVerifier(rsaPub, WithAllowedAlgorithms(AlgPS256, AlgPS384, AlgPS512, AlgRS256))
 	if err != nil {
 		f.Fatal(err)

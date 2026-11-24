@@ -51,6 +51,7 @@ v0.2.2 and under the new version and diffs the output.
 | `StreamEncoder.WriteValue` applies the mode's float rules and UTF-8 validation (021 D18) | stream encoding | input width; no UTF-8 check | none |
 | `StreamEncoder` counts nested containers and rejects out-of-order map keys in deterministic modes (021 D6) | stream encoding | malformed or unsorted output | pre-sort keys, or build a `Value` and use `EncodeTo` |
 | `Marshaler` output (including `RawMessage`, `RawTag`) with repeated map keys returns `ErrDuplicateMapKey` in the deterministic modes, and keeps every entry in Permissive (037 C8) | `Marshal` of a `Marshaler` whose bytes repeat a key | the entries were merged, last one winning (`a2616101616102` → `a1616102`) | none (silent data loss, 034) |
+| `ModePreferredPlus` (Experimental) returns `ErrDuplicateMapKey` for a map whose keys repeat in the data model, as the sorting modes do; `ModePermissive` does the same with the new `CheckDuplicateMapKeys()` (037 C11) | `ModePreferredPlus` `Encode`/`Marshal` of a `Value` with repeated keys | the entries were written (not valid CBOR, RFC 8949 §5.6) | none for `ModePreferredPlus`; `ModePermissive` still writes them by default |
 
 ## Decoding changes
 
@@ -199,7 +200,8 @@ goroutine (for example from a `sync.Pool`).
   `AllowNaNPayloads`, `rfc8949.BudgetState.Charge`; tag content
   validation with `RejectInvalidTagContent()` (decoder),
   `CheckTagContent()` (encoder) and `rfc8949.DecodeOpts` /
-  `EncodeOpts.RejectInvalidTagContent`.
+  `EncodeOpts.RejectInvalidTagContent`; `CheckDuplicateMapKeys()` and
+  `rfc8949.EncodeOpts.RejectDuplicateMapKeys`.
 - `registry`: refreshed from IANA (2026-11-13). Every generated
   constant from v0.2.2 keeps its name and value
   (`registry/names_frozen.txt`); new tags get new constants.

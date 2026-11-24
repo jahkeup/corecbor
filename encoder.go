@@ -40,6 +40,7 @@ type encodeConfig struct {
 	invalidUTF8          rfc8949.InvalidUTF8
 	goNames              bool // WithGoFieldNames (proposal 025)
 	checkTagContent      bool // CheckTagContent (proposal 037)
+	checkDuplicateKeys   bool // CheckDuplicateMapKeys (proposal 037)
 }
 
 type Option func(*encodeConfig)
@@ -98,6 +99,15 @@ func CompatV02() Option {
 // encoder writes tag content as given (proposal 037 C10).
 func CheckTagContent() Option {
 	return func(c *encodeConfig) { c.checkTagContent = true }
+}
+
+// CheckDuplicateMapKeys makes ModePermissive return an error wrapping
+// ErrDuplicateMapKey for a map whose keys repeat in the CBOR data model
+// (RFC 8949 §5.6), as the other modes always do: such a map is not
+// valid CBOR. Without it Permissive writes the entries as given
+// (proposal 037 C11).
+func CheckDuplicateMapKeys() Option {
+	return func(c *encodeConfig) { c.checkDuplicateKeys = true }
 }
 
 // WithBufferPool makes Encode build output in a scratch buffer taken
@@ -171,6 +181,7 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 		InvalidUTF8:          e.cfg.invalidUTF8,
 
 		RejectInvalidTagContent: e.cfg.checkTagContent,
+		RejectDuplicateMapKeys:  e.cfg.checkDuplicateKeys,
 
 		LegacyBignumPassthrough: e.cfg.legacyBignum, //nolint:staticcheck // plumbing for the deprecated WithLegacyBignumPassthrough selector
 	}
@@ -196,6 +207,9 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 		opts.Deterministic = true
 		opts.SortMode = rfc8949.SortNone
 		opts.FloatMode = rfc8949.FloatShortest
+		// It doesn't sort, so the sort can't catch repeated keys
+		// (037 C11).
+		opts.RejectDuplicateMapKeys = true
 	}
 	return opts
 }

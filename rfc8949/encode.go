@@ -94,6 +94,11 @@ type EncodeOpts struct {
 	// under the rules DecodeOpts.RejectInvalidTagContent applies
 	// (proposal 037 C10).
 	RejectInvalidTagContent bool
+	// RejectDuplicateMapKeys returns an error wrapping
+	// cbor.ErrDuplicateMapKey for a map whose keys repeat in the CBOR
+	// data model, in modes that don't sort (the sorting modes always
+	// reject repeats) (proposal 037 C11).
+	RejectDuplicateMapKeys bool
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
@@ -321,6 +326,9 @@ func appendShortestFloat(dst []byte, f float64) []byte {
 func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) {
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	if !opts.Deterministic || len(m) <= 1 || opts.SortMode == SortNone {
+		if opts.RejectDuplicateMapKeys && len(m) > 1 && hasDuplicateKeys(m) {
+			return dst, fmt.Errorf("encode map: %w", cbor.ErrDuplicateMapKey)
+		}
 		var err error
 		for i := range m {
 			key := &m[i].Key
@@ -459,6 +467,33 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 		opts.SortCache.put()
 	}
 	return dst, nil
+}
+
+// hasDuplicateKeys reports whether two keys of m are the same key in
+// the CBOR data model (RFC 8949 §5.6.1, the decoder's default key
+// identity). Small maps compare pairwise; larger ones hash.
+func hasDuplicateKeys(m []cbor.MapEntry) bool {
+	if len(m) <= dedupThreshold {
+		for i := 1; i < len(m); i++ {
+			for j := range i {
+				if keysEqual(m[i].Key, m[j].Key, false) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	seen := make(map[uint64][]int32, len(m))
+	for i := range m {
+		h := keyHash(m[i].Key)
+		for _, j := range seen[h] {
+			if keysEqual(m[i].Key, m[j].Key, false) {
+				return true
+			}
+		}
+		seen[h] = append(seen[h], int32(i))
+	}
+	return false
 }
 
 // kindError is the encoder's unsupported-kind error. It wraps

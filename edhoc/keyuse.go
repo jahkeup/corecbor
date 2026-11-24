@@ -19,22 +19,37 @@ import (
 // key or its credential says (RFC 9528 §3.5.1, Appendix D.1).
 type keyUse struct {
 	sign, dh bool
-	// why names the restriction, for errors.
-	why string
+	// why names the restriction, for errors. After and, noSign and noDH
+	// name what rules out each use.
+	why, noSign, noDH string
 }
 
 var anyUse = keyUse{sign: true, dh: true}
 
-// and combines two restrictions; why names the first one that
-// restricts anything.
+// and combines two restrictions, keeping the first reason each use is
+// ruled out.
 func (u keyUse) and(v keyUse) keyUse {
 	out := keyUse{sign: u.sign && v.sign, dh: u.dh && v.dh}
 	for _, w := range []keyUse{u, v} {
-		if out.why == "" && !(w.sign && w.dh) {
-			out.why = w.why
+		if out.noSign == "" && !w.sign {
+			out.noSign = w.reason(true)
+		}
+		if out.noDH == "" && !w.dh {
+			out.noDH = w.reason(false)
 		}
 	}
 	return out
+}
+
+// reason names what rules out a signature (signs) or DH use.
+func (u keyUse) reason(signs bool) string {
+	if signs && u.noSign != "" {
+		return u.noSign
+	}
+	if !signs && u.noDH != "" {
+		return u.noDH
+	}
+	return u.why
 }
 
 func (u keyUse) allows(signs bool) bool {
@@ -152,5 +167,5 @@ func checkUse(c *Credential, signs bool) error {
 	if signs {
 		want = "signature"
 	}
-	return fmt.Errorf("key is not usable for %s authentication: %s (RFC 9528 §3.5.1)", want, u.why)
+	return fmt.Errorf("key is not usable for %s authentication: %s (RFC 9528 §3.5.1)", want, u.reason(signs))
 }

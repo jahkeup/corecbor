@@ -26,7 +26,11 @@ type X509Policy struct {
 	// Intermediates adds intermediate certificates to the ones the peer
 	// sends in x5chain. Optional.
 	Intermediates *x509.CertPool
-	// KeyUsages are the acceptable extended key usages; empty means any.
+	// KeyUsages are the acceptable extended key usages; empty means any
+	// (RFC 9528 registers no EDHOC extended key usage). The keyUsage
+	// extension is checked separately, against the method, by the
+	// handshake: digitalSignature for signature authentication,
+	// keyAgreement for static DH (RFC 9528 Appendix D.1).
 	KeyUsages []x509.ExtKeyUsage
 	// CurrentTime is the verification time; zero means now.
 	CurrentTime time.Time
@@ -34,9 +38,17 @@ type X509Policy struct {
 	// (DER, leaf first). Without it, x5t credentials are rejected. The
 	// leaf must hash to the x5t value.
 	Certificates func(ctx context.Context, x5t X5T) ([][]byte, error)
-	// VerifyPeer, when set, is called with the verified leaf, for checks
-	// such as matching a subject name. An error rejects the peer.
+	// VerifyPeer is called with the verified leaf to check the peer's
+	// identity, such as its subject name (RFC 9528 Appendix D.2). An
+	// error rejects the peer. It is required unless
+	// AllowAnyPeerUnderRoots is set: without it every certificate
+	// under Roots would be accepted as the peer.
 	VerifyPeer func(leaf *x509.Certificate) error
+	// AllowAnyPeerUnderRoots accepts any leaf that chains to Roots, with
+	// no identity check, when VerifyPeer is nil. Set it only when every
+	// certificate Roots can validate is an acceptable peer, such as a
+	// private CA that issues only to this deployment's devices.
+	AllowAnyPeerUnderRoots bool
 }
 
 // X509Resolver returns a CredentialResolver (for InitiatorConfig.Peers or
@@ -83,6 +95,9 @@ func (r x509Resolver) ResolveCredential(ctx context.Context, id IDCred) (*Creden
 func (p X509Policy) verify(chain [][]byte) (*x509.Certificate, error) {
 	if p.Roots == nil {
 		return nil, fmt.Errorf("%w: X509Policy.Roots is required", ErrAuthentication)
+	}
+	if p.VerifyPeer == nil && !p.AllowAnyPeerUnderRoots {
+		return nil, fmt.Errorf("%w: X509Policy has no VerifyPeer identity check; set VerifyPeer, or AllowAnyPeerUnderRoots to accept any certificate under Roots", ErrAuthentication)
 	}
 	if len(chain) == 0 {
 		return nil, fmt.Errorf("%w: empty certificate chain", ErrAuthentication)

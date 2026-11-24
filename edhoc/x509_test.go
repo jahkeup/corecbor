@@ -26,6 +26,8 @@ type testPKI struct {
 	inKey *ecdsa.PrivateKey
 	inter *x509.Certificate
 	now   time.Time
+	// leafUsage, when set, replaces the end-entity keyUsage.
+	leafUsage x509.KeyUsage
 }
 
 func newTestPKI(t *testing.T) *testPKI {
@@ -61,6 +63,9 @@ func (p *testPKI) cert(t *testing.T, cn string, pub crypto.PublicKey, parent *x5
 		IsCA:                  isCA,
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
 	}
+	if !isCA && p.leafUsage != 0 {
+		tmpl.KeyUsage = p.leafUsage
+	}
 	if parent == nil {
 		parent = tmpl
 		signer = p.caKey
@@ -88,8 +93,10 @@ func (p *testPKI) leaf(t *testing.T, cn string) (ed25519.PrivateKey, [][]byte) {
 	return priv, [][]byte{c.Raw, p.inter.Raw}
 }
 
+// policy accepts any peer under the test roots; tests of the identity
+// check set VerifyPeer.
 func (p *testPKI) policy() X509Policy {
-	return X509Policy{Roots: p.roots, CurrentTime: p.now}
+	return X509Policy{Roots: p.roots, CurrentTime: p.now, AllowAnyPeerUnderRoots: true}
 }
 
 // The Initiator sends its chain by value (x5chain); the Responder sends
@@ -245,7 +252,7 @@ func TestX509_UntrustedPeerFailsHandshake(t *testing.T) {
 func FuzzX509ResolverNeverPanics(f *testing.F) {
 	f.Add([]byte{0x30, 0x00}, []byte{})
 	f.Add([]byte{}, []byte{0x30, 0x03, 0x02, 0x01, 0x00})
-	r := X509Resolver(X509Policy{Roots: x509.NewCertPool()})
+	r := X509Resolver(X509Policy{Roots: x509.NewCertPool(), AllowAnyPeerUnderRoots: true})
 	f.Fuzz(func(t *testing.T, leaf, inter []byte) {
 		_, err := r.ResolveCredential(context.Background(), IDCred{X5Chain: [][]byte{leaf, inter}})
 		if err != nil && !errors.Is(err, ErrAuthentication) {

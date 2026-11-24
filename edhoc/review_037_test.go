@@ -12,6 +12,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"errors"
 	"strings"
 	"testing"
@@ -184,6 +185,83 @@ func TestE2_PeerKeyUseFromCOSEKey(t *testing.T) {
 	}
 	if err := run(MethodSigSig, true, cose.AlgES256, cose.KeyOpVerify); err != nil {
 		t.Errorf("ES256 key for signatures: %v", err)
+	}
+}
+
+// E4: X509Resolver without an identity check fails closed unless the
+// caller opts into accepting any leaf under Roots.
+func TestE4_X509IdentityCheckRequired(t *testing.T) {
+	pki := newTestPKI(t)
+	_, chain := pki.leaf(t, "peer")
+	p := X509Policy{Roots: pki.roots, CurrentTime: pki.now}
+	_, err := X509Resolver(p).ResolveCredential(context.Background(), IDCred{X5Chain: chain})
+	if !errors.Is(err, ErrAuthentication) || !strings.Contains(err.Error(), "VerifyPeer") {
+		t.Errorf("no VerifyPeer: %v, want ErrAuthentication naming VerifyPeer", err)
+	}
+	p.AllowAnyPeerUnderRoots = true
+	if _, err := X509Resolver(p).ResolveCredential(context.Background(), IDCred{X5Chain: chain}); err != nil {
+		t.Errorf("AllowAnyPeerUnderRoots: %v", err)
+	}
+	p.AllowAnyPeerUnderRoots = false
+	p.VerifyPeer = func(c *x509.Certificate) error { return nil }
+	if _, err := X509Resolver(p).ResolveCredential(context.Background(), IDCred{X5Chain: chain}); err != nil {
+		t.Errorf("VerifyPeer: %v", err)
+	}
+}
+
+// E4: the certificate's keyUsage must match the method: a
+// keyAgreement-only certificate does not authenticate a signature.
+func TestE4_X509KeyUsageMatchesMethod(t *testing.T) {
+	run := func(usage x509.KeyUsage) error {
+		pki := newTestPKI(t)
+		pki.leafUsage = usage
+		iKey, iChain := pki.leaf(t, "initiator")
+		rKey, rChain := pki.leaf(t, "responder")
+		pki.leafUsage = 0
+		iCred, _ := X509Credential(iChain, false)
+		rCred, _ := X509Credential(rChain, false)
+		// The Responder's own credential is fine; the Initiator's is
+		// checked by the Responder as a peer and by itself as its own.
+		ini, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iKey, ConnectionID: []byte{1}, Credential: iCred, Peers: X509Resolver(pki.policy())})
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite0}, PrivateKey: rKey, ConnectionID: []byte{2}, Credential: rCred, Peers: X509Resolver(pki.policy())})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return handshake(t, ini, res)
+	}
+	if err := run(x509.KeyUsageDigitalSignature); err != nil {
+		t.Errorf("digitalSignature: %v", err)
+	}
+	if err := run(x509.KeyUsageKeyAgreement); err == nil || !strings.Contains(err.Error(), "keyUsage") {
+		t.Errorf("keyAgreement-only certificates for signatures: %v, want a keyUsage error", err)
+	}
+	// A P-curve key may do either; the keyUsage decides.
+	pki := newTestPKI(t)
+	k, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	for _, c := range []struct {
+		usage      x509.KeyUsage
+		sign, stat bool
+	}{
+		{x509.KeyUsageKeyAgreement, false, true},
+		{x509.KeyUsageDigitalSignature, true, false},
+		{x509.KeyUsageDigitalSignature | x509.KeyUsageKeyAgreement, true, true},
+		{x509.KeyUsageDataEncipherment, false, false},
+	} {
+		pki.leafUsage = c.usage
+		leaf := pki.cert(t, "peer", &k.PublicKey, pki.inter, pki.inKey, false, pki.now.Add(-time.Minute), pki.now.Add(time.Minute))
+		cred, err := X509Credential([][]byte{leaf.Raw}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := checkUse(cred, true); (err == nil) != c.sign {
+			t.Errorf("keyUsage %b for signatures: %v", c.usage, err)
+		}
+		if err := checkUse(cred, false); (err == nil) != c.stat {
+			t.Errorf("keyUsage %b for static DH: %v", c.usage, err)
+		}
 	}
 }
 

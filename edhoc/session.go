@@ -91,6 +91,9 @@ func (s *session) fail(err error) error {
 		s.state = stateFailed
 	}
 	s.zeroize()
+	// Nothing received from an unauthenticated peer stays visible
+	// (RFC 9528 §5.3.3, §5.4.3).
+	s.peerCred, s.peerEAD = nil, nil
 	return err
 }
 
@@ -414,17 +417,19 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, s.fail(err)
 	}
 	ead2Raw := pr.rest
-	if s.peerEAD, err = decodeEAD(pr, s.accept); err != nil {
+	ead2, err := decodeEAD(pr, s.accept)
+	if err != nil {
 		return nil, s.fail(err)
 	}
-	if s.peerCred, err = s.party.resolvePeer(ctx, peerID); err != nil {
+	peerCred, err := s.party.resolvePeer(ctx, peerID)
+	if err != nil {
 		return nil, s.fail(err)
 	}
 
 	if s.method.responderSigns() {
 		s.prk3e2m = slices.Clone(s.prk2e)
 	} else {
-		peerDH, err := su.staticPublic(s.peerCred.PublicKey)
+		peerDH, err := su.staticPublic(peerCred.PublicKey)
 		if err != nil {
 			return nil, s.fail(err)
 		}
@@ -432,10 +437,13 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 			return nil, s.fail(err)
 		}
 	}
-	if err := s.verifySignOrMAC(2, encodeCID(s.peerCID), peerID, s.th2, ead2Raw, som, s.method.responderSigns()); err != nil {
+	if err := s.verifySignOrMAC(2, encodeCID(s.peerCID), peerID, peerCred, s.th2, ead2Raw, som, s.method.responderSigns()); err != nil {
 		return nil, s.fail(err)
 	}
-	s.th3 = su.h(bstrItem(s.th2), pt2, s.peerCred.Raw)
+	// The Responder is authenticated: only now are its credential and
+	// EAD_2 visible.
+	s.peerCred, s.peerEAD = peerCred, ead2
+	s.th3 = su.h(bstrItem(s.th2), pt2, peerCred.Raw)
 	s.t("TH_3", s.th3)
 
 	// PRK_4e3m (§4.1.1.3).
@@ -496,17 +504,17 @@ func (s *session) signOrMAC(n int, cR, th, ead []byte, signs bool) ([]byte, []by
 	return sig, idCompact, nil
 }
 
-func (s *session) verifySignOrMAC(n int, cR []byte, peerID IDCred, th, ead, som []byte, signs bool) error {
+func (s *session) verifySignOrMAC(n int, cR []byte, peerID IDCred, cred *Credential, th, ead, som []byte, signs bool) error {
 	idFull, err := peerID.full()
 	if err != nil {
 		return err
 	}
-	mac, err := s.mac(n, cR, idFull, th, s.peerCred.Raw, ead, signs)
+	mac, err := s.mac(n, cR, idFull, th, cred.Raw, ead, signs)
 	if err != nil {
 		return err
 	}
 	if signs {
-		return s.suite.verify(s.peerCred.PublicKey, sigStructure(idFull, th, s.peerCred.Raw, ead, mac), som)
+		return s.suite.verify(cred.PublicKey, sigStructure(idFull, th, cred.Raw, ead, mac), som)
 	}
 	if subtle.ConstantTimeCompare(mac, som) != 1 {
 		return fmt.Errorf("%w: MAC_%d", ErrAuthentication, n)
@@ -614,16 +622,18 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 		return s.fail(err)
 	}
 	ead3Raw := pr.rest
-	if s.peerEAD, err = decodeEAD(pr, s.accept); err != nil {
+	ead3, err := decodeEAD(pr, s.accept)
+	if err != nil {
 		return s.fail(err)
 	}
-	if s.peerCred, err = s.party.resolvePeer(ctx, peerID); err != nil {
+	peerCred, err := s.party.resolvePeer(ctx, peerID)
+	if err != nil {
 		return s.fail(err)
 	}
 	if s.method.initiatorSigns() {
 		s.prk4e3m = slices.Clone(s.prk3e2m)
 	} else {
-		peerDH, err := su.staticPublic(s.peerCred.PublicKey)
+		peerDH, err := su.staticPublic(peerCred.PublicKey)
 		if err != nil {
 			return s.fail(err)
 		}
@@ -631,10 +641,13 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 			return s.fail(err)
 		}
 	}
-	if err := s.verifySignOrMAC(3, nil, peerID, s.th3, ead3Raw, som, s.method.initiatorSigns()); err != nil {
+	if err := s.verifySignOrMAC(3, nil, peerID, peerCred, s.th3, ead3Raw, som, s.method.initiatorSigns()); err != nil {
 		return s.fail(err)
 	}
-	s.th4 = su.h(bstrItem(s.th3), pt3, s.peerCred.Raw)
+	// The Initiator is authenticated: only now are its credential and
+	// EAD_3 visible.
+	s.peerCred, s.peerEAD = peerCred, ead3
+	s.th4 = su.h(bstrItem(s.th3), pt3, peerCred.Raw)
 	s.t("TH_4", s.th4)
 	if err := s.deriveOut(); err != nil {
 		return s.fail(err)
@@ -751,7 +764,7 @@ func (s *session) processMessage4(msg4 []byte) error {
 	if err != nil {
 		return s.fail(err)
 	}
-	s.peerEAD = ead4
+	s.peerEAD = ead4 // authenticated by the AEAD
 	s.message4OK = true
 	return nil
 }

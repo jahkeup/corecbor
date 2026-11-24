@@ -391,6 +391,12 @@ peer does not interoperate with a v0.2 peer** unless one side passes
 `NewInitiator(cfg, ...Option)` and `NewResponder(cfg, ...Option)` gain
 optional parameters; existing calls compile unchanged.
 
+Behavior changes from the pre-v0.3.0 review (proposal 037):
+
+| Change | Old behavior | Restore with |
+|---|---|---|
+| `PeerCredential()` and `PeerEAD()` return nil until the peer's Signature_or_MAC verifies, and after any failure (EAD_1 stays visible after `ProcessMessage1`, documented as unverified) | the resolved credential and decoded EAD were returned even when verification then failed | none (safety defect, 034) |
+
 ## eat (032)
 
 Integer claim handling (claim keys, oemid PEN, detached-digest

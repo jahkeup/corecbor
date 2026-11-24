@@ -141,7 +141,10 @@ func (i *Initiator) KeyUpdate(context []byte) error {
 	return i.s.keyUpdate(context)
 }
 
-// PeerEAD returns the EAD items received in the most recent message.
+// PeerEAD returns the EAD items received in the most recent message,
+// once that message has been verified: EAD_2 after ProcessMessage2,
+// EAD_4 after ProcessMessage4. It returns nil before then and after any
+// failure.
 func (i *Initiator) PeerEAD() []EADItem {
 	if i.s == nil {
 		return nil
@@ -150,7 +153,9 @@ func (i *Initiator) PeerEAD() []EADItem {
 }
 
 // PeerCredential returns the Responder's credential once message_2 has
-// been verified.
+// been verified. It returns nil before then and after any failure,
+// including a credential that resolved but whose signature or MAC did
+// not verify.
 func (i *Initiator) PeerCredential() *Credential {
 	if i.s == nil {
 		return nil
@@ -285,7 +290,10 @@ func (r *Responder) KeyUpdate(context []byte) error {
 	return r.s.keyUpdate(context)
 }
 
-// PeerEAD returns the EAD items received in the most recent message.
+// PeerEAD returns the EAD items received in the most recent message:
+// EAD_1 after ProcessMessage1, EAD_3 once message_3 has been verified.
+// message_1 is not authenticated, so EAD_1 is unverified until
+// ProcessMessage3 succeeds. It returns nil after any failure.
 func (r *Responder) PeerEAD() []EADItem {
 	if r.s == nil {
 		return nil
@@ -294,7 +302,9 @@ func (r *Responder) PeerEAD() []EADItem {
 }
 
 // PeerCredential returns the Initiator's credential once message_3 has
-// been verified.
+// been verified. It returns nil before then and after any failure,
+// including a credential that resolved but whose signature or MAC did
+// not verify.
 func (r *Responder) PeerCredential() *Credential {
 	if r.s == nil {
 		return nil

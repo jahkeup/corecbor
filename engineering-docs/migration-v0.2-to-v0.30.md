@@ -78,6 +78,7 @@ v0.2.2 and under the new version and diffs the output.
 | `Stream.Next` stops with an error, wrapping `ErrTruncated` and `io.ErrUnexpectedEOF`, when the reader ends inside an item; only an end between items is a clean end (037 C6) | `Stream` | a truncated last item ended the stream silently, as if it were not there | none (silent data loss, 034) |
 | A chunk of the wrong type in an indefinite-length string returns the new `ErrInvalidChunk` (037 C6) | `Decode`, `Cursor`, `DecodeFrom`, `Stream` | `ErrTruncated` (and `Stream` ended silently) | none; match `ErrInvalidChunk` |
 | `Cursor.FindMapKey` returns the value `Decode` keeps: it scans to the end of the map and takes the last of repeated keys; under `RejectDuplicateMapKeys` (and so `StrictDecoder`) a repeat of the key anywhere in the map returns `ErrDuplicateMapKey`; keys match under the key identity, so a non-shortest or indefinite-length text key matches by default and only the shortest encoding under `KeyIdentityEncoded`; under `KeepDuplicateMapKeys` it stops at the next occurrence (037 C7) | `Cursor.FindMapKey` | the first occurrence; duplicates never rejected; only a definite-length key compared byte-for-byte | none (parser differential, 034); use `KeepDuplicateMapKeys` to step through every occurrence |
+| `RequireDeterministic` accepts a NaN only as `f97e00`, the NaN the deterministic encoders write, so accepted input re-encodes to the same bytes (037 C9) | `NewDecoder(RequireDeterministic())` | any NaN in the shortest width that kept its payload and sign | `AllowNaNPayloads()` |
 
 ## Text that is not valid UTF-8 (035)
 
@@ -193,6 +194,8 @@ goroutine (for example from a `sync.Pool`).
   `cose.KeepParamsAsReceived()` with `(*Key).ReceivedParams` and
   `(*Key).DeleteReceivedParam`. Data kept this way is written back
   verbatim, so it is the one exception to Core Deterministic output.
+- Pre-release review fixes (037): `ErrInvalidChunk`,
+  `AllowNaNPayloads`, `rfc8949.BudgetState.Charge`.
 - `registry`: refreshed from IANA (2026-11-13). Every generated
   constant from v0.2.2 keeps its name and value
   (`registry/names_frozen.txt`); new tags get new constants.

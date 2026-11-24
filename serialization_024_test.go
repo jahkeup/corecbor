@@ -197,9 +197,10 @@ func TestRequirePreferredPlus(t *testing.T) {
 			t.Errorf("%s: %v, want accepted", h, err)
 		}
 	}
-	// RequireDeterministic preserves NaN payloads in the shortest width
-	// (RFC 8949 §4.1) and doesn't impose the draft's f97e00 rule.
-	det := NewDecoder(RequireDeterministic())
+	// With AllowNaNPayloads, RequireDeterministic preserves NaN payloads
+	// in the shortest width (RFC 8949 §4.1) and doesn't impose f97e00;
+	// by default it does (037 C9).
+	det := NewDecoder(RequireDeterministic(), AllowNaNPayloads())
 	if _, err := det.Decode(mustHex(t, "f97e01")); err != nil {
 		t.Errorf("RequireDeterministic f97e01: %v", err)
 	}

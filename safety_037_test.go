@@ -146,6 +146,54 @@ func TestC8MarshalerDuplicateKeys(t *testing.T) {
 	}
 }
 
+// C9: RequireDeterministic accepts only the NaN the deterministic
+// encoders write (f97e00), so re-encoding reproduces accepted input;
+// AllowNaNPayloads restores the RFC 8949 §4.2.1 rule alone.
+func TestC9DeterministicNaN(t *testing.T) {
+	enc := New(ModeCoreDeterministic, AllowNonFiniteFloats())
+	for _, tc := range []struct {
+		src      []byte
+		def, rfc bool // accepted by default, with AllowNaNPayloads
+	}{
+		{[]byte{0xf9, 0x7e, 0x00}, true, true},
+		{[]byte{0xf9, 0x7e, 0x01}, false, true},             // payload
+		{[]byte{0xf9, 0xfe, 0x00}, false, true},             // sign
+		{[]byte{0xfa, 0x7f, 0xc0, 0x00, 0x01}, false, true}, // payload needs single
+		{[]byte{0xfa, 0x7f, 0xc0, 0x00, 0x00}, false, false},
+		{[]byte{0xfb, 0x7f, 0xf8, 0, 0, 0, 0, 0, 0}, false, false},
+		{[]byte{0xf9, 0x7c, 0x00}, true, true}, // +Inf is reproduced
+	} {
+		v, err := NewDecoder(RequireDeterministic()).Decode(tc.src)
+		if (err == nil) != tc.def {
+			t.Errorf("RequireDeterministic(%x): err = %v, want accepted=%v", tc.src, err, tc.def)
+		}
+		if err == nil {
+			if out, err := enc.Encode(nil, v); err != nil || !bytes.Equal(out, tc.src) {
+				t.Errorf("%x accepted but re-encodes as %x, %v", tc.src, out, err)
+			}
+		} else if !errors.Is(err, ErrNotPreferred) {
+			t.Errorf("RequireDeterministic(%x): err = %v, want ErrNotPreferred", tc.src, err)
+		}
+		for _, d := range []*Decoder{
+			NewDecoder(RequireDeterministic(), AllowNaNPayloads()),
+			NewDecoder(AllowNaNPayloads(), RequireDeterministic()),
+		} {
+			if _, err := d.Decode(tc.src); (err == nil) != tc.rfc {
+				t.Errorf("AllowNaNPayloads(%x): err = %v, want accepted=%v", tc.src, err, tc.rfc)
+			}
+		}
+		// DeterministicDecoder rejects every non-finite float, as
+		// StrictDecoder does.
+		if _, err := DeterministicDecoder().Decode(tc.src); !errors.Is(err, ErrNonFiniteFloat) {
+			t.Errorf("DeterministicDecoder(%x): err = %v, want ErrNonFiniteFloat", tc.src, err)
+		}
+	}
+	// RequirePreferredPlus keeps its own NaN rule.
+	if _, err := NewDecoder(RequirePreferredPlus(), AllowNaNPayloads()).Decode([]byte{0xf9, 0x7e, 0x01}); !errors.Is(err, ErrNotPreferred) {
+		t.Errorf("RequirePreferredPlus + AllowNaNPayloads: err = %v", err)
+	}
+}
+
 // C5: a sequence of scalars is charged for its items, and each call
 // starts from a fresh budget.
 func TestC5SequenceBudget(t *testing.T) {

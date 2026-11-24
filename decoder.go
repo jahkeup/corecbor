@@ -14,6 +14,11 @@ type decodeConfig struct {
 	noInternalArena bool
 	textLossless    bool // InvalidUTF8Lossless: Unmarshal into string accepts non-UTF-8 forms
 
+	// RequireDeterministic's NaN rule (proposal 037 C9), applied when
+	// the Decoder is built so option order doesn't matter.
+	deterministicNaN bool
+	allowNaNPayloads bool
+
 	// Reflection options (proposal 025).
 	disallowUnknown    bool
 	caseInsensitive    bool
@@ -177,16 +182,34 @@ func CompatV02Decoding() DecoderOption {
 // Deterministic: non-preferred serialization (§4.1, §3.4.3: shortest
 // arguments and float widths, definite lengths, preferred bignums) and
 // maps whose keys are not in strictly increasing bytewise-lex order of
-// their encodings (which also rejects duplicates). It is based on the
-// published RFC only; combine with RequirePreferredPlus for the draft's
-// additional NaN rule. Errors wrap ErrNotDeterministic, or
-// ErrNotPreferred for serialization violations (together with
-// ErrNonShortest or ErrIndefiniteLength where they apply).
+// their encodings (which also rejects duplicates). Errors wrap
+// ErrNotDeterministic, or ErrNotPreferred for serialization violations
+// (together with ErrNonShortest or ErrIndefiniteLength where they
+// apply).
+//
+// A NaN is accepted only as f97e00, the one NaN the deterministic
+// encoders write (RFC 8949 §4.2.2 leaves NaN handling to the
+// application), so that re-encoding accepted input reproduces it
+// (proposal 037 C9). AllowNaNPayloads restores the §4.2.1 rule alone:
+// any NaN in the shortest width that keeps its payload and sign.
 func RequireDeterministic() DecoderOption {
 	return func(c *decodeConfig) {
 		c.opts.RequirePreferred = true
 		c.opts.RequireSortedMapKeys = true
+		c.deterministicNaN = true
 	}
+}
+
+// AllowNaNPayloads makes RequireDeterministic accept a NaN with any
+// payload and sign in the shortest width that preserves them, which is
+// all RFC 8949 §4.2.1 asks, instead of only f97e00. Input it lets
+// through can't be reproduced by re-encoding in a deterministic mode,
+// which writes every NaN as f97e00. It doesn't relax
+// RequirePreferredPlus, whose rule is f97e00 only, or
+// RejectNonFiniteFloats (set by StrictDecoder and DeterministicDecoder),
+// which rejects every NaN.
+func AllowNaNPayloads() DecoderOption {
+	return func(c *decodeConfig) { c.allowNaNPayloads = true }
 }
 
 // RequirePreferredPlus is Experimental: it implements the checking
@@ -273,9 +296,16 @@ type Decoder struct {
 }
 
 func NewDecoder(opts ...DecoderOption) *Decoder {
-	cfg := decodeConfig{}
+	return newDecoder(decodeConfig{}, opts)
+}
+
+// newDecoder applies opts over cfg and builds the Decoder.
+func newDecoder(cfg decodeConfig, opts []DecoderOption) *Decoder {
 	for _, o := range opts {
 		o(&cfg)
+	}
+	if cfg.deterministicNaN && !cfg.allowNaNPayloads {
+		cfg.opts.RequireCanonicalNaN = true
 	}
 	d := &Decoder{cfg: cfg}
 	if !cfg.noInternalArena && cfg.opts.Arena == nil {
@@ -290,15 +320,7 @@ func NewDecoder(opts ...DecoderOption) *Decoder {
 // keys. Tags are accepted; add RejectUnknownTags() or WithAllowedTags
 // for closed-world tag validation.
 func StrictDecoder(opts ...DecoderOption) *Decoder {
-	cfg := decodeConfig{opts: rfc8949.StrictOpts()}
-	for _, o := range opts {
-		o(&cfg)
-	}
-	d := &Decoder{cfg: cfg}
-	if !cfg.noInternalArena && cfg.opts.Arena == nil {
-		d.arena = rfc8949.NewArena(256, 64)
-	}
-	return d
+	return newDecoder(decodeConfig{opts: rfc8949.StrictOpts()}, opts)
 }
 
 // DeterministicDecoder returns StrictDecoder plus RequireDeterministic:

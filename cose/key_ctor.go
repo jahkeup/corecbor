@@ -3,7 +3,10 @@
 
 package cose
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // NewSignerFromKey returns a Signer for a private COSE_Key. The key's
 // key_ops must permit sign. Its alg, when set, selects the algorithm the
@@ -47,8 +50,11 @@ func withKeyAlgorithm(a Algorithm) SignerOption {
 
 // NewVerifierFromKey returns a Verifier for a COSE_Key. The key's
 // key_ops must permit verify, and its alg, when set, must match the key
-// type (ErrInvalidKey otherwise). For an RSA key, a set alg is the only
-// algorithm accepted unless WithAllowedAlgorithms says otherwise.
+// type (ErrInvalidKey otherwise). A set alg is then the only algorithm
+// the Verifier accepts (RFC 9052 §7.1); WithAllowedAlgorithms can narrow
+// that but not widen it, and an allow-list without the key's alg is
+// ErrInvalidKey. For an RSA key, a set RS256/384/512 alg is accepted
+// without WithAllowedAlgorithms.
 func NewVerifierFromKey(k *Key, opts ...VerifierOption) (*Verifier, error) {
 	if !k.Permits(KeyOpVerify) {
 		return nil, fmt.Errorf("%w: key_ops do not permit verify", ErrInvalidKey)
@@ -69,20 +75,24 @@ func NewVerifierFromKey(k *Key, opts ...VerifierOption) (*Verifier, error) {
 		if !sameSignatureFamily(a, v.alg) {
 			return nil, fmt.Errorf("%w: key alg %s, key type implies %s", ErrInvalidKey, a, v.alg)
 		}
-		// A key restricted to one form (RFC 9052 §7.1 alg) only verifies
-		// messages using it.
-		if v.policy.allowed == nil {
-			v.policy.allowed = []Algorithm{a}
-		}
-		return v, nil
+		return restrictToKeyAlg(v, a)
 	}
 	switch a {
 	case AlgPS256, AlgPS384, AlgPS512, AlgRS256, AlgRS384, AlgRS512:
 	default:
 		return nil, fmt.Errorf("%w: key alg %s on an RSA key", ErrInvalidKey, a)
 	}
-	if v.policy.allowed == nil {
-		v.policy.allowed = []Algorithm{a}
+	return restrictToKeyAlg(v, a)
+}
+
+// restrictToKeyAlg limits v to the key's alg: a key restricted to one
+// algorithm (RFC 9052 §7.1) only verifies messages using it, whatever
+// WithAllowedAlgorithms allows. An allow-list that excludes it leaves
+// nothing to verify, which is ErrInvalidKey.
+func restrictToKeyAlg(v *Verifier, a Algorithm) (*Verifier, error) {
+	if v.policy.allowed != nil && !slices.Contains(v.policy.allowed, a) {
+		return nil, fmt.Errorf("%w: key alg %s is not in the allowed algorithms %v", ErrInvalidKey, a, v.policy.allowed)
 	}
+	v.policy.allowed = []Algorithm{a}
 	return v, nil
 }

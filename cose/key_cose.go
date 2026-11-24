@@ -903,6 +903,13 @@ func (ks KeySet) MarshalCBOR() ([]byte, error) {
 // Lookup returns the keys whose kid equals kid (when kid is non-nil),
 // whose alg equals alg or is unset (when alg is non-zero), and whose
 // key_ops permit op (when op is non-zero), in set order.
+//
+// alg matches exactly: a key whose alg is ES256 (-7) doesn't match
+// ESP256 (-9), nor EdDSA (-8) Ed25519 (-19). A key's alg restricts it to
+// that algorithm (RFC 9052 §7.1), and RFC 9864 gives the polymorphic
+// and fully-specified identifiers distinct meanings, so such a key
+// couldn't verify the message anyway (NewVerifierFromKey). A key meant
+// for both forms leaves alg unset.
 func (ks KeySet) Lookup(kid []byte, alg Algorithm, op KeyOp) []*Key {
 	var out []*Key
 	for _, k := range ks {

@@ -207,7 +207,18 @@ goroutine (for example from a `sync.Pool`).
   validation with `RejectInvalidTagContent()` (decoder),
   `CheckTagContent()` (encoder) and `rfc8949.DecodeOpts` /
   `EncodeOpts.RejectInvalidTagContent`; `CheckDuplicateMapKeys()` and
-  `rfc8949.EncodeOpts.RejectDuplicateMapKeys`.
+  `rfc8949.EncodeOpts.RejectDuplicateMapKeys`; `rfc8949.DecodeAt`.
+- Strict reflection (037 C15–C17): `DisallowDroppedTags()`,
+  `DisallowUndefined()` and `UnmarshalStrict` (StrictDecoder plus
+  both). Package `Unmarshal` is unchanged and forgiving: it drops tags
+  around content stored into plain Go types and reads undefined as
+  null.
+- RFC 8746 typed arrays (037 C18): `TypedArrayTo`, `TypedArrayToLE`,
+  `AsTypedArray` (generic over `TypedArrayElem`: the integer types,
+  `float32`, `float64`), `TagUint8ClampedArray`. Errors wrap
+  `ErrMalformedTag`. Float16/float128 element arrays and the
+  multi-dimensional and homogeneous array tags (40, 41, 1040) are not
+  covered yet.
 - `registry`: refreshed from IANA (2026-11-13). Every generated
   constant from v0.2.2 keeps its name and value
   (`registry/names_frozen.txt`); new tags get new constants.

@@ -54,7 +54,10 @@ func Marshal(v any) ([]byte, error) {
 }
 
 // Unmarshal decodes CBOR data into v, which must be a non-nil pointer.
-// It uses a forgiving decoder (accepts all well-formed CBOR).
+// It uses a forgiving decoder (accepts all well-formed CBOR): repeated
+// map keys resolve last-write-wins, tags around content stored into a
+// plain Go type are dropped, and undefined is read as null. Use
+// UnmarshalStrict, or a configured Decoder, to reject those instead.
 // Unmarshal is safe for concurrent use, and everything it stores in v
 // is independent of data and of any decoder storage.
 func Unmarshal(data []byte, v any) error {
@@ -89,6 +92,9 @@ func (d *Decoder) Unmarshal(data []byte, v any) error {
 		disallowUnknown:    d.cfg.disallowUnknown,
 		caseInsensitive:    d.cfg.caseInsensitive,
 		legacyNoTextBinary: d.cfg.legacyNoTextBinary,
+
+		disallowDroppedTags: d.cfg.disallowDroppedTags,
+		disallowUndefined:   d.cfg.disallowUndefined,
 	}
 	rv := reflect.ValueOf(v)
 	if rv.Kind() == reflect.Pointer && !rv.IsNil() && needsRaw(rv.Elem().Type()) {

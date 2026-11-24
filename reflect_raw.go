@@ -139,6 +139,9 @@ func (r rawState) fill(span []byte, val cbor.Value, target reflect.Value, raw bo
 
 	switch h.Major {
 	case wire.MajorTag:
+		if r.disallowDroppedTags && h.Arg != cbor.TagSelfDescribe {
+			return droppedTag(h.Arg, target.Type())
+		}
 		var inner cbor.Value
 		if val.Kind == cbor.KindTag {
 			inner = val.TagInner()

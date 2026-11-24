@@ -19,10 +19,12 @@ type decodeConfig struct {
 	deterministicNaN bool
 	allowNaNPayloads bool
 
-	// Reflection options (proposal 025).
-	disallowUnknown    bool
-	caseInsensitive    bool
-	legacyNoTextBinary bool
+	// Reflection options (proposal 025, 037).
+	disallowUnknown     bool
+	disallowDroppedTags bool
+	disallowUndefined   bool
+	caseInsensitive     bool
+	legacyNoTextBinary  bool
 }
 
 type DecoderOption func(*decodeConfig)

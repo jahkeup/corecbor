@@ -23,6 +23,43 @@ func DisallowUnknownFields() DecoderOption {
 	return func(c *decodeConfig) { c.disallowUnknown = true }
 }
 
+// DisallowDroppedTags makes Unmarshal fail with an error wrapping
+// ErrTypeMismatch where it would store a tag's content into a target
+// that has no place for the tag number, instead of dropping the number
+// (the forgiving default): 999(5) into an int, 1(1363896240) into an
+// int64. Targets that keep tags are unaffected: Value, any, RawTag, an
+// Unmarshaler, time.Time for tags 0 and 1, big.Int for tags 2 and 3,
+// and struct fields that declare the tag. Tag 55799 (self-describe),
+// which carries no meaning, is still dropped (proposal 037 C15).
+func DisallowDroppedTags() DecoderOption {
+	return func(c *decodeConfig) { c.disallowDroppedTags = true }
+}
+
+// DisallowUndefined makes Unmarshal fail with an error wrapping
+// ErrTypeMismatch where it would store undefined (f7) into a target
+// that can't tell it from null: by default both leave a Go value at its
+// zero value, and any gets nil for both. A Value or an Unmarshaler
+// still receives undefined as it is (proposal 037 C16).
+func DisallowUndefined() DecoderOption {
+	return func(c *decodeConfig) { c.disallowUndefined = true }
+}
+
+// strictUnmarshaler backs UnmarshalStrict. It has no internal arena, so
+// it is safe for concurrent use.
+var strictUnmarshaler = StrictDecoder(WithoutInternalArena(), DisallowDroppedTags(), DisallowUndefined())
+
+// UnmarshalStrict is Unmarshal with StrictDecoder's checks (spec §3.2:
+// indefinite lengths, non-shortest arguments, invalid UTF-8, duplicate
+// map keys, non-finite floats, null map keys and invalid tag content
+// are rejected), DisallowDroppedTags and DisallowUndefined. Package
+// Unmarshal stays forgiving; use UnmarshalStrict, or a StrictDecoder's
+// Unmarshal with options of your choice, for input that must be
+// canonical and lose nothing (proposal 037 C17). It is safe for
+// concurrent use.
+func UnmarshalStrict(data []byte, v any) error {
+	return strictUnmarshaler.Unmarshal(data, v)
+}
+
 // WithCaseInsensitiveFieldNames makes struct decoding match a text key
 // against field names exactly first, then case-insensitively (the
 // encoding/json rule). Without it, only the exact key for the default

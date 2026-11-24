@@ -30,6 +30,10 @@ type unmarshalState struct {
 	disallowUnknown    bool // DisallowUnknownFields
 	caseInsensitive    bool // WithCaseInsensitiveFieldNames
 	legacyNoTextBinary bool // WithLegacyNoTextBinaryUnmarshal
+
+	// Proposal 037.
+	disallowDroppedTags bool // DisallowDroppedTags
+	disallowUndefined   bool // DisallowUndefined
 }
 
 func unmarshalValue(val cbor.Value, v any, u unmarshalState) error {
@@ -50,6 +54,9 @@ func (u unmarshalState) own(v cbor.Value) cbor.Value {
 func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	if !target.CanSet() {
 		return unsupportedTarget(cbor.KindInvalid, target.Type(), "cannot set target of type %s", target.Type())
+	}
+	if val.Kind == cbor.KindUndefined && u.disallowUndefined && !keepsUndefined(target) {
+		return typeMismatchf(cbor.KindUndefined, target.Type(), "undefined into %s, which can't tell it from null", target.Type())
 	}
 
 	if target.Kind() == reflect.Pointer {
@@ -653,7 +660,26 @@ func (u unmarshalState) decodeTagReflect(t cbor.Value, target reflect.Value) err
 	if target.Type() == bigIntPtrType && (t.TagID() == cbor.TagUnsignedBignum || t.TagID() == cbor.TagNegativeBignum) {
 		return decodeBigIntPtr(t, target)
 	}
+	if u.disallowDroppedTags && t.TagID() != cbor.TagSelfDescribe {
+		return droppedTag(t.TagID(), target.Type())
+	}
 	return u.valueToGo(t.TagInner(), target)
+}
+
+// droppedTag reports, under DisallowDroppedTags, a tag whose number the
+// target has no place for.
+func droppedTag(id uint64, goType reflect.Type) error {
+	return typeMismatchf(cbor.KindTag, goType, "tag %d would be dropped storing its content into %s", id, goType)
+}
+
+// keepsUndefined reports whether target can hold undefined as distinct
+// from null: a cbor.Value, a pointer to one (checked on the element),
+// or an Unmarshaler, which gets the bytes.
+func keepsUndefined(target reflect.Value) bool {
+	if target.Kind() == reflect.Pointer || target.Type() == valueType {
+		return true
+	}
+	return target.CanAddr() && target.Addr().Type().Implements(unmarshalerType)
 }
 
 func decodeTime(val cbor.Value, target reflect.Value) error {

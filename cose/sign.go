@@ -163,6 +163,9 @@ func isRSAAlg(a Algorithm) bool {
 
 // checkBucketOverlap rejects a label set in both buckets (RFC 9052 §3).
 func checkBucketOverlap(prot, unprot map[any]any) error {
+	if _, ok := unprot[headerLabelType]; ok {
+		return fmt.Errorf("%w: typ (16) must be in the protected bucket (RFC 9596 §2)", ErrUnsupportedHeader)
+	}
 	for label := range unprot {
 		if _, dup := prot[label]; dup {
 			return fmt.Errorf("%w: label %v in both buckets", ErrDuplicateLabel, label)

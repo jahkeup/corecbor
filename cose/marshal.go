@@ -44,6 +44,11 @@ type DecodeLimits struct {
 	// counting nested recipients; 0 means 64, and a negative value
 	// means no cap.
 	MaxRecipients int
+	// AllowUnprotectedTyp accepts a typ header (16) in an unprotected
+	// bucket, which RFC 9596 §2 forbids (it isn't integrity protected
+	// there), for messages from senders that put it there. The header
+	// is still returned unprotected; don't rely on it.
+	AllowUnprotectedTyp bool
 	// AllowDuplicateLabels restores v0.2.2 behavior: a label repeated in
 	// a bucket resolves last-wins, and a label may appear in both the
 	// protected and unprotected buckets.

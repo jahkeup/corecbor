@@ -297,6 +297,9 @@ func decodeBuckets(protected []byte, unprotected corecbor.Value, lim DecodeLimit
 	if err != nil {
 		return nil, nil, err
 	}
+	if _, ok := unprot.params[headerLabelType]; ok && !lim.AllowUnprotectedTyp {
+		return nil, nil, fmt.Errorf("%w: typ (16) in the unprotected bucket (RFC 9596 §2; see DecodeLimits.AllowUnprotectedTyp)", ErrMalformed)
+	}
 	if lim.AllowDuplicateLabels {
 		return prot, unprot, nil
 	}

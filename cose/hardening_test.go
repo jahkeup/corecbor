@@ -29,7 +29,7 @@ import (
 
 // Proposal 027 Phase 1 regression tests.
 
-func hx(t *testing.T, s string) []byte {
+func hx(t testing.TB, s string) []byte {
 	t.Helper()
 	b, err := hex.DecodeString(s)
 	if err != nil {
@@ -47,7 +47,7 @@ func b64u(t *testing.T, s string) []byte {
 	return b
 }
 
-func encodeCBOR(t *testing.T, v corecbor.Value) []byte {
+func encodeCBOR(t testing.TB, v corecbor.Value) []byte {
 	t.Helper()
 	b, err := corecbor.New(corecbor.ModeCoreDeterministic).Encode(nil, v)
 	if err != nil {

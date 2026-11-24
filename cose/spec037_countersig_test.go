@@ -12,7 +12,7 @@ import (
 // label (7) must be understood by new implementations, so crit may list
 // it. A countersignature doesn't change how the message it counter-signs
 // is processed; this package passes it through and doesn't verify it.
-// The RFC 9338 labels (11, 12) aren't processed and stay critical.
+// The RFC 9338 labels (11, 12) are unprotected, so crit can't list them.
 func TestSpec037CritCounterSignature(t *testing.T) {
 	v, err := NewVerifier(hardEdPub)
 	if err != nil {

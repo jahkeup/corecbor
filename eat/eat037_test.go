@@ -6,6 +6,7 @@ package eat_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"testing"
 	"time"
@@ -456,6 +457,60 @@ func TestEncode_Collision037(t *testing.T) {
 	c.PrivateClaims[cwt.IntKey(eat.ClaimNonce)] = corecbor.Bytes(n8)
 	if _, err := c.Encode(); err != nil {
 		t.Errorf("same value twice: %v", err)
+	}
+}
+
+// W25: RFC 9711 §5 detached EAT bundle rules, and a digest checker.
+func TestDetachedBundle037(t *testing.T) {
+	main := hx(t, rfcA22MainToken)
+	tee := hx(t, rfcA22TEE)
+	bundle := func(mainTok corecbor.Value, sets ...corecbor.MapEntry) []byte {
+		return encodeValue(t, corecbor.MakeTag(eat.TagDetachedEATBundle, corecbor.MakeArray(mainTok, corecbor.MakeMapFromSlice(sets))))
+	}
+	set := func(name string, v corecbor.Value) corecbor.MapEntry {
+		return corecbor.MapEntry{Key: corecbor.Text(name), Value: v}
+	}
+	for name, data := range map[string][]byte{
+		"json-wrapped set in a CBOR bundle": bundle(corecbor.Bytes(main), set("TEE", corecbor.Text("eyJ9"))),
+		"set is not a claims map":           bundle(corecbor.Bytes(main), set("TEE", corecbor.Bytes([]byte{0x80}))),
+		"set is two items":                  bundle(corecbor.Bytes(main), set("TEE", corecbor.Bytes(append(append([]byte{}, tee...), 0xa0)))),
+		"main token untagged":               bundle(corecbor.Bytes([]byte{0x84, 0x40, 0xa0, 0x40, 0x40}), set("TEE", corecbor.Bytes(tee))),
+		"main token is a bundle":            bundle(corecbor.Bytes(bundle(corecbor.Bytes(main), set("TEE", corecbor.Bytes(tee)))), set("TEE", corecbor.Bytes(tee))),
+	} {
+		if _, err := eat.DecodeDetachedBundle(data); !errors.Is(err, eat.ErrMalformedEAT) {
+			t.Errorf("%s: %v, want ErrMalformedEAT", name, err)
+		}
+	}
+	b, err := eat.DecodeDetachedBundle(bundle(corecbor.Bytes(main), set("TEE", corecbor.Bytes(tee))))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	sum := sha256.Sum256(tee)
+	if err := b.CheckDetached(ctx, "TEE", eat.DetachedDigest{Alg: -16, Digest: sum[:]}); err != nil {
+		t.Errorf("SHA-256 digest: %v", err)
+	}
+	if err := b.CheckDetached(ctx, "TEE", eat.DetachedDigest{AlgName: "SHA-256", Digest: sum[:]}); err != nil {
+		t.Errorf("text alg: %v", err)
+	}
+	if err := b.CheckDetached(ctx, "TEE", eat.DetachedDigest{Alg: -16, Digest: make([]byte, 32)}); !errors.Is(err, cose.ErrVerification) {
+		t.Errorf("wrong digest: %v, want cose.ErrVerification", err)
+	}
+	if err := b.CheckDetached(ctx, "other", eat.DetachedDigest{Alg: -16, Digest: sum[:]}); !errors.Is(err, eat.ErrSubmodUnverified) {
+		t.Errorf("missing set: %v, want ErrSubmodUnverified", err)
+	}
+	if err := b.CheckDetached(ctx, "TEE", eat.DetachedDigest{Alg: -15, Digest: sum[:8]}); !errors.Is(err, cose.ErrUnsupportedAlgorithm) {
+		t.Errorf("SHA-256/64: %v, want cose.ErrUnsupportedAlgorithm", err)
+	}
+	// As an Appraiser hook (the RFC's diagnostic-notation digest).
+	claims, err := eat.DecodeClaims(hx(t, rfcA21Payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims.Submods = map[string]eat.Submod{"TEE": {Detached: &eat.DetachedDigest{Alg: -16, Digest: hx(t, rfcA22DiagDigest)}}}
+	a := eat.Appraiser{SubmodPolicy: func(string, *eat.Claims) error { return nil }, SubmodDetached: b.CheckDetached}
+	if err := a.Appraise(claims); err != nil {
+		t.Errorf("Appraise with CheckDetached: %v", err)
 	}
 }
 

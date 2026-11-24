@@ -4,7 +4,17 @@ All modules in this repository are versioned together: `vX.Y.Z` for
 the root module and `cose/vX.Y.Z`, `cwt/vX.Y.Z`, `eat/vX.Y.Z`,
 `edhoc/vX.Y.Z`, `scitt/vX.Y.Z` for the others.
 
-## v0.3.0 — unreleased
+## v0.3.1 — 2026-11-23
+
+- **Performance:** decoding with a memory budget (`WithMemoryBudget`)
+  keeps the fast path for short text map keys, charging them to the
+  budget there. In v0.3.0 a budget sent every such key down the
+  checked path, about 24% slower on key-heavy data. Decoding without a
+  budget is unchanged, and the same budget accepts or rejects the same
+  input as before.
+- **License:** `LICENSE` is a fresh copy of the Apache License text.
+
+## v0.3.0 — 2026-11-23
 
 Upgrade guide: [`engineering-docs/migration-v0.2-to-v0.3.md`](engineering-docs/migration-v0.2-to-v0.3.md).
 It lists every behavior change with what to do if you depended on the

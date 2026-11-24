@@ -117,8 +117,14 @@ tidy-check: ## fail if go.mod/go.sum need tidying in any module (all platforms)
 		(cd "$$mod" && $(GO) mod tidy -diff >/dev/null) || { echo "ERROR: $$mod needs 'go mod tidy'"; exit 1; }; \
 	done
 
+.PHONY: license-check
+license-check: ## fail if a module's LICENSE is missing or differs from the root LICENSE
+	@for mod in $(MODULES); do \
+		cmp -s LICENSE "$$mod/LICENSE" || { echo "ERROR: $$mod/LICENSE is missing or differs from LICENSE (each module zip needs its own copy for license detection)"; exit 1; }; \
+	done
+
 .PHONY: check
-check: fmt-check tidy-check vet lint apicheck test ## CI-gating set: fmt-check + tidy-check + vet + lint + apicheck + test
+check: fmt-check tidy-check license-check vet lint apicheck test ## CI-gating set: fmt-check + tidy-check + license-check + vet + lint + apicheck + test
 
 .PHONY: compat
 compat: ## run cross-library compatibility tests (including user-provided payloads)

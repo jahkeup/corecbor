@@ -119,9 +119,12 @@ type tpmDeriver struct {
 }
 
 func (t *tpmDeriver) Algorithm() cose.Algorithm {
-	// We use AlgDirect semantics: the "ciphertext" in the recipient IS the sealed key.
-	// In a real implementation, you'd register a custom algorithm ID.
-	return cose.AlgDirect
+	// The recipient ciphertext is the sealed key, so this is a key wrap,
+	// not direct encryption (AlgDirect carries no ciphertext and makes
+	// the deriver's key the content key, RFC 9052 §8.5.1). An
+	// application-defined scheme uses a private-use identifier
+	// (< -65536); a real one would register its own.
+	return cose.Algorithm(-65700)
 }
 
 // WrapKey "seals" the CEK to the current TPM PCR state by XOR-ing with the PCR value.

@@ -8,6 +8,7 @@ import (
 	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -215,14 +216,16 @@ func TestComputeMACMulti_TwoRecipients(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	directKey := &DirectKey{Key: macKey}
-	aesKWKey := &AESKWKey{Key: make([]byte, 16)}
-	if _, err := rand.Read(aesKWKey.Key); err != nil {
-		t.Fatal(err)
+	kw1 := &AESKWKey{Key: make([]byte, 16)}
+	kw2 := &AESKWKey{Key: make([]byte, 32)}
+	for _, k := range []*AESKWKey{kw1, kw2} {
+		if _, err := rand.Read(k.Key); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	payload := []byte("mac multi test")
-	msg, err := ComputeMACMulti(payload, macKey, AlgHMAC256, []KeyDeriver{directKey, aesKWKey})
+	msg, err := ComputeMACMulti(payload, macKey, AlgHMAC256, []KeyDeriver{kw1, kw2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,14 +237,16 @@ func TestComputeMACMulti_TwoRecipients(t *testing.T) {
 		t.Fatal("expected non-empty tag")
 	}
 
-	err = VerifyMACMulti(msg, directKey, 0)
-	if err != nil {
-		t.Fatalf("VerifyMACMulti with direct key failed: %v", err)
+	if err := VerifyMACMulti(msg, kw1, 0); err != nil {
+		t.Fatalf("VerifyMACMulti with first AES-KW key failed: %v", err)
+	}
+	if err := VerifyMACMulti(msg, kw2, 1); err != nil {
+		t.Fatalf("VerifyMACMulti with second AES-KW key failed: %v", err)
 	}
 
-	err = VerifyMACMulti(msg, aesKWKey, 1)
-	if err != nil {
-		t.Fatalf("VerifyMACMulti with AES-KW key failed: %v", err)
+	// A direct recipient must be the only one (RFC 9052 §8.5.1).
+	if _, err := ComputeMACMulti(payload, macKey, AlgHMAC256, []KeyDeriver{&DirectKey{Key: macKey}, kw1}); !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("direct + AES-KW: err = %v, want ErrInvalidKey", err)
 	}
 }
 

@@ -12,10 +12,10 @@ import (
 
 // EncryptMulti encrypts plaintext into a COSE_Encrypt for recipients.
 // contentAlg is AES-GCM or AES-CCM. A random content key is wrapped for
-// each recipient, except with a single direct key agreement recipient
-// (ECDH-ES + HKDF, -25/-26), whose agreed key is the content key
-// (RFC 9052 §8.5.4); a direct recipient alongside others is
-// ErrInvalidKey. The IV is random and carried in header 5.
+// each recipient, except with a single direct recipient: a DirectKey
+// (alg direct, RFC 9052 §8.5.1), whose key is the content key, or direct
+// key agreement (ECDH-ES + HKDF, -25/-26), whose agreed key is
+// (§8.5.4). A direct recipient alongside others is ErrInvalidKey. The IV is random and carried in header 5.
 func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDeriver, opts ...EncryptOption) (*Encrypt, error) {
 	if len(recipients) == 0 {
 		return nil, fmt.Errorf("%w: at least one recipient required", ErrInvalidKey)
@@ -31,20 +31,29 @@ func EncryptMulti(plaintext []byte, contentAlg Algorithm, recipients []KeyDerive
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, contentAlg)
 	}
 
+	dcek, dr, directEnc, err := directEncryption(recipients, contentAlg, cekLen)
+	if err != nil {
+		return nil, err
+	}
 	ka, direct, err := directAgreement(recipients, o.legacy)
 	if err != nil {
 		return nil, err
 	}
 	msg := &Encrypt{}
 	var cek []byte
-	if direct {
+	switch {
+	case directEnc:
+		cek = dcek
+		msg.Recipients = []Recipient{dr}
+		direct = true
+	case direct:
 		var r Recipient
 		cek, r, err = agreeRecipient(ka, contentAlg, cekLen)
 		if err != nil {
 			return nil, err
 		}
 		msg.Recipients = []Recipient{r}
-	} else {
+	default:
 		cek = make([]byte, cekLen)
 		if _, err := rand.Read(cek); err != nil {
 			return nil, fmt.Errorf("generating CEK: %w", err)

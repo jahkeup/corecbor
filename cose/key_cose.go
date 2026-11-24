@@ -731,10 +731,20 @@ func (k *Key) SymmetricKey() ([]byte, error) {
 }
 
 // KeyDeriver adapts a symmetric key to the encryption KeyDeriver
-// interface: alg direct gives a DirectKey, A128KW/A192KW/A256KW an
-// AESKWKey. Other key types and algorithms are ErrUnsupportedAlgorithm
-// (ECDH-ES from EC2/OKP keys is proposal 029).
+// interface: alg direct gives a direct-encryption recipient whose key is
+// the content key (RFC 9052 §8.5.1), A128KW/A192KW/A256KW an AESKWKey.
+// Other key types and algorithms are ErrUnsupportedAlgorithm (ECDH-ES
+// from EC2/OKP keys is proposal 029).
+//
+// For direct, the key's alg, when set, is direct or the content
+// algorithm (for example A128GCM or HMAC 256/256), and the deriver then
+// only works with that content algorithm; key_ops must permit the key's
+// use as a content key: encrypt to seal and decrypt to open, or MAC
+// create and MAC verify.
 func (k *Key) KeyDeriver(alg Algorithm) (KeyDeriver, error) {
+	if alg == AlgDirect {
+		return k.directDeriver()
+	}
 	if !k.Permits(KeyOpWrapKey) && !k.Permits(KeyOpUnwrapKey) && !k.Permits(KeyOpEncrypt) && !k.Permits(KeyOpDecrypt) {
 		return nil, fmt.Errorf("%w: key_ops forbid key distribution", ErrInvalidKey)
 	}
@@ -746,8 +756,6 @@ func (k *Key) KeyDeriver(alg Algorithm) (KeyDeriver, error) {
 		return nil, fmt.Errorf("%w: %w", ErrUnsupportedAlgorithm, err)
 	}
 	switch alg {
-	case AlgDirect:
-		return &DirectKey{Key: raw}, nil
 	case AlgA128KW, AlgA192KW, AlgA256KW:
 		kw := &AESKWKey{Key: raw}
 		if kw.Algorithm() != alg {
@@ -757,6 +765,66 @@ func (k *Key) KeyDeriver(alg Algorithm) (KeyDeriver, error) {
 	default:
 		return nil, fmt.Errorf("%w: %s from a symmetric key", ErrUnsupportedAlgorithm, alg)
 	}
+}
+
+func (k *Key) directDeriver() (KeyDeriver, error) {
+	if !k.Permits(KeyOpEncrypt) && !k.Permits(KeyOpDecrypt) && !k.Permits(KeyOpMACCreate) && !k.Permits(KeyOpMACVerify) {
+		return nil, fmt.Errorf("%w: key_ops don't permit use as a content key (encrypt, decrypt, MAC create or MAC verify)", ErrInvalidKey)
+	}
+	d := &keyDirect{key: k}
+	if a, ok := k.Algorithm(); ok && a != AlgDirect {
+		if !isContentAlg(a) {
+			return nil, fmt.Errorf("%w: key alg %s, requested direct", ErrAlgorithmMismatch, a)
+		}
+		d.contentAlg = a
+	}
+	raw, err := k.SymmetricKey()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrUnsupportedAlgorithm, err)
+	}
+	d.DirectKey = DirectKey{Key: raw}
+	return d, nil
+}
+
+// isContentAlg reports whether a is a content-layer algorithm a direct
+// key can be restricted to: AEAD content encryption or HMAC.
+func isContentAlg(a Algorithm) bool {
+	if cekLenForAlg(a) > 0 {
+		return true
+	}
+	_, err := hmacHashFunc(a)
+	return err == nil
+}
+
+// keyDirect is a direct-encryption recipient made from a COSE_Key. It
+// enforces the key's alg (as the content algorithm) and its key_ops.
+type keyDirect struct {
+	DirectKey
+	key        *Key
+	contentAlg Algorithm // 0: any
+}
+
+func (d *keyDirect) UnwrapKey(ct []byte, h Headers, opts KeyUnwrapOpts) ([]byte, error) {
+	if d.contentAlg != 0 && opts.CEKAlgorithm != d.contentAlg {
+		return nil, fmt.Errorf("%w: key alg %s, content alg %s", ErrAlgorithmMismatch, d.contentAlg, opts.CEKAlgorithm)
+	}
+	_, notMAC := hmacHashFunc(opts.CEKAlgorithm)
+	var op KeyOp
+	var name string
+	switch {
+	case opts.seal && notMAC == nil:
+		op, name = KeyOpMACCreate, "MAC create"
+	case opts.seal:
+		op, name = KeyOpEncrypt, "encrypt"
+	case notMAC == nil:
+		op, name = KeyOpMACVerify, "MAC verify"
+	default:
+		op, name = KeyOpDecrypt, "decrypt"
+	}
+	if !d.key.Permits(op) {
+		return nil, fmt.Errorf("%w: key_ops do not permit %s", ErrInvalidKey, name)
+	}
+	return d.DirectKey.UnwrapKey(ct, h, opts)
 }
 
 // KeySet is a COSE_KeySet (RFC 9052 §7): an array of COSE_Key.

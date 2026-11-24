@@ -59,6 +59,33 @@ func directAgreement(recipients []KeyDeriver, legacy legacyEncoding) (KeyAgreer,
 	return recipients[direct].(KeyAgreer), true, nil
 }
 
+// directEncryption handles a direct-encryption recipient (alg direct,
+// RFC 9052 §8.5.1): its shared key is the content key, so it must be the
+// only recipient. ok is false when no recipient is direct. The returned
+// COSE_Recipient has an empty protected bucket, alg in the unprotected
+// bucket and a zero-length ciphertext, as §8.5.1 requires.
+func directEncryption(recipients []KeyDeriver, contentAlg Algorithm, keyLen int) (cek []byte, r Recipient, ok bool, err error) {
+	for i, d := range recipients {
+		if d.Algorithm() != AlgDirect {
+			continue
+		}
+		if len(recipients) > 1 {
+			return nil, Recipient{}, false, fmt.Errorf("%w: recipient %d uses direct encryption and must be the only recipient (RFC 9052 §8.5.1)", ErrInvalidKey, i)
+		}
+		cek, err = d.UnwrapKey(nil, Headers{}, KeyUnwrapOpts{CEKAlgorithm: contentAlg, CEKLength: keyLen, seal: true})
+		if err != nil {
+			return nil, Recipient{}, false, fmt.Errorf("recipient 0: %w", err)
+		}
+		if len(cek) == 0 {
+			return nil, Recipient{}, false, fmt.Errorf("%w: recipient 0: direct key is empty", ErrInvalidKey)
+		}
+		var u Headers
+		u.SetAlgorithm(AlgDirect)
+		return cek, Recipient{Unprotected: u, Ciphertext: []byte{}}, true, nil
+	}
+	return nil, Recipient{}, false, nil
+}
+
 // sealRecipients builds one COSE_Recipient per deriver for cek. When
 // agreed is non-nil, it is the single direct-agreement recipient whose
 // headers came from AgreeKey.
@@ -124,6 +151,9 @@ func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLe
 			}
 			return nil, fmt.Errorf("%w: recipient alg %s, key implies %s", ErrAlgorithmMismatch, a, want)
 		}
+	}
+	if deriver.Algorithm() == AlgDirect && len(r.Ciphertext) != 0 {
+		return nil, fmt.Errorf("%w: direct recipient ciphertext must be empty (RFC 9052 §8.5.1)", ErrDecryption)
 	}
 	protBytes, err := r.Protected.encodeProtected()
 	if err != nil {

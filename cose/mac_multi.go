@@ -4,6 +4,7 @@
 package cose
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/subtle"
@@ -13,6 +14,12 @@ import (
 	"github.com/jahkeup/corecbor"
 )
 
+// ComputeMACMulti computes a COSE_Mac over payload for recipients.
+// key is the MAC key to distribute; with a nil key a random one is
+// generated. A single direct recipient supplies the MAC key instead: a
+// DirectKey (alg direct, RFC 9052 §8.5.1), with key nil or equal to it,
+// or direct key agreement (§8.5.4), with key nil. A direct recipient
+// alongside others is ErrInvalidKey.
 func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []KeyDeriver, opts ...MACOption) (*Mac, error) {
 	if len(recipients) == 0 {
 		return nil, fmt.Errorf("%w: at least one recipient required", ErrInvalidKey)
@@ -30,6 +37,10 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 
 	cekLen := hmacKeyLen(alg)
 
+	dcek, dr, directEnc, err := directEncryption(recipients, alg, cekLen)
+	if err != nil {
+		return nil, err
+	}
 	ka, direct, err := directAgreement(recipients, o.legacy)
 	if err != nil {
 		return nil, err
@@ -37,6 +48,18 @@ func ComputeMACMulti(payload []byte, key []byte, alg Algorithm, recipients []Key
 	msg := &Mac{Payload: payload}
 	var cek []byte
 	switch {
+	case directEnc:
+		// RFC 9052 §8.5.1: the shared key is the MAC key. A key passed
+		// as well must be that key.
+		if key != nil && !bytes.Equal(key, dcek) {
+			return nil, fmt.Errorf("%w: a direct recipient's key is the MAC key; pass it or a nil key", ErrInvalidKey)
+		}
+		if err := o.checkMACKey(dcek, alg); err != nil {
+			return nil, err
+		}
+		cek = dcek
+		msg.Recipients = []Recipient{dr}
+		direct = true
 	case direct:
 		// RFC 9052 §8.5.4: the agreed key is the MAC key.
 		if key != nil {

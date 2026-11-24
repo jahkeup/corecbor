@@ -22,4 +22,7 @@ var goldenChanges = map[string]string{
 
 	// Proposal 027 Phase 3.
 	"cose/headers/set-algorithm-typed": "proposal 027 H9: Set(1, AlgES256) encodes alg -7 instead of null",
+
+	// Proposal 037.
+	"cose/multi/mac-direct": "proposal 037 S1: a direct recipient has an empty protected bucket and alg in the unprotected bucket (RFC 9052 §8.5.1); the tag is unchanged",
 }

@@ -25,6 +25,7 @@ type KeyUnwrapOpts struct {
 
 	protected string // recipient protected bucket, for KDF contexts
 	legacy    legacyEncoding
+	seal      bool // a direct key is being read to seal, not to open
 }
 
 // legacyEncoding carries the deprecated v0.2 wire-format selectors from
@@ -35,6 +36,10 @@ type legacyEncoding struct {
 	draftHPKE27 bool // WithDraftHPKE27 (not a legacy encoding; carried the same way)
 }
 
+// DirectKey is a direct-encryption recipient (alg direct, RFC 9052
+// §8.5.1): Key is the content key (or MAC key) itself, shared in advance.
+// EncryptMulti and ComputeMACMulti use it as the content key, and it
+// must be the only recipient of the message.
 type DirectKey struct {
 	Key []byte
 }

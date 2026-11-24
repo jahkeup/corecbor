@@ -4,6 +4,7 @@
 package eat
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,7 +134,10 @@ type Claims struct {
 
 // Encode serializes the Claims as a CBOR map with integer keys, in
 // Core Deterministic encoding. NumericDates are whole seconds, as in
-// v0.2.2.
+// v0.2.2. A claim set both in PrivateClaims and by a typed field must
+// have the same value there; otherwise Encode returns a *cwt.ClaimError
+// for it wrapping ErrMalformedEAT and cwt.ErrMalformedClaims, as
+// cwt.ClaimsSet.Encode does.
 func (c *Claims) Encode(opts ...Option) ([]byte, error) {
 	cfg := newConfig(opts)
 	v, err := c.toValue(cfg)
@@ -166,7 +170,14 @@ func (c *Claims) toValue(cfg config) (corecbor.Value, error) {
 		priv[k] = v
 	}
 	for k, v := range eat {
-		priv[cwt.IntKey(k)] = v // typed fields win over a raw claim
+		key := cwt.IntKey(k)
+		if prev, ok := priv[key]; ok && !sameEncoding(prev, v) {
+			// cwt.ClaimsSet.Encode does the same for its claims; v0.2.2
+			// and 032 kept the typed field and dropped this one.
+			return corecbor.Value{}, &cwt.ClaimError{Key: key, Err: fmt.Errorf(
+				"%w: %w: claim set in PrivateClaims and a typed field with different values", ErrMalformedEAT, cwt.ErrMalformedClaims)}
+		}
+		priv[key] = v
 	}
 	cs.PrivateClaims = priv
 
@@ -177,6 +188,12 @@ func (c *Claims) toValue(cfg config) (corecbor.Value, error) {
 	// cwt's output is already Core Deterministic; splice it rather
 	// than decode and re-encode it, which would undo ReceivedClaims.
 	return rawvalue.Make(b), nil
+}
+
+func sameEncoding(a, b corecbor.Value) bool {
+	ea, err1 := restEncoder.Encode(nil, a)
+	eb, err2 := restEncoder.Encode(nil, b)
+	return err1 == nil && err2 == nil && bytes.Equal(ea, eb)
 }
 
 func wholeSeconds(t time.Time) time.Time {

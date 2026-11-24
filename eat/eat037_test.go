@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
 	"github.com/jahkeup/corecbor/eat"
@@ -439,6 +440,22 @@ func TestSubmods_NestedShapes037(t *testing.T) {
 		if _, err := (&eat.Claims{Submods: map[string]eat.Submod{"a": s}}).Encode(); !errors.Is(err, eat.ErrMalformedEAT) {
 			t.Errorf("Encode %s: %v, want ErrMalformedEAT", name, err)
 		}
+	}
+}
+
+// W27: like cwt, Encode refuses a claim set twice with different values
+// instead of dropping one.
+func TestEncode_Collision037(t *testing.T) {
+	n8 := bytes.Repeat([]byte{1}, 8)
+	c := &eat.Claims{Nonce: [][]byte{n8}, ClaimsSet: cwt.ClaimsSet{PrivateClaims: map[cwt.ClaimKey]corecbor.Value{
+		cwt.IntKey(eat.ClaimNonce): corecbor.Bytes(bytes.Repeat([]byte{2}, 8)),
+	}}}
+	if _, err := c.Encode(); !claimIs(err, eat.ClaimNonce, eat.ErrMalformedEAT) {
+		t.Errorf("conflicting nonce: %v, want ErrMalformedEAT naming nonce", err)
+	}
+	c.PrivateClaims[cwt.IntKey(eat.ClaimNonce)] = corecbor.Bytes(n8)
+	if _, err := c.Encode(); err != nil {
+		t.Errorf("same value twice: %v", err)
 	}
 }
 

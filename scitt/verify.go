@@ -167,6 +167,11 @@ func verifyReceipt(ctx context.Context, r *receipt.Receipt, entry []byte, o Veri
 	if !ok || claims.Issuer == "" || claims.Subject == "" {
 		return "", fmt.Errorf("%w: receipt without protected CWT Claims iss and sub", ErrInvalidStatement)
 	}
+	// RFC 9943 §6: a receipt is a signed statement; the same key
+	// identification rule applies.
+	if err := checkIssuerKey(r.Msg, claims); err != nil {
+		return "", fmt.Errorf("receipt: %w", err)
+	}
 	if err := r.VerifyInclusion(ctx, entry, o.ServiceKeys, o.ServiceOptions...); err != nil {
 		return "", err
 	}

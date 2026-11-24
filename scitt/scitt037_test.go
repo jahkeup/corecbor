@@ -70,6 +70,60 @@ func TestMinReceipts_Distinct037(t *testing.T) {
 	}
 }
 
+// issueReceipt is service.register with control over the headers.
+func issueReceipt(t *testing.T, ts *service, st *scitt.Statement, kid bool, unprotClaims bool) *receipt.Receipt {
+	t.Helper()
+	entry, err := scitt.Entry(st.Msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := ts.tree.Append(entry)
+	size := ts.tree.Size()
+	p, _ := ts.tree.InclusionProof(idx, size)
+	root, _ := ts.tree.Root(size)
+	prot, err := scitt.ReceiptHeaders(ts.iss, "statement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if kid {
+		prot.SetKeyID(ts.kid)
+	}
+	r, err := receipt.Issue(context.Background(), ts.signer, root, p, prot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unprotClaims {
+		if err := cwt.SetClaimsHeader(&r.Msg.Unprotected, &cwt.ClaimsSet{Issuer: "other.example", Subject: "x"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return r
+}
+
+// W28: RFC 9943 §6 — a receipt is a signed statement: its CWT Claims are
+// protected only, and it carries a protected kid unless x5t or x5chain
+// identifies the service.
+func TestReceiptHeaders037(t *testing.T) {
+	ctx := context.Background()
+	issuer := newParty(t, "issuer-1")
+	ts := newService(t, "ts.example", 3)
+	for name, tc := range map[string]struct{ kid, unprot, ok bool }{
+		"protected kid":               {kid: true, ok: true},
+		"no kid":                      {kid: false},
+		"CWT Claims also unprotected": {kid: true, unprot: true},
+	} {
+		st := issueWith(t, issuer, nil)
+		if err := receipt.Attach(st.Msg, issueReceipt(t, ts, st, tc.kid, tc.unprot)); err != nil {
+			t.Fatal(err)
+		}
+		_, err := scitt.VerifyTransparent(ctx, marshal(t, st.Msg), issuer.keys, ts.keys, 1)
+		// Label 15 in both buckets is already malformed COSE (RFC 9052 §3).
+		if tc.ok != (err == nil) || (!tc.ok && !tc.unprot && !errors.Is(err, scitt.ErrInsufficientReceipts)) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
 // W11: RFC 9943 §7.1 — the statement's validity period (exp, nbf) is
 // checked by default.
 func TestVerify_StatementValidity037(t *testing.T) {

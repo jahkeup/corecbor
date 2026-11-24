@@ -196,13 +196,8 @@ func checkStatement(msg *cose.Sign1) (*Statement, error) {
 	if claims.Issuer == "" || claims.Subject == "" {
 		return nil, fmt.Errorf("%w: CWT Claims must carry iss and sub", ErrInvalidStatement)
 	}
-	x509 := msg.Protected.Get(headerLabelX5Chain) != nil || msg.Protected.Get(headerLabelX5T) != nil
-	if x509 {
-		if err := checkX509Issuer(claims.Issuer); err != nil {
-			return nil, err
-		}
-	} else if len(msg.Protected.KeyID()) == 0 {
-		return nil, fmt.Errorf("%w: a protected kid is required when neither x5t nor x5chain is protected", ErrInvalidStatement)
+	if err := checkIssuerKey(msg, claims); err != nil {
+		return nil, err
 	}
 	st := &Statement{Msg: msg, Claims: claims}
 	if format, mediaType, ok := msg.Protected.Type(); ok {
@@ -220,6 +215,20 @@ func checkStatement(msg *cose.Sign1) (*Statement, error) {
 		st.HashEnvelope = &env
 	}
 	return st, nil
+}
+
+// checkIssuerKey applies RFC 9943 §6's key identification rule, which
+// covers signed statements and receipts alike: a protected kid unless
+// x5t or x5chain is protected, in which case iss must suit an X.509
+// issuer.
+func checkIssuerKey(msg *cose.Sign1, claims *cwt.ClaimsSet) error {
+	if msg.Protected.Get(headerLabelX5Chain) != nil || msg.Protected.Get(headerLabelX5T) != nil {
+		return checkX509Issuer(claims.Issuer)
+	}
+	if len(msg.Protected.KeyID()) == 0 {
+		return fmt.Errorf("%w: a protected kid is required when neither x5t nor x5chain is protected", ErrInvalidStatement)
+	}
+	return nil
 }
 
 // checkX509Issuer applies RFC 9943 §6 to iss when the issuer is an

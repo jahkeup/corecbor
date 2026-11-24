@@ -92,9 +92,11 @@ type DecodeOpts struct {
 	// 8949 §4.2.1), which also rejects duplicates. Errors wrap
 	// ErrNotDeterministic.
 	RequireSortedMapKeys bool
-	// RequireCanonicalNaN rejects any NaN other than f97e00
-	// (draft-ietf-cbor-serialization-13 §4; Experimental). Errors wrap
-	// ErrNotPreferred.
+	// RequireCanonicalNaN rejects any NaN other than f97e00, the NaN
+	// the deterministic encoders write: the rule of
+	// draft-ietf-cbor-serialization-13 §4, and of the root package's
+	// RequireDeterministic so that accepted input re-encodes to the same
+	// bytes (proposal 037 C9). Errors wrap ErrNotPreferred.
 	RequireCanonicalNaN bool
 
 	// spans, when non-nil, receives the entry spans of the next map

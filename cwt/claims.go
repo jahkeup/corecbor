@@ -28,8 +28,10 @@ const (
 const decodeBudget = 8 << 20
 
 // Confirmation represents the cnf (confirmation) claim (key 8)
-// per RFC 8747. Binds the token to a specific cryptographic key.
-// Exactly one method is present in a decoded Confirmation.
+// per RFC 8747. Binds the token to a specific cryptographic key. A
+// decoded Confirmation holds at most one of Key and Encrypted/
+// EncryptedKey (RFC 8747 §3.1), either possibly with a KeyID naming the
+// same key.
 type Confirmation struct {
 	Key   *cose.Key // cnf map key 1: COSE_Key by value
 	KeyID []byte    // cnf map key 3: key ID reference
@@ -62,26 +64,27 @@ func (c *Confirmation) members() (key, enc, kid bool) {
 	return c.Key != nil, c.EncryptedKey != nil || len(c.Encrypted) > 0, len(c.KeyID) > 0
 }
 
-// checkMethod is Validator.RequireConfirmation: c must carry exactly
-// one understood proof-of-possession method (RFC 8747 §3.1). A cnf that
-// is empty or holds only members this package doesn't understand
-// (which decoding ignores) carries none.
+// errTwoKeys is RFC 8747 §3.1: "At most one of the COSE_Key and
+// Encrypted_COSE_Key confirmation values ... may be present". A kid
+// may accompany either, identifying the same key.
+const errTwoKeys = "COSE_Key and Encrypted_COSE_Key both present (RFC 8747 §3.1)"
+
+// checkMethod is Validator.RequireConfirmation: c must identify exactly
+// one proof-of-possession key with members this package understands
+// (RFC 8747 §3.1): a COSE_Key or an Encrypted_COSE_Key, either with an
+// optional kid, or a kid alone. A cnf that is empty or holds only
+// members this package doesn't understand (which decoding ignores)
+// carries none.
 func (c *Confirmation) checkMethod() error {
 	if c == nil {
 		return &ClaimError{Key: IntKey(ClaimCnf), Err: ErrMissingConfirmation}
 	}
-	n := 0
 	key, enc, kid := c.members()
-	for _, set := range []bool{key, enc, kid} {
-		if set {
-			n++
-		}
-	}
 	switch {
-	case n == 0:
+	case key && enc:
+		return claimErr(IntKey(ClaimCnf), errTwoKeys, nil)
+	case !key && !enc && !kid:
 		return &ClaimError{Key: IntKey(ClaimCnf), Err: fmt.Errorf("%w: cnf carries no understood proof-of-possession method", ErrMissingConfirmation)}
-	case n > 1:
-		return claimErr(IntKey(ClaimCnf), "more than one confirmation method", nil)
 	}
 	return nil
 }
@@ -102,17 +105,18 @@ func (c *ClaimsSet) checkNotExposed() error {
 	return nil
 }
 
-// Match reports whether k is the key bound by c: the same key ID, or
-// for a key by value, the same RFC 9679 thumbprint (public parameters
-// only).
+// Match reports whether k is the key bound by c. When c carries the key
+// by value, the key decides: k must have the same RFC 9679 thumbprint
+// (public parameters only), and, if both c and k carry a key ID, the
+// same one. Otherwise k must have c's key ID.
 func (c *Confirmation) Match(k *cose.Key) bool {
 	if c == nil || k == nil {
 		return false
 	}
-	if len(c.KeyID) > 0 && bytes.Equal(c.KeyID, k.ID()) {
-		return true
-	}
 	if c.Key == nil {
+		return len(c.KeyID) > 0 && bytes.Equal(c.KeyID, k.ID())
+	}
+	if len(c.KeyID) > 0 && len(k.ID()) > 0 && !bytes.Equal(c.KeyID, k.ID()) {
 		return false
 	}
 	a, err := c.Key.Thumbprint(crypto.SHA256)
@@ -729,15 +733,8 @@ func fromValue(v corecbor.Value) any {
 }
 
 func encodeCnf(cnf *Confirmation) ([]corecbor.MapEntry, error) {
-	methods := 0
-	for _, set := range []bool{cnf.Key != nil, cnf.EncryptedKey != nil || len(cnf.Encrypted) > 0, len(cnf.KeyID) > 0} {
-		if set {
-			methods++
-		}
-	}
-	if methods > 1 {
-		// RFC 8747 §3.1: one confirmation method per cnf.
-		return nil, fmt.Errorf("%w: more than one confirmation method", errCnf)
+	if key, enc, _ := cnf.members(); key && enc {
+		return nil, fmt.Errorf("%w: %s", errCnf, errTwoKeys)
 	}
 	var m []corecbor.MapEntry
 	if cnf.Key != nil {
@@ -817,7 +814,7 @@ func decodeCnf(v corecbor.Value, opts DecodeOptions) (*Confirmation, error) {
 		return nil, fmt.Errorf("%w: expected map, got kind %d", errCnf, v.Kind)
 	}
 	cnf := &Confirmation{}
-	methods := 0
+	keys := 0 // COSE_Key and Encrypted_COSE_Key members seen
 	for _, entry := range v.Map() {
 		k := claimKeyOf(entry.Key)
 		if k.Raw != "" || k.IsText || k.Int < cnfKeyByCOSEKey || k.Int > cnfKeyByKid {
@@ -826,7 +823,9 @@ func decodeCnf(v corecbor.Value, opts DecodeOptions) (*Confirmation, error) {
 			}
 			continue
 		}
-		methods++
+		if k.Int != cnfKeyByKid {
+			keys++
+		}
 		switch k.Int {
 		case cnfKeyByCOSEKey:
 			if entry.Value.Kind != corecbor.KindMap {
@@ -848,9 +847,9 @@ func decodeCnf(v corecbor.Value, opts DecodeOptions) (*Confirmation, error) {
 			cnf.KeyID = entry.Value.BytesVal()
 		}
 	}
-	if methods > 1 {
-		// RFC 8747 §3.1: one confirmation method per cnf.
-		return nil, fmt.Errorf("%w: more than one confirmation method", errCnf)
+	if keys > 1 {
+		// RFC 8747 §3.1: a kid may accompany the key.
+		return nil, fmt.Errorf("%w: %s", errCnf, errTwoKeys)
 	}
 	return cnf, nil
 }

@@ -6,6 +6,7 @@ package cwt_test
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"testing"
 	"time"
@@ -476,6 +477,56 @@ func TestValidator_Exi037(t *testing.T) {
 	if err := fixedNow(cwt.NewValidator(), now).Validate(validClaims()); err != nil {
 		t.Errorf("no exi: %v", err)
 	}
+}
+
+// W22: RFC 8747 §3.1 allows at most one of COSE_Key and
+// Encrypted_COSE_Key; a kid may accompany either.
+func TestCnf_KeyWithKid037(t *testing.T) {
+	k, _ := cose.NewKeyFromPublic(edPub)
+	kb, _ := k.MarshalCBOR()
+	in := append(append(h(t, "a108a201"), kb...), h(t, "034101")...) // {8: {1: key, 3: h'01'}}
+	cs, err := cwt.DecodeClaimsSet(in)
+	if err != nil {
+		t.Fatalf("COSE_Key + kid: %v", err)
+	}
+	if cs.Confirmation.Key == nil || !bytes.Equal(cs.Confirmation.KeyID, []byte{1}) {
+		t.Fatalf("Confirmation = %+v", cs.Confirmation)
+	}
+	out, err := cs.Encode()
+	if err != nil || !bytes.Equal(out, in) {
+		t.Fatalf("Encode = %x, %v; want %x", out, err, in)
+	}
+	if err := (&cwt.Validator{RequireConfirmation: true}).Validate(cs); err != nil {
+		t.Errorf("RequireConfirmation: %v", err)
+	}
+	// With a key present, the key decides Match: another key with the
+	// same kid is not the bound key.
+	other, _ := cose.NewKeyFromPublic(edPriv2Pub(t))
+	other.SetID([]byte{1})
+	if cs.Confirmation.Match(other) {
+		t.Error("Match accepted a different key carrying the same kid")
+	}
+	k.SetID([]byte{1})
+	if !cs.Confirmation.Match(k) {
+		t.Error("Match rejected the bound key")
+	}
+
+	// COSE_Key and Encrypted_COSE_Key together are still two keys.
+	both := append(append(h(t, "a108a201"), kb...), h(t, "02420102")...)
+	if _, err := cwt.DecodeClaimsSet(both); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("COSE_Key + Encrypted_COSE_Key: %v", err)
+	}
+	if _, err := (&cwt.ClaimsSet{Confirmation: &cwt.Confirmation{Key: k, Encrypted: []byte{1}}}).Encode(); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("encode COSE_Key + Encrypted: %v", err)
+	}
+	if err := (&cwt.Validator{RequireConfirmation: true}).Validate(&cwt.ClaimsSet{Confirmation: &cwt.Confirmation{Key: k, Encrypted: []byte{1}}}); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("RequireConfirmation, COSE_Key + Encrypted: %v", err)
+	}
+}
+
+func edPriv2Pub(t *testing.T) ed25519.PublicKey {
+	t.Helper()
+	return ed25519.NewKeyFromSeed(bytes.Repeat([]byte{2}, 32)).Public().(ed25519.PublicKey)
 }
 
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this

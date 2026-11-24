@@ -506,14 +506,15 @@ func TestDecodeUCCS(t *testing.T) {
 }
 
 func TestCnf_TwoMethods(t *testing.T) {
-	// cnf {1: <key>, 3: h'01'} — two methods.
+	// cnf {1: <key>, 2: h'0102'} — two keys. (A COSE_Key with a kid is
+	// one key, RFC 8747 §3.1; see TestCnf_KeyWithKid037.)
 	k, _ := cose.NewKeyFromPublic(edPub)
 	kb, _ := k.MarshalCBOR()
-	in := append(append(h(t, "a108a201"), kb...), h(t, "034101")...)
+	in := append(append(h(t, "a108a201"), kb...), h(t, "02420102")...)
 	if _, err := cwt.DecodeClaimsSet(in); !errors.Is(err, cwt.ErrMalformedClaims) {
 		t.Fatalf("decode two methods: %v", err)
 	}
-	if _, err := (&cwt.ClaimsSet{Confirmation: &cwt.Confirmation{Key: k, KeyID: []byte{1}}}).Encode(); !errors.Is(err, cwt.ErrMalformedClaims) {
+	if _, err := (&cwt.ClaimsSet{Confirmation: &cwt.Confirmation{Key: k, Encrypted: []byte{1}}}).Encode(); !errors.Is(err, cwt.ErrMalformedClaims) {
 		t.Fatalf("encode two methods: %v", err)
 	}
 }

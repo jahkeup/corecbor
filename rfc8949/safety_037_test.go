@@ -6,6 +6,7 @@ package rfc8949
 import (
 	"bytes"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -176,6 +177,69 @@ func TestC5BudgetChargesRealSizes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// countingReader counts the bytes read through it.
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
+}
+
+// C4: DecodeFrom charges the bytes it buffers to the memory budget as it
+// reads them, so a budget bounds what one item can make it read.
+func TestC4DecodeFromBudgetBoundsReading(t *testing.T) {
+	// An endless indefinite array of 4 MiB byte strings, each under the
+	// default string and array limits.
+	head := []byte{0x5a, 0x00, 0x40, 0x00, 0x00}
+	r := &countingReader{r: io.MultiReader(bytes.NewReader([]byte{0x9f}), &endlessStrings{head: head, size: 4 << 20})}
+	const budget = 1 << 20
+	_, err := DecodeFrom(r, DecodeOpts{Budget: NewBudget(budget)})
+	if !errors.Is(err, cbor.ErrMemoryBudgetExceeded) {
+		t.Fatalf("err = %v, want ErrMemoryBudgetExceeded", err)
+	}
+	if r.n > 2*budget {
+		t.Fatalf("read %d bytes under a %d-byte budget", r.n, budget)
+	}
+
+	// An item that fits is decoded, and the buffer counts toward the
+	// budget alongside the decoded Value.
+	src := []byte{0x43, 1, 2, 3}
+	b := NewBudget(1 << 20)
+	if _, err := DecodeFrom(bytes.NewReader(src), DecodeOpts{Budget: b}); err != nil {
+		t.Fatal(err)
+	}
+	if b.Allocated != len(src)+3 {
+		t.Fatalf("charged %d, want %d (buffer) + 3 (bytes)", b.Allocated, len(src))
+	}
+}
+
+// endlessStrings yields head followed by size bytes, forever.
+type endlessStrings struct {
+	head []byte
+	size int
+	pos  int
+}
+
+func (e *endlessStrings) Read(p []byte) (int, error) {
+	n := 0
+	for n < len(p) {
+		per := len(e.head) + e.size
+		i := e.pos % per
+		if i < len(e.head) {
+			p[n] = e.head[i]
+		} else {
+			p[n] = 0xaa
+		}
+		n++
+		e.pos++
+	}
+	return n, nil
 }
 
 // C2: duplicates in an indefinite-length map are still found, before

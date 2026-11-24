@@ -28,7 +28,10 @@ import (
 // error wrapping both cbor.ErrTruncated and io.ErrUnexpectedEOF. The
 // decoder's nesting, length and well-formedness limits are applied while
 // reading, before the item's bytes are buffered, so a limit violation is
-// reported as soon as its head is read.
+// reported as soon as its head is read. With a memory budget, the bytes
+// buffered for the item are charged as they are read, in addition to
+// what decoding them allocates, so the budget bounds how much one item
+// makes DecodeFrom read.
 func DecodeFrom(r io.Reader, opts DecodeOpts) (cbor.Value, error) {
 	if b, ok := r.(*BufferedReader); ok {
 		if v, ok := b.decodeBuffered(opts); ok {
@@ -188,8 +191,11 @@ func (ir *itemReader) decode() (cbor.Value, error) {
 	case err == nil:
 	case errors.Is(err, errItemEOF):
 		// The reader is exhausted, so the buffered bytes are the whole
-		// input: Decode reports exactly what it would for them.
-		_, _, derr := Decode(ir.buf, ir.opts)
+		// input: Decode reports exactly what it would for them. The
+		// budget has already been charged for reading them.
+		o := ir.opts
+		o.Budget = nil
+		_, _, derr := Decode(ir.buf, o)
 		if derr == nil || errors.Is(derr, cbor.ErrTruncated) {
 			return cbor.Value{}, decerr.Text(fmt.Errorf("%w: %w", cbor.ErrTruncated, io.ErrUnexpectedEOF), len(ir.buf),
 				fmt.Sprintf("%s at offset %d: %s", cbor.ErrTruncated, len(ir.buf), io.ErrUnexpectedEOF))
@@ -227,6 +233,11 @@ func (ir *itemReader) readN(n uint64) error {
 			chunk = n
 		}
 		start := len(ir.buf)
+		// The buffered bytes count toward the memory budget before they
+		// are read, so a budget bounds the reading (037 C4).
+		if err := ir.opts.Budget.charge(int(chunk), start); err != nil {
+			return err
+		}
 		if cap(ir.buf)-start < int(chunk) {
 			grown := make([]byte, start, max(2*cap(ir.buf), start+int(chunk)))
 			copy(grown, ir.buf)
@@ -292,6 +303,11 @@ func (ir *itemReader) read() error {
 				return io.EOF // clean end: no item started
 			}
 			return ir.readErr(err)
+		}
+		if ir.opts.Budget != nil {
+			if err := ir.opts.Budget.charge(1, off); err != nil {
+				return err
+			}
 		}
 		ir.buf = append(ir.buf, ib)
 

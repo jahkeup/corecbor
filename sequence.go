@@ -67,9 +67,7 @@ func (e *Encoder) EncodeSequence(dst []byte, items ...Value) ([]byte, error) {
 // DecodeSequence decodes items one-by-one from src until exhausted.
 func (d *Decoder) DecodeSequence(src []byte) (Sequence, error) {
 	// The memory budget covers one call, as it does for Decode.
-	if d.cfg.opts.Budget != nil {
-		d.cfg.opts.Budget.Allocated = 0
-	}
+	d.resetBudget()
 	var seq Sequence
 	remaining := src
 	for len(remaining) > 0 {

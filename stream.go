@@ -541,9 +541,19 @@ func (s *StreamEncoder) WriteRawCBOR(raw []byte) error {
 	return s.write(raw)
 }
 
-// DecodeFrom reads exactly one CBOR value from r.
+// DecodeFrom reads exactly one CBOR value from r. A memory budget
+// (WithMemoryBudget) covers the call: the bytes buffered for the item
+// as well as what decoding it allocates.
 func (d *Decoder) DecodeFrom(r io.Reader) (Value, error) {
+	d.resetBudget()
 	return rfc8949.DecodeFrom(r, d.cfg.opts)
+}
+
+// resetBudget starts a new decode operation's memory budget.
+func (d *Decoder) resetBudget() {
+	if d.cfg.opts.Budget != nil {
+		d.cfg.opts.Budget.Allocated = 0
+	}
 }
 
 // Stream returns a streaming iterator that reads CBOR values from r.
@@ -562,6 +572,7 @@ func (d *Decoder) Stream(r io.Reader) *Stream {
 // Next advances to the next CBOR value. Returns false when no more values
 // are available or an error occurred.
 func (s *Stream) Next() bool {
+	s.dec.resetBudget() // the budget covers one item
 	v, err := rfc8949.DecodeFromBuffered(s.br, s.dec.cfg.opts)
 	if err != nil {
 		if !errors.Is(err, cbor.ErrTruncated) && err != io.EOF {

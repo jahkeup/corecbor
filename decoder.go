@@ -347,9 +347,7 @@ func (d *Decoder) DecodeRaw(src []byte) (v Value, raw []byte, err error) {
 // decode decodes one item from the start of src, resetting per-call
 // state (budget, internal arena), and returns the bytes consumed.
 func (d *Decoder) decode(src []byte) (cbor.Value, int, error) {
-	if d.cfg.opts.Budget != nil {
-		d.cfg.opts.Budget.Allocated = 0
-	}
+	d.resetBudget()
 	opts := d.cfg.opts
 	if d.arena != nil {
 		d.arena.Reset()

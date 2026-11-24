@@ -529,6 +529,64 @@ func edPriv2Pub(t *testing.T) ed25519.PublicKey {
 	return ed25519.NewKeyFromSeed(bytes.Repeat([]byte{2}, 32)).Public().(ed25519.PublicKey)
 }
 
+// W18: a COSE_Sign (multi-signer) CWT, RFC 8392 §7.2 step 5.
+func TestVerifyToken_COSESign037(t *testing.T) {
+	ctx := context.Background()
+	priv2 := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{2}, 32))
+	signer := func(priv ed25519.PrivateKey, kid string) *cose.Signer {
+		var prot cose.Headers
+		prot.SetKeyID([]byte(kid))
+		s, err := cose.NewSigner(priv, cose.WithProtectedHeaders(prot))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	key := func(pub ed25519.PublicKey, kid string) *cose.Key {
+		k, _ := cose.NewKeyFromPublic(pub)
+		k.SetID([]byte(kid))
+		return k
+	}
+	payload, _ := validClaims().Encode()
+	msg, err := cose.SignMulti(payload, []*cose.Signer{signer(edPriv, "a"), signer(priv2, "b")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := cose.MarshalSign(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	onlyA := cose.KeySetResolver(cose.KeySet{key(edPub, "a")})
+	both := cose.KeySetResolver(cose.KeySet{key(edPub, "a"), key(priv2.Public().(ed25519.PublicKey), "b")})
+	opts := func(r cose.KeyResolver, all bool) cwt.VerifyOptions {
+		return cwt.VerifyOptions{Keys: r, Validator: fixedNow(cwt.NewValidator(), t0), RequireAllSignatures: all}
+	}
+	for _, in := range [][]byte{data, append([]byte{0xd8, 0x3d}, data...)} {
+		tok, err := cwt.VerifyToken(ctx, in, opts(onlyA, false))
+		if err != nil || tok.Claims.Issuer != "as" {
+			t.Fatalf("one of two signers: %+v, %v", tok, err)
+		}
+	}
+	if _, err := cwt.VerifyToken(ctx, data, opts(onlyA, true)); !errors.Is(err, cose.ErrVerification) {
+		t.Errorf("RequireAllSignatures, one key: %v, want ErrVerification", err)
+	}
+	if _, err := cwt.VerifyToken(ctx, data, opts(both, true)); err != nil {
+		t.Errorf("RequireAllSignatures, both keys: %v", err)
+	}
+	other := cose.KeySetResolver(cose.KeySet{key(edPriv2Pub(t), "a")})
+	if _, err := cwt.VerifyToken(ctx, data, opts(other, false)); !errors.Is(err, cose.ErrVerification) {
+		t.Errorf("wrong key: %v, want ErrVerification", err)
+	}
+	// Claims are validated as for COSE_Sign1.
+	expired := &cwt.ClaimsSet{Expiration: t0.Add(-time.Hour)}
+	p2, _ := expired.Encode()
+	msg2, _ := cose.SignMulti(p2, []*cose.Signer{signer(edPriv, "a")})
+	d2, _ := cose.MarshalSign(msg2)
+	if _, err := cwt.VerifyToken(ctx, d2, opts(onlyA, false)); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("expired: %v", err)
+	}
+}
+
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
 // package doesn't understand, carries no proof-of-possession key.
 func TestValidator_RequireConfirmation037(t *testing.T) {

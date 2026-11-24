@@ -10,7 +10,9 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cose"
+	"github.com/jahkeup/corecbor/wire"
 )
 
 // MediaTypeCWT is the CWT media type (RFC 8392 §9.3); CoAPContentFormatCWT
@@ -61,6 +63,12 @@ type VerifyOptions struct {
 	// "application/eat+cwt" and 263.
 	Types []any
 
+	// RequireAllSignatures, for a COSE_Sign CWT (several signers),
+	// requires every signature to verify with a resolved key. Without
+	// it one verifying signature suffices (cose.RequireAny), as RFC
+	// 9052 §4.1 leaves to the application. COSE_Sign1 is unaffected.
+	RequireAllSignatures bool
+
 	// RequireType requires a typ header (explicit typing, RFC 8725
 	// §3.11, RFC 9596), so a token of another kind signed by the same
 	// key can't be substituted. Without it a token with no typ passes.
@@ -82,10 +90,15 @@ var (
 )
 
 // VerifyToken parses data (optionally tag-61 wrapped; COSE_Sign1 tagged
-// or untagged), resolves the key through opts.Keys, verifies the
-// signature, checks typ and cty when present, decodes the claims
-// strictly and validates them. It is the recommended entry point for
-// signed CWTs.
+// or untagged, or a tagged COSE_Sign), resolves the key through
+// opts.Keys, verifies the signature, checks typ and cty when present,
+// decodes the claims strictly and validates them. It is the recommended
+// entry point for signed CWTs.
+//
+// For a COSE_Sign (several signers), keys are resolved per signature
+// from that signature's headers and each signature is checked only
+// against its own keys; one verifying signature suffices unless
+// opts.RequireAllSignatures is set.
 func VerifyToken(ctx context.Context, data []byte, opts VerifyOptions) (*Token, error) {
 	return verifySigned(ctx, data, opts, 0)
 }
@@ -97,6 +110,9 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 	}
 	if opts.RequireTag && depth == 0 && !tagged {
 		return nil, fmt.Errorf("%w: CWT tag 61 required", ErrMalformedClaims)
+	}
+	if h := wire.ParseHead(inner); h.N > 0 && h.Major == wire.MajorTag && h.Arg == corecbor.TagCOSESign {
+		return verifySignMulti(ctx, inner, tagged, opts, depth)
 	}
 	msg, err := cose.UnmarshalSign1With(inner, cose.RecommendedDecodeLimits)
 	if err != nil {
@@ -115,6 +131,83 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 	}
 	if err := cose.VerifySign1(ctx, msg, resolverWithErr(opts.Keys), vopts...); err != nil {
 		return nil, err
+	}
+	tok := &Token{Protected: &msg.Protected, Unprotected: &msg.Unprotected, Tagged: tagged}
+	if nested || startsWithTag(msg.Payload) {
+		if depth+1 > maxNesting(opts) {
+			return nil, fmt.Errorf("%w: nested CWT deeper than MaxNesting", ErrUnexpectedType)
+		}
+		innerTok, err := verifySigned(ctx, msg.Payload, opts, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		tok.Nested, tok.Claims = innerTok, innerTok.Claims
+		return tok, nil
+	}
+	if tok.Claims, err = decodeAndValidate(msg.Payload, opts, false); err != nil {
+		return nil, err
+	}
+	return tok, nil
+}
+
+// verifySignMulti verifies a tagged COSE_Sign CWT: keys are resolved
+// per signature (from its own headers) and cose.VerifyMulti applies
+// RequireAny, or RequireAll with opts.RequireAllSignatures.
+func verifySignMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOptions, depth int) (*Token, error) {
+	msg, err := cose.UnmarshalSignWith(data, cose.RecommendedDecodeLimits)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
+	}
+	nested, err := checkContentTypes(&msg.Protected, &msg.Unprotected, opts, depth == 0)
+	if err != nil {
+		return nil, err
+	}
+	if opts.Keys == nil {
+		return nil, fmt.Errorf("%w: no KeyResolver configured", ErrKeyResolution)
+	}
+	var vopts []cose.VerifierOption
+	if len(opts.AllowedAlgorithms) > 0 {
+		vopts = append(vopts, cose.WithAllowedAlgorithms(opts.AllowedAlgorithms...))
+	}
+	// Each signature is checked only against the keys resolved from its
+	// own headers, so a key resolved for one signer can't vouch for
+	// another's signature.
+	verified := 0
+	var lastErr error
+	for i := range msg.Signatures {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		sig := msg.Signatures[i]
+		keys, err := resolverWithErr(opts.Keys).ResolveKey(ctx, &sig.Protected, &sig.Unprotected)
+		if err != nil {
+			return nil, err
+		}
+		var verifiers []*cose.Verifier
+		for _, k := range keys {
+			if v, err := cose.NewVerifierFromKey(k, vopts...); err == nil {
+				verifiers = append(verifiers, v)
+			}
+		}
+		if len(verifiers) == 0 {
+			lastErr = fmt.Errorf("%w: signature %d: no key resolved", cose.ErrVerification, i)
+			continue
+		}
+		one := *msg
+		one.Signatures = []cose.Signature{sig}
+		if _, err := cose.VerifyMulti(&one, verifiers); err != nil {
+			lastErr = fmt.Errorf("signature %d: %w", i, err)
+			continue
+		}
+		verified++
+	}
+	switch {
+	case verified == 0 && lastErr != nil:
+		return nil, lastErr
+	case verified == 0:
+		return nil, fmt.Errorf("%w: no signatures", cose.ErrVerification)
+	case opts.RequireAllSignatures && verified != len(msg.Signatures):
+		return nil, fmt.Errorf("%w: %d of %d signatures verified: %w", cose.ErrVerification, verified, len(msg.Signatures), lastErr)
 	}
 	tok := &Token{Protected: &msg.Protected, Unprotected: &msg.Unprotected, Tagged: tagged}
 	if nested || startsWithTag(msg.Payload) {

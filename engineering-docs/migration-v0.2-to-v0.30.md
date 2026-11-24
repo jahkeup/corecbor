@@ -459,6 +459,8 @@ Existing identifiers keep their meaning (034). Changes to them:
 | A negative `SecurityLevel` or `Debug` encodes as a CBOR negative integer | wrapped to a large uint | none |
 | `Verify` accepts an outer CWT tag 61 followed by a COSE tag (RFC 9711 §3) and decodes the envelope with an 8 MiB memory budget, the claims decoder's (037 W8) | tag 61 rejected; envelope decoded with no limit | none (safety defect, 034); use the new `VerifyToken` for `cose.RecommendedDecodeLimits` |
 | `Sign`, `Verify` and `VerifyToken` refuse a symmetric `cnf` COSE_Key by value, in inline submodules too, with `cwt.ErrSymmetricKeyNotEncrypted` in a `*cwt.ClaimError` for `cnf` (RFC 8747 §3.2; 037 W7) | emitted and accepted in plaintext | none (safety defect, 034): use `Confirmation.EncryptedKey` |
+| With `SubmodPolicy` set, the submodules of an inline submodule and of a verified nested token are appraised too, fail-closed, to 16 levels (deeper is `ErrMalformedEAT`) (RFC 9711 §4.2.18; 037 W3) | only the top level was appraised; nested tokens below an inline submodule were never verified | none (safety defect, 034) |
+| A nested token verified with `SubmodVerifier` is decoded with `cose.RecommendedDecodeLimits` and the new `Appraiser.Options`, its `typ` checked, and validated with `CWTValidator` (when set) and, with `ValidateValues`, `Claims.Validate` (037 W4) | `Verify` only: no limits, no claims validation, RFC 9711 numbering regardless | none (safety defect, 034) |
 
 `DecodeClaims` accepts the same values as before. The RFC 9711 value
 rules (nonce 8–64 bytes, UEID form, dbgstat 0–4, profile URI or OID)

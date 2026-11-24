@@ -176,6 +176,104 @@ func TestVerify_Legacy037(t *testing.T) {
 	}
 }
 
+// W3: submodules nested inside inline submodules are appraised too,
+// fail-closed, within the depth bound.
+func TestAppraise_NestedInsideInline037(t *testing.T) {
+	verifier, _ := cose.NewVerifier(edPub)
+	accept := func(string, *eat.Claims) error { return nil }
+	wrongKey := signedToken(&eat.Claims{UEID: ueid}, edPriv2)
+	inline := func(inner eat.Submod) *eat.Claims {
+		return &eat.Claims{Submods: map[string]eat.Submod{"radio": {Claims: &eat.Claims{Submods: map[string]eat.Submod{"tee": inner}}}}}
+	}
+
+	a := eat.Appraiser{SubmodPolicy: accept, SubmodVerifier: verifier}
+	if err := a.Appraise(inline(eat.Submod{Token: wrongKey})); !errors.Is(err, cose.ErrVerification) {
+		t.Errorf("badly signed token inside an inline submodule: %v, want cose.ErrVerification", err)
+	}
+	if err := (&eat.Appraiser{SubmodPolicy: accept}).Appraise(inline(eat.Submod{Token: wrongKey})); !errors.Is(err, eat.ErrSubmodUnverified) {
+		t.Errorf("no verifier: %v, want ErrSubmodUnverified", err)
+	}
+	if err := (&eat.Appraiser{SubmodPolicy: accept}).Appraise(inline(eat.Submod{Detached: &eat.DetachedDigest{Alg: -16, Digest: make([]byte, 32)}})); !errors.Is(err, eat.ErrSubmodUnverified) {
+		t.Errorf("detached inside inline, no checker: %v, want ErrSubmodUnverified", err)
+	}
+
+	// The policy sees every level.
+	var seen []string
+	a = eat.Appraiser{SubmodPolicy: func(name string, _ *eat.Claims) error { seen = append(seen, name); return nil }, SubmodVerifier: verifier}
+	if err := a.Appraise(inline(eat.Submod{Token: signedToken(&eat.Claims{UEID: ueid}, edPriv)})); err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) != 2 || seen[0] != "radio" || seen[1] != "tee" {
+		t.Errorf("policy saw %v, want [radio tee]", seen)
+	}
+
+	// Submodules inside a verified nested token are appraised too.
+	innerBad := &eat.Claims{UEID: ueid, Submods: map[string]eat.Submod{"x": {Token: wrongKey}}}
+	outer := &eat.Claims{Submods: map[string]eat.Submod{"tee": {Token: signedToken(innerBad, edPriv)}}}
+	if err := (&eat.Appraiser{SubmodPolicy: accept, SubmodVerifier: verifier}).Appraise(outer); !errors.Is(err, cose.ErrVerification) {
+		t.Errorf("bad token inside a nested token: %v, want cose.ErrVerification", err)
+	}
+
+	// Depth bound.
+	deep := &eat.Claims{UEID: ueid}
+	for range 20 {
+		deep = &eat.Claims{Submods: map[string]eat.Submod{"s": {Claims: deep}}}
+	}
+	if err := (&eat.Appraiser{SubmodPolicy: accept}).Appraise(deep); !errors.Is(err, eat.ErrMalformedEAT) {
+		t.Errorf("deep nesting: %v, want ErrMalformedEAT", err)
+	}
+}
+
+// W4: a nested token verified with SubmodVerifier is decoded with the
+// appraiser's options and limits and validated with its validator.
+func TestAppraise_SubmodVerifierValidates037(t *testing.T) {
+	verifier, _ := cose.NewVerifier(edPub)
+	accept := func(string, *eat.Claims) error { return nil }
+	sub := func(tok []byte) *eat.Claims {
+		return &eat.Claims{ClaimsSet: cwt.ClaimsSet{Expiration: t0.Add(time.Hour)}, Submods: map[string]eat.Submod{"tee": {Token: tok}}}
+	}
+	v := cwt.NewValidator()
+	v.Now = func() time.Time { return t0 }
+
+	expired := signedToken(&eat.Claims{ClaimsSet: cwt.ClaimsSet{Expiration: t0.Add(-time.Hour)}}, edPriv)
+	a := eat.Appraiser{SubmodPolicy: accept, SubmodVerifier: verifier, CWTValidator: v}
+	if err := a.Appraise(sub(expired)); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("expired nested token: %v, want cwt.ErrTokenExpired", err)
+	}
+
+	shortNonce := signedToken(&eat.Claims{Nonce: [][]byte{{1}}}, edPriv)
+	a = eat.Appraiser{SubmodPolicy: accept, SubmodVerifier: verifier, ValidateValues: true}
+	if err := a.Appraise(sub(shortNonce)); !errors.Is(err, eat.ErrInvalidNonce) {
+		t.Errorf("nested token with a 1-byte nonce: %v, want ErrInvalidNonce", err)
+	}
+
+	// Options: a draft-numbered nested token decodes under the
+	// appraiser's numbering.
+	legacy := eat.WithLegacyDraftClaimKeys() //nolint:staticcheck // pass-through check
+	s, _ := cose.NewSigner(edPriv)
+	old, err := eat.Sign(&eat.Claims{Uptime: ptrU64(7)}, s, legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var uptime *uint64
+	a = eat.Appraiser{
+		SubmodPolicy:   func(_ string, c *eat.Claims) error { uptime = c.Uptime; return nil },
+		SubmodVerifier: verifier,
+		Options:        []eat.Option{legacy},
+	}
+	if err := a.Appraise(sub(old)); err != nil || uptime == nil || *uptime != 7 {
+		t.Errorf("Options: err=%v uptime=%v", err, uptime)
+	}
+
+	// Limits: the envelope is decoded with cose.RecommendedDecodeLimits.
+	var big cose.Headers
+	big.Set(int64(-70000), bytes.Repeat([]byte{1}, 2<<20))
+	huge := signWith(t, encodeClaimsT(t, &eat.Claims{UEID: ueid}), cose.Headers{}, big)
+	if err := (&eat.Appraiser{SubmodPolicy: accept, SubmodVerifier: verifier}).Appraise(sub(huge)); !errors.Is(err, eat.ErrMalformedEAT) {
+		t.Errorf("2 MiB nested envelope: %v, want ErrMalformedEAT", err)
+	}
+}
+
 // W7: no symmetric cnf key by value in a signed EAT (RFC 8747 §3.2).
 func TestSymmetricCnf037(t *testing.T) {
 	// RFC 8392 A.2.1 128-bit symmetric COSE_Key.

@@ -61,6 +61,11 @@ type Appraiser struct {
 	SubmodDetached func(ctx context.Context, name string, d DetachedDigest) error
 	// MeasurementPolicy, when set, is called with the measurements claim.
 	MeasurementPolicy func(ms []TypedBytes) error
+
+	// Options are the decoding options (WithLegacyDraftClaimKeys,
+	// WithKeepAsReceived) for nested tokens SubmodVerifier verifies;
+	// pass the ones the enclosing token was decoded with.
+	Options []Option
 }
 
 // NewAppraiser returns an Appraiser with current-standards defaults:
@@ -77,6 +82,16 @@ func NewAppraiser() *Appraiser {
 // token that cannot be verified is rejected. Without a SubmodPolicy,
 // claims.Submods is left unexamined: do not treat its contents as
 // verified after Appraise returns.
+//
+// With a SubmodPolicy, every level is appraised (RFC 9711 §4.2.18): the
+// submodules of an inline submodule and of a verified nested token are
+// passed to SubmodPolicy in turn, under their own names, and fail
+// closed the same way, down to 16 levels (deeper is ErrMalformedEAT).
+// A nested token verified with SubmodVerifier is decoded with
+// cose.RecommendedDecodeLimits and Options, and validated like the
+// enclosing token: CWTValidator (when set) and, with ValidateValues,
+// Claims.Validate. Claims returned by SubmodVerify are the callback's
+// responsibility (VerifyToken validates them).
 func (a *Appraiser) Appraise(claims *Claims) error {
 	return a.AppraiseContext(context.Background(), claims)
 }
@@ -151,17 +166,32 @@ func (a *Appraiser) AppraiseContext(ctx context.Context, claims *Claims) error {
 	}
 
 	if a.SubmodPolicy != nil {
-		for _, name := range sortedSubmodNames(claims.Submods) {
-			if err := a.appraiseSubmod(ctx, name, claims.Submods[name]); err != nil {
-				return fmt.Errorf("submods[%q]: %w", name, err)
-			}
+		if err := a.appraiseSubmods(ctx, claims, 0); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-func (a *Appraiser) appraiseSubmod(ctx context.Context, name string, sub Submod) error {
+// appraiseSubmods appraises every submodule of c, recursing into the
+// submodules of inline submodules and verified nested tokens.
+func (a *Appraiser) appraiseSubmods(ctx context.Context, c *Claims, depth int) error {
+	if len(c.Submods) == 0 {
+		return nil
+	}
+	if depth >= maxSubmodDepth {
+		return fmt.Errorf("%w: submodules nested deeper than %d", ErrMalformedEAT, maxSubmodDepth)
+	}
+	for _, name := range sortedSubmodNames(c.Submods) {
+		if err := a.appraiseSubmod(ctx, name, c.Submods[name], depth); err != nil {
+			return fmt.Errorf("submods[%q]: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (a *Appraiser) appraiseSubmod(ctx context.Context, name string, sub Submod, depth int) error {
 	var subClaims *Claims
 	switch {
 	case sub.Claims != nil:
@@ -176,7 +206,7 @@ func (a *Appraiser) appraiseSubmod(ctx context.Context, name string, sub Submod)
 		case a.SubmodVerify != nil:
 			subClaims, err = a.SubmodVerify(ctx, name, tok)
 		case a.SubmodVerifier != nil && sub.Token != nil:
-			subClaims, err = Verify(sub.Token, a.SubmodVerifier)
+			subClaims, err = a.verifyNested(sub.Token)
 		default:
 			return ErrSubmodUnverified
 		}
@@ -192,7 +222,54 @@ func (a *Appraiser) appraiseSubmod(ctx context.Context, name string, sub Submod)
 	if subClaims == nil {
 		return nil
 	}
-	return a.SubmodPolicy(name, subClaims)
+	if err := a.SubmodPolicy(name, subClaims); err != nil {
+		return err
+	}
+	return a.appraiseSubmods(ctx, subClaims, depth+1)
+}
+
+// verifyNested verifies a nested-token submodule with SubmodVerifier:
+// bounded envelope, typ check, signature, claims decoded with Options,
+// no exposed symmetric key, then the appraiser's own validation.
+func (a *Appraiser) verifyNested(data []byte) (*Claims, error) {
+	inner, _, err := unwrapCWT(data)
+	if err != nil {
+		return nil, err
+	}
+	msg, err := cose.UnmarshalSign1With(inner, tokenDecodeLimits)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
+	}
+	nested, err := checkTokenTypes(&msg.Protected, &msg.Unprotected)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.SubmodVerifier.Verify(msg); err != nil {
+		return nil, err
+	}
+	if nested || startsWithTag(msg.Payload) {
+		// Its inner token is signed by some other key; SubmodVerify
+		// can resolve it.
+		return nil, fmt.Errorf("%w: a nested token that wraps another token needs SubmodVerify", ErrSubmodUnverified)
+	}
+	claims, err := DecodeClaims(msg.Payload, a.Options...)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkNotExposed(claims, 0); err != nil {
+		return nil, err
+	}
+	if a.CWTValidator != nil {
+		if err := a.CWTValidator.Validate(&claims.ClaimsSet); err != nil {
+			return nil, err
+		}
+	}
+	if a.ValidateValues {
+		if err := claims.Validate(); err != nil {
+			return nil, err
+		}
+	}
+	return claims, nil
 }
 
 func nonceMatches(nonces [][]byte, expected []byte) bool {

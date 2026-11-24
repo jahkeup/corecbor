@@ -81,10 +81,14 @@ func (c *Claims) validateSoftware() error {
 			case *t.ContentFormat > 65535:
 				return invalid(f.key, "[%d] content format %d exceeds 65535", i, *t.ContentFormat)
 			}
-			if f.key == ClaimMeasurements {
-				if _, ok, err := t.MeasuredComponent(); ok && err != nil {
-					return invalid(f.key, "[%d] measured component (RFC 10013): %w", i, err)
-				}
+			_, ok, err := t.MeasuredComponent()
+			switch {
+			case f.key != ClaimMeasurements && t.Text:
+				return invalid(f.key, "[%d] body must be a byte string", i)
+			case f.key == ClaimMeasurements && ok && err != nil:
+				return invalid(f.key, "[%d] measured component (RFC 10013): %w", i, err)
+			case f.key == ClaimMeasurements && t.Text && !ok:
+				return invalid(f.key, "[%d] a text body is defined only for content format %d", i, ContentFormatMeasuredComponentJSON)
 			}
 		}
 	}

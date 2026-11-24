@@ -105,6 +105,11 @@ type TypedBytes struct {
 	ContentFormat *uint64
 	MediaType     string
 	Value         []byte
+	// Text reports that Value is carried as a CBOR text string rather
+	// than a byte string: a measurements body whose format is text,
+	// such as RFC 10013's mc-json (ContentFormatMeasuredComponentJSON)
+	// in a CBOR EAT. Decoding sets it; Encode honors it.
+	Text bool
 }
 
 // MeasResult is an individual-result's outcome (RFC 9711 §4.2.17).

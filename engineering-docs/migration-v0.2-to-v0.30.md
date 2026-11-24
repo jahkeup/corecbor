@@ -501,8 +501,11 @@ New, additive:
 - RFC 10013 measured components (037 W29): `MeasuredComponent`,
   `ComponentDigest`, `ParseMeasuredComponent`, `Encode`,
   `TypedBytes.MeasuredComponent`, and the media types / Content-Formats
-  295 and 296. `Claims.Validate` checks measurements identified by 295;
-  the JSON form (296) is not decoded.
+  295 and 296. The JSON form: `ParseMeasuredComponentJSON` and
+  `EncodeJSON`; in a CBOR EAT it is a text string, decoded into the new
+  `TypedBytes.Text` (a measurements body carried as text; `Encode`
+  writes it back as text). `Claims.Validate` checks measurements
+  identified by 295 or 296, and that a body's kind fits its format.
 - `VerifyToken(ctx, data, VerifyOptions{Keys: …})` (037 W9), the
   recommended entry point for a signed EAT: tag 61 (followed by a COSE
   tag) or a bare COSE_Sign1; `cose.RecommendedDecodeLimits`; `typ`

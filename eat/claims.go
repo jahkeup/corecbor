@@ -474,7 +474,11 @@ func typedBytesValue(ts []TypedBytes) corecbor.Value {
 		} else {
 			ct = corecbor.Text(t.MediaType)
 		}
-		arr[i] = corecbor.MakeArray(ct, corecbor.Bytes(t.Value))
+		body := corecbor.Bytes(t.Value)
+		if t.Text {
+			body = corecbor.Text(string(t.Value))
+		}
+		arr[i] = corecbor.MakeArray(ct, body)
 	}
 	return corecbor.MakeArrayFromSlice(arr)
 }
@@ -1104,7 +1108,16 @@ func parseTypedBytes(v corecbor.Value, what string) ([]TypedBytes, error) {
 	out := make([]TypedBytes, len(v.Array()))
 	for i, f := range v.Array() {
 		items := f.Array()
-		if f.Kind != corecbor.KindArray || len(items) != 2 || items[1].Kind != corecbor.KindBytes {
+		if f.Kind != corecbor.KindArray || len(items) != 2 {
+			return nil, malformed("%s[%d] must be [content-type, bytes]", what, i)
+		}
+		switch {
+		case items[1].Kind == corecbor.KindBytes:
+			out[i].Value = items[1].BytesVal()
+		case items[1].Kind == corecbor.KindText && what == "measurements":
+			// $measurements-body-cbor /= mc-json (RFC 10013 §4.4).
+			out[i].Value, out[i].Text = []byte(items[1].TextVal()), true
+		default:
 			return nil, malformed("%s[%d] must be [content-type, bytes]", what, i)
 		}
 		switch items[0].Kind {
@@ -1116,7 +1129,6 @@ func parseTypedBytes(v corecbor.Value, what string) ([]TypedBytes, error) {
 		default:
 			return nil, malformed("%s[%d] content-type must be a content-format number or media type", what, i)
 		}
-		out[i].Value = items[1].BytesVal()
 	}
 	return out, nil
 }

@@ -612,6 +612,35 @@ func TestE14_OneElementX5ChainArray(t *testing.T) {
 	}
 }
 
+// E15: CRED_x for a CWT is the untagged CWT, even when kcwt carries it
+// with the CWT tag (RFC 9528 §3.5.2).
+func TestE15_TaggedKCWTIsUntaggedCRED(t *testing.T) {
+	iPriv, iPub := edPair(t)
+	rPriv, rPub := edPair(t)
+	caPriv, caPub := edPair(t)
+	tok := cwtFor(t, caPriv, iPub, func(c *cwt.ClaimsSet) { c.Expiration = time.Now().Add(time.Hour) })
+	tagged := append([]byte{0xd8, 0x3d}, tok...) // 61(CWT)
+	ini, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{1},
+		Credential: &Credential{Type: CredentialCWT, CWTBytes: tagged}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite0}, PrivateKey: rPriv, CWTIssuerKey: caPub, ConnectionID: []byte{2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := handshake(t, ini, res); err != nil {
+		t.Fatal(err)
+	}
+	if got := ini.s.ownCred.Raw; !bytes.Equal(got, tok) {
+		t.Errorf("own CRED_I starts %x, want the untagged CWT", got[:4])
+	}
+	pc := res.PeerCredential()
+	if !bytes.Equal(pc.Raw, tok) || !bytes.Equal(pc.IDCred.KCWT, tagged) {
+		t.Errorf("peer CRED_I starts %x (kcwt %x), want the untagged CWT and kcwt as sent", pc.Raw[:4], pc.IDCred.KCWT[:4])
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

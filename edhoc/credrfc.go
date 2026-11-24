@@ -18,6 +18,7 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
+	"github.com/jahkeup/corecbor/wire"
 )
 
 // COSE key parameters (RFC 9053).
@@ -75,13 +76,26 @@ func (p credParty) ownCredential(authPub crypto.PublicKey) (*Credential, error) 
 		}
 		return &out, nil
 	case c != nil && c.Type == CredentialCWT && len(c.CWTBytes) > 0:
-		return &Credential{Type: CredentialCWT, CWTBytes: c.CWTBytes, Raw: c.CWTBytes, IDCred: IDCred{KCWT: c.CWTBytes}, PublicKey: authPub}, nil
+		return &Credential{Type: CredentialCWT, CWTBytes: c.CWTBytes, Raw: untaggedCWT(c.CWTBytes), IDCred: IDCred{KCWT: c.CWTBytes}, PublicKey: authPub}, nil
 	}
 	ccs, err := ccsFor(authPub)
 	if err != nil {
 		return nil, err
 	}
 	return &Credential{Raw: ccs, IDCred: IDCred{KCCS: ccs}, PublicKey: authPub}, nil
+}
+
+// cwtTag is the CWT CBOR tag (RFC 8392 §6).
+const cwtTag = 61
+
+// untaggedCWT returns a CWT without its CWT tag: CRED_x is the untagged
+// CWT (RFC 9528 §3.5.2), while kcwt may carry it tagged.
+func untaggedCWT(b []byte) []byte {
+	h := wire.ParseHead(b)
+	if h.N > 0 && h.Major == wire.MajorTag && h.Arg == cwtTag {
+		return b[h.N:]
+	}
+	return b
 }
 
 // ccsFor builds a CWT Claims Set {cnf: {COSE_Key: key}} (RFC 8747).
@@ -269,7 +283,7 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 		return c, nil
 	}
 	if pc := p.peerCred; pc != nil && len(pc.Raw) > 0 {
-		match := (id.KCCS != nil && bytes.Equal(id.KCCS, pc.Raw)) || (id.KCWT != nil && bytes.Equal(id.KCWT, pc.Raw)) || pc.IDCred.identifies(id)
+		match := (id.KCCS != nil && bytes.Equal(id.KCCS, pc.Raw)) || (id.KCWT != nil && bytes.Equal(untaggedCWT(id.KCWT), untaggedCWT(pc.Raw))) || pc.IDCred.identifies(id)
 		if !match {
 			return nil, unknown
 		}
@@ -297,7 +311,7 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 		if p.peerPublic != nil && !samePublic(k, p.peerPublic) {
 			return nil, unknown
 		}
-		return &Credential{Type: CredentialCWT, CWTBytes: id.KCWT, Raw: id.KCWT, IDCred: id, PublicKey: k, coseKey: ck}, nil
+		return &Credential{Type: CredentialCWT, CWTBytes: id.KCWT, Raw: untaggedCWT(id.KCWT), IDCred: id, PublicKey: k, coseKey: ck}, nil
 	}
 	if id.KCCS != nil && p.peerPublic != nil {
 		k, err := publicFromCCS(id.KCCS)

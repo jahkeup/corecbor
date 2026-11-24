@@ -427,33 +427,9 @@ func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
 		ciphertextVal = corecbor.Bytes(msg.Ciphertext)
 	}
 
-	recipientsArr := make([]corecbor.Value, len(msg.Recipients))
-	for i, r := range msg.Recipients {
-		rProtBytes, err := r.Protected.encodeProtected()
-		if err != nil {
-			return nil, err
-		}
-		if rProtBytes == nil {
-			rProtBytes = []byte{}
-		}
-		rUnprotMap, err := r.Unprotected.toCBORMap()
-		if err != nil {
-			return nil, err
-		}
-		if rUnprotMap.IsZero() {
-			rUnprotMap = corecbor.MakeMap()
-		}
-		var rCipherVal corecbor.Value
-		if r.Ciphertext == nil {
-			rCipherVal = corecbor.Bytes(nil)
-		} else {
-			rCipherVal = corecbor.Bytes(r.Ciphertext)
-		}
-		recipientsArr[i] = corecbor.MakeArray(
-			corecbor.Bytes(rProtBytes),
-			rUnprotMap,
-			rCipherVal,
-		)
+	recipientsArr, err := encodeRecipients(msg.Recipients)
+	if err != nil {
+		return nil, err
 	}
 
 	arr := corecbor.MakeArray(
@@ -531,42 +507,10 @@ func UnmarshalEncryptWith(data []byte, lim DecodeLimits) (*Encrypt, error) {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
 
-	if err := checkCount("recipients", len(recipientsArr), lim.MaxRecipients, defaultMaxRecipients); err != nil {
+	var count int
+	recipients, err := decodeRecipients(recipientsArr, lim, &count, "recipient ")
+	if err != nil {
 		return nil, err
-	}
-	recipients := make([]Recipient, len(recipientsArr))
-	for i, rv := range recipientsArr {
-		rArr := rv.Array()
-		ok := rv.Kind == corecbor.KindArray
-		if !ok || len(rArr) != 3 {
-			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
-		}
-
-		rProtBstr := rArr[0].BytesVal()
-		ok = rArr[0].Kind == corecbor.KindBytes
-		if !ok {
-			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
-		}
-		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1], lim)
-		if err != nil {
-			return nil, fmt.Errorf("%w: recipient %d: %w", ErrMalformed, i, err)
-		}
-
-		var rCiphertext []byte
-		switch rArr[2].Kind {
-		case corecbor.KindBytes:
-			rCiphertext = rArr[2].BytesVal()
-		case corecbor.KindNull:
-			rCiphertext = nil
-		default:
-			return nil, fmt.Errorf("%w: recipient %d ciphertext must be bstr or null", ErrMalformed, i)
-		}
-
-		recipients[i] = Recipient{
-			Protected:   *rProt,
-			Unprotected: *rUnprot,
-			Ciphertext:  rCiphertext,
-		}
 	}
 
 	return &Encrypt{
@@ -759,33 +703,9 @@ func MarshalMac(msg *Mac) ([]byte, error) {
 		payloadVal = corecbor.Bytes(msg.Payload)
 	}
 
-	recipientsArr := make([]corecbor.Value, len(msg.Recipients))
-	for i, r := range msg.Recipients {
-		rProtBytes, err := r.Protected.encodeProtected()
-		if err != nil {
-			return nil, err
-		}
-		if rProtBytes == nil {
-			rProtBytes = []byte{}
-		}
-		rUnprotMap, err := r.Unprotected.toCBORMap()
-		if err != nil {
-			return nil, err
-		}
-		if rUnprotMap.IsZero() {
-			rUnprotMap = corecbor.MakeMap()
-		}
-		var rCipherVal corecbor.Value
-		if r.Ciphertext == nil {
-			rCipherVal = corecbor.Bytes(nil)
-		} else {
-			rCipherVal = corecbor.Bytes(r.Ciphertext)
-		}
-		recipientsArr[i] = corecbor.MakeArray(
-			corecbor.Bytes(rProtBytes),
-			rUnprotMap,
-			rCipherVal,
-		)
+	recipientsArr, err := encodeRecipients(msg.Recipients)
+	if err != nil {
+		return nil, err
 	}
 
 	arr := corecbor.MakeArray(
@@ -870,42 +790,10 @@ func UnmarshalMacWith(data []byte, lim DecodeLimits) (*Mac, error) {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
 
-	if err := checkCount("recipients", len(recipientsArr), lim.MaxRecipients, defaultMaxRecipients); err != nil {
+	var count int
+	recipients, err := decodeRecipients(recipientsArr, lim, &count, "recipient ")
+	if err != nil {
 		return nil, err
-	}
-	recipients := make([]Recipient, len(recipientsArr))
-	for i, rv := range recipientsArr {
-		rArr := rv.Array()
-		ok := rv.Kind == corecbor.KindArray
-		if !ok || len(rArr) != 3 {
-			return nil, fmt.Errorf("%w: recipient %d must be 3-element array", ErrMalformed, i)
-		}
-
-		rProtBstr := rArr[0].BytesVal()
-		ok = rArr[0].Kind == corecbor.KindBytes
-		if !ok {
-			return nil, fmt.Errorf("%w: recipient %d protected must be bstr", ErrMalformed, i)
-		}
-		rProt, rUnprot, err := decodeBuckets([]byte(rProtBstr), rArr[1], lim)
-		if err != nil {
-			return nil, fmt.Errorf("%w: recipient %d: %w", ErrMalformed, i, err)
-		}
-
-		var rCiphertext []byte
-		switch rArr[2].Kind {
-		case corecbor.KindBytes:
-			rCiphertext = rArr[2].BytesVal()
-		case corecbor.KindNull:
-			rCiphertext = nil
-		default:
-			return nil, fmt.Errorf("%w: recipient %d ciphertext must be bstr or null", ErrMalformed, i)
-		}
-
-		recipients[i] = Recipient{
-			Protected:   *rProt,
-			Unprotected: *rUnprot,
-			Ciphertext:  rCiphertext,
-		}
 	}
 
 	return &Mac{
@@ -915,4 +803,93 @@ func UnmarshalMacWith(data []byte, lim DecodeLimits) (*Mac, error) {
 		Tag:         []byte(tag),
 		Recipients:  recipients,
 	}, nil
+}
+
+// encodeRecipients encodes COSE_recipient structures, with a fourth
+// element for nested recipients when there are any (RFC 9052 §5.1).
+func encodeRecipients(rs []Recipient) ([]corecbor.Value, error) {
+	out := make([]corecbor.Value, len(rs))
+	for i, r := range rs {
+		rProtBytes, err := r.Protected.encodeProtected()
+		if err != nil {
+			return nil, err
+		}
+		if rProtBytes == nil {
+			rProtBytes = []byte{}
+		}
+		rUnprotMap, err := r.Unprotected.toCBORMap()
+		if err != nil {
+			return nil, err
+		}
+		if rUnprotMap.IsZero() {
+			rUnprotMap = corecbor.MakeMap()
+		}
+		var rCipherVal corecbor.Value
+		if r.Ciphertext == nil {
+			rCipherVal = corecbor.Bytes(nil)
+		} else {
+			rCipherVal = corecbor.Bytes(r.Ciphertext)
+		}
+		elems := []corecbor.Value{corecbor.Bytes(rProtBytes), rUnprotMap, rCipherVal}
+		if len(r.Recipients) > 0 {
+			nested, err := encodeRecipients(r.Recipients)
+			if err != nil {
+				return nil, err
+			}
+			elems = append(elems, corecbor.MakeArrayFromSlice(nested))
+		}
+		out[i] = corecbor.MakeArrayFromSlice(elems)
+	}
+	return out, nil
+}
+
+// decodeRecipients decodes a recipients array. A COSE_recipient has
+// three elements, or four with nested recipients (RFC 9052 §5.1);
+// nested ones count toward lim.MaxRecipients through count, and their
+// depth is bounded by lim.MaxDepth in the decoder. path prefixes error
+// messages ("recipient 0.1").
+func decodeRecipients(arr []corecbor.Value, lim DecodeLimits, count *int, path string) ([]Recipient, error) {
+	*count += len(arr)
+	if err := checkCount("recipients", *count, lim.MaxRecipients, defaultMaxRecipients); err != nil {
+		return nil, err
+	}
+	recipients := make([]Recipient, len(arr))
+	for i, rv := range arr {
+		rArr := rv.Array()
+		if rv.Kind != corecbor.KindArray || (len(rArr) != 3 && len(rArr) != 4) {
+			return nil, fmt.Errorf("%w: %s%d must be a 3- or 4-element array", ErrMalformed, path, i)
+		}
+		if rArr[0].Kind != corecbor.KindBytes {
+			return nil, fmt.Errorf("%w: %s%d protected must be bstr", ErrMalformed, path, i)
+		}
+		rProt, rUnprot, err := decodeBuckets(rArr[0].BytesVal(), rArr[1], lim)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s%d: %w", ErrMalformed, path, i, err)
+		}
+
+		var rCiphertext []byte
+		switch rArr[2].Kind {
+		case corecbor.KindBytes:
+			rCiphertext = rArr[2].BytesVal()
+		case corecbor.KindNull:
+			rCiphertext = nil
+		default:
+			return nil, fmt.Errorf("%w: %s%d ciphertext must be bstr or null", ErrMalformed, path, i)
+		}
+
+		r := Recipient{Protected: *rProt, Unprotected: *rUnprot, Ciphertext: rCiphertext}
+		if len(rArr) == 4 {
+			// "If there are no recipient information structures, this
+			// element is absent" (§5.1): present means [+COSE_recipient].
+			if rArr[3].Kind != corecbor.KindArray || len(rArr[3].Array()) == 0 {
+				return nil, fmt.Errorf("%w: %s%d nested recipients must be a non-empty array", ErrMalformed, path, i)
+			}
+			r.Recipients, err = decodeRecipients(rArr[3].Array(), lim, count, fmt.Sprintf("%s%d.", path, i))
+			if err != nil {
+				return nil, err
+			}
+		}
+		recipients[i] = r
+	}
+	return recipients, nil
 }

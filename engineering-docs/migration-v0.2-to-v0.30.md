@@ -494,6 +494,11 @@ New, additive:
   `SubmodDetached`, `NonceVerifier`, `MinDebugStatus`,
   `RequireProfileOID`, `MeasurementPolicy`, `AppraiseContext`.
 - Detached EAT bundles (tag 602): `DecodeDetachedBundle`.
+- RFC 10013 measured components (037 W29): `MeasuredComponent`,
+  `ComponentDigest`, `ParseMeasuredComponent`, `Encode`,
+  `TypedBytes.MeasuredComponent`, and the media types / Content-Formats
+  295 and 296. `Claims.Validate` checks measurements identified by 295;
+  the JSON form (296) is not decoded.
 - `VerifyToken(ctx, data, VerifyOptions{Keys: …})` (037 W9), the
   recommended entry point for a signed EAT: tag 61 (followed by a COSE
   tag) or a bare COSE_Sign1; `cose.RecommendedDecodeLimits`; `typ`

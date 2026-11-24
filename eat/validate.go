@@ -81,6 +81,11 @@ func (c *Claims) validateSoftware() error {
 			case *t.ContentFormat > 65535:
 				return invalid(f.key, "[%d] content format %d exceeds 65535", i, *t.ContentFormat)
 			}
+			if f.key == ClaimMeasurements {
+				if _, ok, err := t.MeasuredComponent(); ok && err != nil {
+					return invalid(f.key, "[%d] measured component (RFC 10013): %w", i, err)
+				}
+			}
 		}
 	}
 	for i, g := range c.MeasRes {

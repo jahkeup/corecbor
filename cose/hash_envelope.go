@@ -10,6 +10,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"maps"
+	"slices"
 )
 
 // COSE Hash Envelope header labels (RFC 9995 §3).
@@ -243,11 +244,18 @@ func (v *Verifier) VerifyHashEnvelope(msg *Sign1, digest, preimage []byte) (Hash
 	if err != nil {
 		return HashEnvelope{}, err
 	}
-	if err := v.VerifyDetached(msg, d); err != nil {
+	// The envelope labels are processed here, so crit may list them.
+	hv := *v
+	hv.policy.knownCrit = append(slices.Clone(v.policy.knownCrit), hashEnvelopeLabels...)
+	if err := hv.VerifyDetached(msg, d); err != nil {
 		return HashEnvelope{}, err
 	}
 	return env, nil
 }
+
+// hashEnvelopeLabels are the RFC 9995 header labels the hash-envelope
+// verifiers process (RFC 9052 §3.1 crit).
+var hashEnvelopeLabels = []any{HeaderPayloadHashAlg, HeaderPreimageContentType, HeaderPayloadLocation}
 
 // VerifySign1HashEnvelope is VerifyHashEnvelope with keys from a
 // KeyResolver (see VerifySign1).
@@ -256,6 +264,7 @@ func VerifySign1HashEnvelope(ctx context.Context, msg *Sign1, digest, preimage [
 	if err != nil {
 		return HashEnvelope{}, err
 	}
+	opts = append(slices.Clone(opts), WithKnownCriticalHeaders(hashEnvelopeLabels...))
 	if err := VerifySign1Detached(ctx, msg, d, r, opts...); err != nil {
 		return HashEnvelope{}, err
 	}

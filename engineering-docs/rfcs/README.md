@@ -44,6 +44,7 @@ The files are checked in for three reasons:
 | `rfc9200.txt` | Authentication and Authorization for Constrained Environments Using the OAuth 2.0 Framework (ACE-OAuth) | Proposed Standard | `aud` arrays, `scope`, `ace_profile`, `cnonce`, `exi` claims (031). |
 | `rfc9668.txt` | Using EDHOC with CoAP and OSCORE | Proposed Standard | EDHOC + OSCORE combined request framing and the EDHOC option; the §3.4 example is a test vector (`edhoc/coap_test.go`, proposal 033). |
 | `rfc9053.txt` | CBOR Object Signing and Encryption (COSE): Initial Algorithms | Informational | Algorithm definitions: ECDH-ES modes, COSE_KDF_Context, AES-CCM, RSA key parameters (proposal 029). |
+| `rfc9338.txt` | CBOR Object Signing and Encryption (COSE): Countersignatures | Internet Standard | `cose` V2 countersignatures (labels 11, 12) and the Appendix A vectors (037 S20). |
 | `rfc9864.txt` | Fully-Specified Algorithms for JSON Object Signing and Encryption (JOSE) and CBOR Object Signing and Encryption (COSE) | Proposed Standard | ESP256/384/512, Ed25519, Ed448 and the deprecation of ES*/EdDSA (029). |
 | `rfc9964.txt` | ML-DSA for JSON Object Signing and Encryption (JOSE) and CBOR Object Signing and Encryption (COSE) | Proposed Standard | ML-DSA-44/65/87 and AKP keys; `cose/mldsa_go127_test.go` parses its Appendix A examples (029). |
 | `rfc9711.txt` | The Entity Attestation Token (EAT) | Proposed Standard | `eat` claim numbering, value constraints, submods, detached bundle (032). |

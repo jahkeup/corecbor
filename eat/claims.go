@@ -175,7 +175,8 @@ func (c *Claims) toValue(cfg config) (corecbor.Value, error) {
 			// cwt.ClaimsSet.Encode does the same for its claims; v0.2.2
 			// and 032 kept the typed field and dropped this one.
 			return corecbor.Value{}, &cwt.ClaimError{Key: key, Err: fmt.Errorf(
-				"%w: %w: claim set in PrivateClaims and a typed field with different values", ErrMalformedEAT, cwt.ErrMalformedClaims)}
+				"%w: %w: claim set in PrivateClaims and a typed field with different values", ErrMalformedEAT, cwt.ErrMalformedClaims,
+			)}
 		}
 		priv[key] = v
 	}

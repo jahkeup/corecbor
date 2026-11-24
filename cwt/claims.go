@@ -100,7 +100,8 @@ func (c *ClaimsSet) checkNotExposed() error {
 	if c.Confirmation.Key.KeyType() == cose.KeyTypeSymmetric {
 		return &ClaimError{Key: IntKey(ClaimCnf), Err: fmt.Errorf(
 			"%w: carry it as an Encrypted_COSE_Key (Confirmation.EncryptedKey) or encrypt the CWT (Seal)",
-			ErrSymmetricKeyNotEncrypted)}
+			ErrSymmetricKeyNotEncrypted,
+		)}
 	}
 	return nil
 }

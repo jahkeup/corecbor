@@ -187,7 +187,8 @@ func (v *Validator) validateAudience(claims *ClaimsSet) error {
 		if claims.Audience != "" || len(claims.Audiences) > 0 {
 			return &ClaimError{Key: IntKey(ClaimAud), Err: fmt.Errorf(
 				"%w: token carries aud but the validator accepts no audience (set Audience or Audiences, or IgnoreAudience)",
-				ErrAudienceMismatch)}
+				ErrAudienceMismatch,
+			)}
 		}
 		return nil
 	}

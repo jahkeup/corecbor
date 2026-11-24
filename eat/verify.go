@@ -238,7 +238,8 @@ func checkNotExposed(c *Claims, depth int) error {
 	}
 	if cnf := c.Confirmation; cnf != nil && cnf.Key != nil && cnf.Key.KeyType() == cose.KeyTypeSymmetric {
 		return &cwt.ClaimError{Key: cwt.IntKey(cwt.ClaimCnf), Err: fmt.Errorf(
-			"%w: carry it as an Encrypted_COSE_Key (Confirmation.EncryptedKey)", cwt.ErrSymmetricKeyNotEncrypted)}
+			"%w: carry it as an Encrypted_COSE_Key (Confirmation.EncryptedKey)", cwt.ErrSymmetricKeyNotEncrypted,
+		)}
 	}
 	for _, name := range sortedSubmodNames(c.Submods) {
 		if err := checkNotExposed(c.Submods[name].Claims, depth+1); err != nil {

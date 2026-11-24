@@ -174,13 +174,12 @@ type itemReader struct {
 }
 
 type itemFrame struct {
-	remaining    uint64 // definite: items left (a map counts keys and values)
-	indef        bool
-	isMap        bool
-	items        int   // indefinite container: items read so far
-	str          byte  // indefinite string: its major type (0 if not a string)
-	strLen       int64 // indefinite string: bytes so far
-	selfDescribe bool  // stripped tag 55799: adds no nesting depth
+	remaining uint64 // definite: items left (a map counts keys and values)
+	indef     bool
+	isMap     bool
+	items     int   // indefinite container: items read so far
+	str       byte  // indefinite string: its major type (0 if not a string)
+	strLen    int64 // indefinite string: bytes so far
 }
 
 func (ir *itemReader) decode() (cbor.Value, error) {
@@ -394,14 +393,17 @@ func (ir *itemReader) read() error {
 			if indefinite {
 				return errAt(cbor.ErrReservedAI, off)
 			}
-			sd := h.Arg == 55799 && (top == nil || top.selfDescribe)
-			if !sd {
-				if depth+1 > opts.maxNesting() {
-					return errAt(cbor.ErrMaxNestingDepth, off)
-				}
-				depth++
+			if h.Arg == cbor.TagSelfDescribe && top == nil {
+				// A leading self-describe tag is stripped: it adds no
+				// nesting and needs no frame, so a long chain of them
+				// costs no memory beyond its bytes (037 C1).
+				continue
 			}
-			ir.stack = append(ir.stack, itemFrame{remaining: 1, selfDescribe: sd})
+			if depth+1 > opts.maxNesting() {
+				return errAt(cbor.ErrMaxNestingDepth, off)
+			}
+			depth++
+			ir.stack = append(ir.stack, itemFrame{remaining: 1})
 			continue
 		}
 		if ir.complete(&ir.stack, &depth) {
@@ -424,9 +426,7 @@ func (ir *itemReader) complete(stack *[]itemFrame, depth *int) bool {
 		if top.remaining > 0 {
 			return false
 		}
-		if !top.selfDescribe {
-			*depth--
-		}
+		*depth--
 		*stack = (*stack)[:len(*stack)-1]
 	}
 	return true

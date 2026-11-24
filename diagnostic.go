@@ -292,6 +292,14 @@ func diagWriteRaw(b *strings.Builder, src []byte, off, depth int, o *diagOpts, t
 			return off, false
 		}
 		if top && h.Arg == cbor.TagSelfDescribe {
+			// Strip the whole chain in a loop, as Decode does (037 C1).
+			for pos < len(src) {
+				nh := wire.ParseHead(src[pos:])
+				if nh.N == 0 || nh.Major != wire.MajorTag || nh.AI > wire.AI8Bytes || nh.Arg != cbor.TagSelfDescribe {
+					break
+				}
+				pos += nh.N
+			}
 			return diagWriteRaw(b, src, pos, depth, o, true)
 		}
 		b.WriteString(strconv.FormatUint(h.Arg, 10))

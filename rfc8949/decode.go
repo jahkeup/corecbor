@@ -825,7 +825,14 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		return cbor.Value{}, off, decodeErr(cbor.ErrUnknownTag, off)
 	}
 
-	if tagID == 55799 && stripSelfDescribe {
+	if tagID == cbor.TagSelfDescribe && stripSelfDescribe {
+		// Strip the whole chain of leading self-describe tags in a loop:
+		// they add no nesting depth, so recursing once per tag would let
+		// a long chain overflow the stack (proposal 037 C1). The item
+		// after the chain is decoded as before; a head the loop doesn't
+		// take (another tag, or a 55799 head the options reject) is
+		// checked there.
+		pos = skipSelfDescribe(src, pos, &opts)
 		return decodeValue(src, pos, depth, opts, true)
 	}
 
@@ -844,6 +851,20 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		return cbor.Value{Kind: cbor.KindTag, Num: tagID, Items: items}, next, nil
 	}
 	return cbor.MakeTag(tagID, inner), next, nil
+}
+
+// skipSelfDescribe returns the offset of the first head at or after pos
+// that is not a self-describe tag head (55799) the options accept.
+func skipSelfDescribe(src []byte, pos int, opts *DecodeOpts) int {
+	for pos < len(src) {
+		h := wire.ParseHead(src[pos:])
+		if h.N == 0 || h.Major != wire.MajorTag || h.AI > wire.AI8Bytes || h.Arg != cbor.TagSelfDescribe ||
+			(opts.RejectNonShortest && !h.IsShortest()) {
+			break
+		}
+		pos += h.N
+	}
+	return pos
 }
 
 func decodeOther(src []byte, off int, h wire.HeadResult, opts DecodeOpts) (cbor.Value, int, error) {

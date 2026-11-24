@@ -507,7 +507,8 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 			return off, decodeErr(cbor.ErrUnknownTag, off)
 		}
 		if strip && h.Arg == cbor.TagSelfDescribe {
-			return c.skipAt(pos, depth, reserve, true)
+			// Strip the whole chain in a loop, as Decode does (037 C1).
+			return c.skipAt(skipSelfDescribe(src, pos, &o), depth, reserve, true)
 		}
 		if depth+1 > o.maxNesting() {
 			return off, decodeErr(cbor.ErrMaxNestingDepth, off)

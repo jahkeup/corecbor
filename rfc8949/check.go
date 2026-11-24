@@ -29,7 +29,36 @@ func notPreferred(off int, cause error, what string) error {
 }
 
 func checkItem(src []byte, off int, o *DecodeOpts) (int, error) {
-	h := wire.ParseHead(src[off:])
+	// A tag's content is checked by looping rather than recursing, so a
+	// chain of self-describe tags (which Decode accepts at any length,
+	// 037 C1) can't overflow the stack.
+	for {
+		h := wire.ParseHead(src[off:])
+		if h.Major != wire.MajorTag {
+			return checkHead(src, off, h, o)
+		}
+		if o.RequirePreferred && h.AI >= wire.AI1Byte && h.AI <= wire.AI8Bytes && !h.IsShortest() {
+			return 0, notPreferred(off, cbor.ErrNonShortest, "non-shortest argument")
+		}
+		pos := off + h.N
+		if o.RequirePreferred && (h.Arg == cbor.TagUnsignedBignum || h.Arg == cbor.TagNegativeBignum) {
+			ih := wire.ParseHead(src[pos:])
+			if ih.Major == wire.MajorBytes && ih.AI != wire.AIIndefinite {
+				content := src[pos+ih.N : pos+ih.N+int(ih.Arg)]
+				if len(content) <= 8 {
+					return 0, notPreferred(off, nil, "bignum that fits major type 0/1")
+				}
+				if content[0] == 0 {
+					return 0, notPreferred(off, nil, "bignum with leading zero")
+				}
+			}
+		}
+		off = pos
+	}
+}
+
+// checkHead checks the item at off, whose head h is not a tag.
+func checkHead(src []byte, off int, h wire.HeadResult, o *DecodeOpts) (int, error) {
 	pos := off + h.N
 	indef := h.AI == wire.AIIndefinite
 
@@ -100,21 +129,6 @@ func checkItem(src []byte, off int, o *DecodeOpts) (int, error) {
 			}
 		}
 		return pos, nil
-
-	case wire.MajorTag:
-		if o.RequirePreferred && (h.Arg == cbor.TagUnsignedBignum || h.Arg == cbor.TagNegativeBignum) {
-			ih := wire.ParseHead(src[pos:])
-			if ih.Major == wire.MajorBytes && ih.AI != wire.AIIndefinite {
-				content := src[pos+ih.N : pos+ih.N+int(ih.Arg)]
-				if len(content) <= 8 {
-					return 0, notPreferred(off, nil, "bignum that fits major type 0/1")
-				}
-				if content[0] == 0 {
-					return 0, notPreferred(off, nil, "bignum with leading zero")
-				}
-			}
-		}
-		return checkItem(src, pos, o)
 
 	default: // major type 7
 		return pos, checkFloat(h, off, o)

@@ -68,6 +68,7 @@ v0.2.2 and under the new version and diffs the output.
 | Negative integers below `math.MinInt64` decode into `any` as `*big.Int` (021 D7) | `Unmarshal` into `any` | wrong value | none |
 | `AsTime` returns `ErrTimeRange` for out-of-range or non-finite epochs (021 D5) | `AsTime` | wrapped or garbage times | none |
 | `Unmarshal` into `big.Int` accepts plain integers (024) | `Unmarshal` | type mismatch | n/a (newly accepted input) |
+| A chain of leading self-describe tags (55799) of any length is stripped without recursion (037 C1) | `Decode`, `Cursor`, `DecodeFrom`, `Stream`, `Diagnostic`, checking decoders | a long chain (~6 MB) overflowed the stack: a fatal, unrecoverable crash | none (safety defect, 034) |
 
 ## Text that is not valid UTF-8 (035)
 

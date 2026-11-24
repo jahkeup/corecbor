@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
 )
@@ -217,6 +218,49 @@ func TestLegacyPaths_Bounded037(t *testing.T) {
 	signed, _ = cose.MarshalSign1(sig)
 	if _, err := cwt.Verify(signed, verifier); err != nil {
 		t.Errorf("Verify, 2 MiB header: %v", err)
+	}
+}
+
+// W10: a NumericDate at 0001-01-01T00:00:00Z is the zero time.Time,
+// which ClaimsSet uses for "absent": an exp there would not be checked.
+// W30: float NumericDates decode to the nearest nanosecond, so they
+// re-encode unchanged.
+func TestNumericDate_Edges037(t *testing.T) {
+	// exp = -62135596800 (0001-01-01T00:00:00Z).
+	for _, k := range []string{"04", "05", "06"} {
+		_, err := cwt.DecodeClaimsSet(h(t, "a1"+k+"3b0000000e7791f6ff"))
+		if !errors.Is(err, cwt.ErrMalformedClaims) {
+			t.Errorf("claim %s at year 1: %v, want ErrMalformedClaims", k, err)
+		}
+		if ck, ok := claimKeyOf(err); !ok || ck.Int != int64(h(t, k)[0]) {
+			t.Errorf("claim %s at year 1: error %v does not name the claim", k, err)
+		}
+	}
+	// One second later is an ordinary (long expired) time.
+	cs, err := cwt.DecodeClaimsSet(h(t, "a1043b0000000e7791f6fe"))
+	if err != nil || cs.Expiration.IsZero() {
+		t.Fatalf("exp one second after year 1: %+v, %v", cs, err)
+	}
+	if err := (&cwt.Validator{}).Validate(cs); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("Validate: %v, want ErrTokenExpired", err)
+	}
+
+	for _, f := range []float64{0.3, 1700000000.3, -0.7, 1.1, 0.29, 2.675, 1.005, 4.35, 0.57, 1700000000.123456, -1.005} {
+		enc, err := corecbor.New(corecbor.ModeCoreDeterministic).Encode(nil, corecbor.Float64(f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cs, err := cwt.DecodeClaimsSet(append(h(t, "a104"), enc...))
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := cs.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if want := append(h(t, "a104"), enc...); !bytes.Equal(out, want) {
+			t.Errorf("exp %v: re-encoded %x, want %x", f, out, want)
+		}
 	}
 }
 

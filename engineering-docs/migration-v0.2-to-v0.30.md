@@ -327,6 +327,8 @@ Existing identifiers keep their meaning (034). Changes to them (031):
 | `RequireConfirmation` needs a `cnf` with an understood proof-of-possession method (COSE_Key, Encrypted_COSE_Key or a non-empty kid; RFC 8747 §3.1); `{8:{}}` or a `cnf` of only unknown members fails with `ErrMissingConfirmation` in a `*ClaimError` for `cnf` (037 W2) | any `cnf` map passed, even empty | none (safety defect, 034) |
 | A symmetric `cnf` COSE_Key by value in a CWT that isn't encrypted (RFC 8747 §3.2) is refused with the new `ErrSymmetricKeyNotEncrypted` in a `*ClaimError` for `cnf` by `Sign`, `MAC`, `SetClaimsHeader`, `Verify`, `VerifyMAC`, `VerifyToken` and `VerifyMACToken`; `Seal`/`OpenToken` and `Encrypt`/`Decrypt` still carry it (037 W7) | emitted and accepted in plaintext | none (safety defect, 034): use `Confirmation.EncryptedKey` or `Seal` |
 | `Verify`, `VerifyMAC` and `Decrypt` decode the COSE envelope with an 8 MiB memory budget, the claims decoder's (037 W8) | no limit | none (safety defect, 034); `VerifyToken`/`VerifyMACToken`/`OpenToken` use `cose.RecommendedDecodeLimits` |
+| An `exp`, `nbf` or `iat` of −62135596800 (0001-01-01T00:00:00Z, the zero `time.Time` that means "absent") is rejected with `ErrMalformedClaims` in a `*ClaimError` (037 W10) | decoded as absent, so that `exp` was never checked | none (safety defect, 034) |
+| A float NumericDate decodes to the nearest nanosecond, so it re-encodes unchanged (037 W30) | truncated: 2.675 decoded as 2.674999999 and re-encoded as a different float | none |
 
 New, recommended:
 

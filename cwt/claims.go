@@ -531,6 +531,9 @@ func (cs *ClaimsSet) decodeRegistered(key ClaimKey, val corecbor.Value, opts Dec
 		}
 	case ClaimExp, ClaimNbf, ClaimIat:
 		ts, err := parseNumericDate(val)
+		if err == nil {
+			err = checkPresentDate(ts, val)
+		}
 		if err != nil {
 			return true, &ClaimError{Key: key, Err: err}
 		}

@@ -63,6 +63,18 @@ func floatDate(f float64) (time.Time, error) {
 	if math.IsNaN(f) || f < math.MinInt64 || f >= math.MaxInt64 {
 		return time.Time{}, fmt.Errorf("%w: %w: %g", ErrMalformedClaims, corecbor.ErrTimeRange, f)
 	}
+	// Round to the nearest nanosecond: truncating frac*1e9 turned 2.675
+	// into 2.674999999, which re-encoded as a different float.
 	sec, frac := math.Modf(f)
-	return time.Unix(int64(sec), int64(frac*1e9)), nil
+	return time.Unix(int64(sec), int64(math.Round(frac*1e9))), nil
+}
+
+// checkPresentDate rejects a NumericDate at 0001-01-01T00:00:00Z: it is
+// the zero time.Time, which ClaimsSet uses for an absent claim, so an
+// exp there would silently not be checked.
+func checkPresentDate(t time.Time, n corecbor.Value) error {
+	if !t.IsZero() {
+		return nil
+	}
+	return fmt.Errorf("%w: NumericDate %v is 0001-01-01T00:00:00Z, which can't be told from an absent claim", ErrMalformedClaims, n)
 }

@@ -428,11 +428,9 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		if src[off] == wire.BreakCode {
-			s := string(buf)
-			if opts.RejectInvalidUTF8 && !utf8.ValidString(s) {
-				return cbor.Value{}, off, decodeErr(cbor.ErrInvalidUTF8, off)
-			}
-			return cbor.Text(replaceInvalidText(s, &opts)), off + 1, nil
+			// Under RejectInvalidUTF8 every chunk was checked on its own
+			// below, so the concatenation is valid UTF-8.
+			return cbor.Text(replaceInvalidText(string(buf), &opts)), off + 1, nil
 		}
 		h := wire.ParseHead(src[off:])
 		if h.N == 0 {
@@ -458,6 +456,11 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 		end := start + length
 		if end > len(src) {
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
+		}
+		// Each chunk is a text string in its own right, so a character
+		// can't be split between chunks (RFC 8949 §3.2.3, 037 C12).
+		if opts.RejectInvalidUTF8 && !utf8.Valid(src[start:end]) {
+			return cbor.Value{}, off, decodeErr(cbor.ErrInvalidUTF8, off)
 		}
 		if err := opts.Budget.charge(length, off); err != nil {
 			return cbor.Value{}, off, err

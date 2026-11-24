@@ -12,6 +12,35 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 )
 
+// 037 C12: under InvalidUTF8Reject each chunk of an indefinite-length
+// text string must be valid UTF-8 by itself: a character split across
+// chunks is rejected (RFC 8949 §3.2.3).
+func TestC12SplitUTF8AcrossChunks(t *testing.T) {
+	split := []byte{0x7f, 0x61, 0xc3, 0x61, 0xa9, 0xff} // "é" split in two chunks
+	whole := []byte{0x7f, 0x62, 0xc3, 0xa9, 0x60, 0xff}
+	if _, err := NewDecoder(RejectInvalidUTF8()).Decode(split); !errors.Is(err, ErrInvalidUTF8) {
+		t.Fatalf("split: err = %v, want ErrInvalidUTF8", err)
+	}
+	for _, src := range [][]byte{split, whole} {
+		v, err := NewDecoder().Decode(src)
+		if err != nil || v.Str != "é" {
+			t.Fatalf("%x: default = %q, %v", src, v.Str, err)
+		}
+	}
+	if v, err := NewDecoder(RejectInvalidUTF8()).Decode(whole); err != nil || v.Str != "é" {
+		t.Fatalf("whole chunks: %q, %v", v.Str, err)
+	}
+	// In a map key and inside an array too.
+	for _, src := range [][]byte{
+		append(append([]byte{0xa1}, split...), 0x01),
+		append([]byte{0x81}, split...),
+	} {
+		if _, err := NewDecoder(RejectInvalidUTF8()).Decode(src); !errors.Is(err, ErrInvalidUTF8) {
+			t.Fatalf("%x: err = %v, want ErrInvalidUTF8", src, err)
+		}
+	}
+}
+
 // 037 C11: ModePreferredPlus rejects maps with repeated keys, as the
 // other deterministic modes do; Permissive writes them unless
 // CheckDuplicateMapKeys is set. Keys compare in the data model.

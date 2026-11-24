@@ -351,11 +351,14 @@ func TestMAC0Policy(t *testing.T) {
 		t.Fatalf("ComputeMAC0 empty key: err = %v, want ErrInvalidKey", err)
 	}
 	short := make([]byte, 16)
-	msg, err := ComputeMAC0(payload, short, AlgHMAC256)
-	if err != nil {
-		t.Fatalf("short key accepted by default (RFC 9053 §3.1 SHOULD): %v", err)
+	if _, err := ComputeMAC0(payload, short, AlgHMAC256); !errors.Is(err, ErrInvalidKey) {
+		t.Fatalf("short key by default (RFC 9053 §3.1, proposal 037 S6): err = %v, want ErrInvalidKey", err)
 	}
-	if err := VerifyMAC0(msg, short, AlgHMAC256, WithStrictMACKeyLength()); !errors.Is(err, ErrInvalidKey) {
+	msg, err := ComputeMAC0(payload, short, AlgHMAC256, InsecureAllowShortMACKeys())
+	if err != nil {
+		t.Fatalf("short key with InsecureAllowShortMACKeys: %v", err)
+	}
+	if err := VerifyMAC0(msg, short, AlgHMAC256, InsecureAllowShortMACKeys(), WithStrictMACKeyLength()); !errors.Is(err, ErrInvalidKey) {
 		t.Fatalf("strict: err = %v, want ErrInvalidKey", err)
 	}
 	if err := VerifyMAC0(msg, nil, AlgHMAC256); !errors.Is(err, ErrInvalidKey) {
@@ -372,7 +375,7 @@ func TestMAC0Policy(t *testing.T) {
 	if err := VerifyMAC0(msg, key, AlgHMAC256, WithMACAlgorithms(AlgHMAC512)); !errors.Is(err, ErrAlgorithmMismatch) {
 		t.Fatalf("not allowed: err = %v, want ErrAlgorithmMismatch", err)
 	}
-	if err := VerifyMAC0(msg, key, AlgHMAC384, WithLegacyMACHeaders()); !errors.Is(err, ErrMACVerification) {
+	if err := VerifyMAC0(msg, key, AlgHMAC384, WithLegacyMACHeaders(), InsecureAllowShortMACKeys()); !errors.Is(err, ErrMACVerification) {
 		t.Fatalf("legacy: err = %v, want ErrMACVerification (v0.2.2)", err)
 	}
 }

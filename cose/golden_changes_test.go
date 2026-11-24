@@ -25,4 +25,5 @@ var goldenChanges = map[string]string{
 
 	// Proposal 037.
 	"cose/multi/mac-direct": "proposal 037 S1: a direct recipient has an empty protected bucket and alg in the unprotected bucket (RFC 9052 §8.5.1); the tag is unchanged",
+	"cose/mac0/short-key":   "proposal 037 S6: an HMAC key shorter than the hash output is ErrInvalidKey by default (RFC 9053 §3.1); InsecureAllowShortMACKeys restores v0.2.2",
 }

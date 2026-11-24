@@ -20,7 +20,7 @@ type MACOption func(*macOpts)
 type macOpts struct {
 	externalAAD []byte
 	policy      headerPolicy
-	strictKey   bool
+	shortKey    bool // InsecureAllowShortMACKeys
 	legacy      legacyEncoding
 }
 
@@ -43,10 +43,21 @@ func WithMACKnownCriticalHeaders(labels ...any) MACOption {
 }
 
 // WithStrictMACKeyLength requires the HMAC key to be at least as long as
-// the hash output (RFC 9053 §3.1 says the key SHOULD be). Without it,
-// any non-empty key is accepted, as in v0.2.2.
+// the hash output (RFC 9053 §3.1). That is the default since proposal
+// 037, so this option changes nothing; it undoes an earlier
+// InsecureAllowShortMACKeys in the same option list.
 func WithStrictMACKeyLength() MACOption {
-	return func(o *macOpts) { o.strictKey = true }
+	return func(o *macOpts) { o.shortKey = false }
+}
+
+// InsecureAllowShortMACKeys accepts an HMAC key shorter than the hash
+// output (32 bytes for HMAC 256/64 and 256/256, 48 for 384/384, 64 for
+// 512/512), which RFC 9053 §3.1 says the key should be, for keys
+// provisioned before this check became the default. A short key lowers
+// the strength of every tag made with it. An empty key is still
+// ErrInvalidKey.
+func InsecureAllowShortMACKeys() MACOption {
+	return func(o *macOpts) { o.shortKey = true }
 }
 
 // WithLegacyMACPBES2Labels reads and writes PBES2 COSE_Mac recipients
@@ -77,13 +88,14 @@ func WithLegacyMACHeaders() MACOption {
 }
 
 // checkMACKey rejects an empty key (a MAC under it authenticates
-// nothing) and, with WithStrictMACKeyLength, one shorter than the hash.
+// nothing) and, unless InsecureAllowShortMACKeys, one shorter than the
+// hash output (RFC 9053 §3.1).
 func (o *macOpts) checkMACKey(key []byte, alg Algorithm) error {
 	if len(key) == 0 {
 		return fmt.Errorf("%w: empty MAC key", ErrInvalidKey)
 	}
-	if o.strictKey && len(key) < hmacKeyLen(alg) {
-		return fmt.Errorf("%w: %s key must be at least %d bytes", ErrInvalidKey, alg, hmacKeyLen(alg))
+	if !o.shortKey && len(key) < hmacKeyLen(alg) {
+		return fmt.Errorf("%w: %s key is %d bytes, must be at least %d (RFC 9053 §3.1; see InsecureAllowShortMACKeys)", ErrInvalidKey, alg, len(key), hmacKeyLen(alg))
 	}
 	return nil
 }
@@ -143,13 +155,13 @@ func VerifyMAC0(msg *Mac0, key []byte, alg Algorithm, opts ...MACOption) error {
 	if err != nil {
 		return err
 	}
-	if err := o.checkMACKey(key, alg); err != nil {
-		return err
-	}
 	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
 		return err
 	}
 	if err := bindAlg(&msg.Protected, &msg.Unprotected, alg, &o.policy); err != nil {
+		return err
+	}
+	if err := o.checkMACKey(key, alg); err != nil {
 		return err
 	}
 

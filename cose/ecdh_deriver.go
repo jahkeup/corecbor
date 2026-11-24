@@ -364,6 +364,14 @@ func ephemeralFromHeaders(h Headers, curve ecdh.Curve) (*ecdh.PublicKey, error) 
 	if err != nil {
 		return nil, fmt.Errorf("%w: ephemeral key: %w", ErrMalformed, err)
 	}
+	// The ephemeral key is the sender's public key (RFC 9053 §6.3); a
+	// private part means the sender leaked it, and anyone can derive
+	// this message's key.
+	for _, l := range privateLabels(k.KeyType()) {
+		if k.get(l) != nil {
+			return nil, fmt.Errorf("%w: ephemeral key carries private key parameter %d", ErrMalformed, l)
+		}
+	}
 	pub, err := k.PublicKey()
 	if err != nil {
 		return nil, fmt.Errorf("%w: ephemeral key: %w", ErrDecryption, err)

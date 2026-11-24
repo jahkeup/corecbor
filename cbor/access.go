@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"fmt"
 	"math"
+
+	"github.com/jahkeup/corecbor/internal/pairmatch"
 )
 
 // Get returns the value associated with key in a Map, comparing keys
@@ -129,6 +131,15 @@ func (v Value) Equal(w Value) bool {
 	case KindMap:
 		if len(v.Pairs) != len(w.Pairs) {
 			return false
+		}
+		if len(v.Pairs) > pairmatch.Small {
+			// Index w's pairs by hash so large maps compare in linear
+			// time rather than quadratic (proposal 037 C2).
+			a, b := v.Pairs, w.Pairs
+			return pairmatch.Match(len(a),
+				func(i int) uint64 { return pairHash(&a[i]) },
+				func(j int) uint64 { return pairHash(&b[j]) },
+				func(i, j int) bool { return a[i].Key.Equal(b[j].Key) && a[i].Value.Equal(b[j].Value) })
 		}
 		used := make([]bool, len(w.Pairs))
 	outer:

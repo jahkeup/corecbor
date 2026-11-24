@@ -5,7 +5,9 @@ package rfc8949
 
 import (
 	"bytes"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/jahkeup/corecbor/cbor"
 )
@@ -75,5 +77,97 @@ func TestC1SelfDescribeChainResults(t *testing.T) {
 	// Truncated after the chain.
 	if _, _, err := Decode(selfDescribeChain(4), DecodeOpts{}); err == nil {
 		t.Fatal("chain with no item accepted")
+	}
+}
+
+// indefMap returns an indefinite-length map of n distinct uint keys.
+func indefMap(n int) []byte {
+	b := []byte{0xbf}
+	for i := range n {
+		b = append(b, 0x1a, byte(i>>24), byte(i>>16), byte(i>>8), byte(i), 0xf6)
+	}
+	return append(b, 0xff)
+}
+
+// C2: duplicate tracking in an indefinite-length map is not quadratic:
+// it costs about what the same definite-length map costs.
+func TestC2IndefiniteMapDuplicateCheckLinear(t *testing.T) {
+	const n = 100_000
+	indef := indefMap(n)
+	def := append([]byte{0xba, 0, n >> 16, n >> 8 & 0xff, n & 0xff}, indef[1:len(indef)-1]...)
+	for _, opts := range []DecodeOpts{{}, {RejectDuplicateMapKeys: true}, {KeyIdentity: KeyIdentityEncoded}} {
+		start := time.Now()
+		if _, _, err := Decode(def, opts); err != nil {
+			t.Fatal(err)
+		}
+		defTime := time.Since(start)
+		start = time.Now()
+		v, _, err := Decode(indef, opts)
+		if err != nil || len(v.Pairs) != n {
+			t.Fatalf("indefinite: %d pairs, %v", len(v.Pairs), err)
+		}
+		if indefTime := time.Since(start); indefTime > 20*defTime+200*time.Millisecond {
+			t.Fatalf("opts %+v: indefinite map took %v, definite %v", opts, indefTime, defTime)
+		}
+	}
+}
+
+// C2: comparing two large map keys that hold the same pairs in a
+// different order is not quadratic either.
+func TestC2MapKeyCompareLinear(t *testing.T) {
+	const n = 20_000
+	enc := func(rev bool) []byte {
+		b := []byte{0xb9, n >> 8, n & 0xff}
+		for i := range n {
+			k := i
+			if rev {
+				k = n - 1 - i
+			}
+			b = append(b, 0x19, byte(k>>8), byte(k), 0xf6)
+		}
+		return b
+	}
+	src := append([]byte{0xa2}, enc(false)...)
+	src = append(src, 0x01)
+	src = append(src, enc(true)...)
+	src = append(src, 0x02)
+	start := time.Now()
+	if _, _, err := Decode(src, DecodeOpts{RejectDuplicateMapKeys: true}); !errors.Is(err, cbor.ErrDuplicateMapKey) {
+		t.Fatalf("err = %v, want ErrDuplicateMapKey", err)
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Fatalf("comparing two %d-pair map keys took %v", n, d)
+	}
+}
+
+// C2: duplicates in an indefinite-length map are still found, before
+// and after the switch to hashing, under both key identities.
+func TestC2IndefiniteMapDuplicates(t *testing.T) {
+	for _, n := range []int{3, dedupThreshold, dedupThreshold + 1, 100} {
+		for _, at := range []int{0, n - 1} {
+			body := indefMap(n)
+			body = body[: len(body)-1 : len(body)-1]
+			// Repeat key `at` with value true just before the break: as a
+			// non-shortest head (the same key in the data model) and
+			// byte-identical.
+			wide := append(append([]byte{}, body...), 0x1b, 0, 0, 0, 0, byte(at>>24), byte(at>>16), byte(at>>8), byte(at), 0xf5, 0xff)
+			same := append(append([]byte{}, body...), 0x1a, byte(at>>24), byte(at>>16), byte(at>>8), byte(at), 0xf5, 0xff)
+
+			v, _, err := Decode(wide, DecodeOpts{})
+			if err != nil || len(v.Pairs) != n || v.Pairs[at].Value.Kind != cbor.KindBool {
+				t.Fatalf("n=%d at=%d: last-wins: %d pairs, %v", n, at, len(v.Pairs), err)
+			}
+			if _, _, err := Decode(wide, DecodeOpts{RejectDuplicateMapKeys: true}); !errors.Is(err, cbor.ErrDuplicateMapKey) {
+				t.Fatalf("n=%d at=%d: reject: %v", n, at, err)
+			}
+			// Under encoded identity the two encodings are different keys.
+			v, _, err = Decode(wide, DecodeOpts{KeyIdentity: KeyIdentityEncoded, RejectDuplicateMapKeys: true})
+			if err != nil || len(v.Pairs) != n+1 {
+				t.Fatalf("n=%d at=%d: encoded: %d pairs, %v", n, at, len(v.Pairs), err)
+			}
+			if _, _, err := Decode(same, DecodeOpts{KeyIdentity: KeyIdentityEncoded, RejectDuplicateMapKeys: true}); !errors.Is(err, cbor.ErrDuplicateMapKey) {
+				t.Fatalf("n=%d at=%d: encoded reject: %v", n, at, err)
+			}
+		}
 	}
 }

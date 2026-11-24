@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/internal/pairmatch"
 )
 
 // KeyIdentity selects when two map keys are the same key for duplicate
@@ -89,6 +90,18 @@ func keysEqual(a, b cbor.Value, legacyFloat bool) bool {
 		// Maps are equal when they hold the same pairs, in any order.
 		if len(a.Pairs) != len(b.Pairs) {
 			return false
+		}
+		if len(a.Pairs) > pairmatch.Small {
+			// Linear rather than quadratic (037 C2). Legacy equality is
+			// finer than the data model, so keyHash serves it too.
+			ap, bp := a.Pairs, b.Pairs
+			pairHash := func(p *cbor.MapEntry) uint64 { return keyHashInto(keyHashInto(fnvOffset, p.Key), p.Value) }
+			return pairmatch.Match(len(ap),
+				func(i int) uint64 { return pairHash(&ap[i]) },
+				func(j int) uint64 { return pairHash(&bp[j]) },
+				func(i, j int) bool {
+					return keysEqual(ap[i].Key, bp[j].Key, legacyFloat) && keysEqual(ap[i].Value, bp[j].Value, legacyFloat)
+				})
 		}
 		used := make([]bool, len(b.Pairs))
 	outer:
@@ -257,6 +270,29 @@ func getKeySet(count int, opts *DecodeOpts) *keySet {
 	ks.next = ks.next[:0]
 	ks.enc = ks.enc[:0]
 	ks.hashed = hashed
+	return ks
+}
+
+// hashKeySet switches the tracker of a map whose entries so far are m
+// to hashed lookups, taking one from the pool when ks is nil (a small
+// map under value identity tracks no state). The keys in m are distinct.
+func hashKeySet(ks *keySet, m []cbor.MapEntry, opts *DecodeOpts) *keySet {
+	if ks == nil {
+		ks = getKeySet(-1, opts)
+	}
+	ks.hashed = true
+	ks.next = ks.next[:0]
+	encoded := opts.KeyIdentity == KeyIdentityEncoded
+	for i := range m {
+		var h uint64
+		if encoded {
+			h = fnv1a(ks.enc[i])
+		} else {
+			h = keyHash(m[i].Key)
+		}
+		ks.next = append(ks.next, ks.head[h])
+		ks.head[h] = int32(i + 1)
+	}
 	return ks
 }
 

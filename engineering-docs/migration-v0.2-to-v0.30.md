@@ -69,6 +69,7 @@ v0.2.2 and under the new version and diffs the output.
 | `AsTime` returns `ErrTimeRange` for out-of-range or non-finite epochs (021 D5) | `AsTime` | wrapped or garbage times | none |
 | `Unmarshal` into `big.Int` accepts plain integers (024) | `Unmarshal` | type mismatch | n/a (newly accepted input) |
 | A chain of leading self-describe tags (55799) of any length is stripped without recursion (037 C1) | `Decode`, `Cursor`, `DecodeFrom`, `Stream`, `Diagnostic`, checking decoders | a long chain (~6 MB) overflowed the stack: a fatal, unrecoverable crash | none (safety defect, 034) |
+| Duplicate tracking in indefinite-length maps switches to the hashed key set past 16 entries, and map keys that are themselves large maps compare in linear time (`Value.Equal` too) (037 C2) | `Decode`, `Cursor.Decode`, `Value.Equal` | quadratic: a 40k-entry indefinite map took 0.5 s, 1M about 6 min | none (safety defect, 034) |
 
 ## Text that is not valid UTF-8 (035)
 

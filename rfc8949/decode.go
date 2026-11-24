@@ -767,11 +767,16 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 	var m []cbor.MapEntry
 	rec := opts.spans
 	opts.spans = nil
-	// Indefinite maps keep the v0.2 linear scan for value identity.
+	// Start as a small map does and switch to the hashed key set once the
+	// map outgrows dedupThreshold, so duplicate tracking stays linear in
+	// the number of entries (037 C2).
 	ks := getKeySet(0, &opts)
-	defer putKeySet(ks)
+	defer func() { putKeySet(ks) }()
 	pos := off
 	for {
+		if len(m) == dedupThreshold && !opts.KeepDuplicateMapKeys && (ks == nil || !ks.hashed) {
+			ks = hashKeySet(ks, m, &opts)
+		}
 		if pos >= len(src) {
 			return cbor.Value{}, pos, decodeErr(cbor.ErrTruncated, pos)
 		}

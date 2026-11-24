@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"math"
 	"sort"
-	"time"
 
 	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cose"
@@ -133,8 +132,9 @@ type Claims struct {
 }
 
 // Encode serializes the Claims as a CBOR map with integer keys, in
-// Core Deterministic encoding. NumericDates are whole seconds, as in
-// v0.2.2. A claim set both in PrivateClaims and by a typed field must
+// Core Deterministic encoding. NumericDates are integers for whole
+// seconds and floats otherwise (RFC 8392 §2; v0.2.2 truncated them to
+// whole seconds). A claim set both in PrivateClaims and by a typed field must
 // have the same value there; otherwise Encode returns a *cwt.ClaimError
 // for it wrapping ErrMalformedEAT and cwt.ErrMalformedClaims, as
 // cwt.ClaimsSet.Encode does.
@@ -161,10 +161,9 @@ func (c *Claims) toValue(cfg config) (corecbor.Value, error) {
 		return corecbor.Value{}, err
 	}
 
+	// NumericDates are written as cwt writes them (RFC 8392 §2): an
+	// integer for whole seconds, a float otherwise.
 	cs := c.ClaimsSet
-	cs.Expiration = wholeSeconds(cs.Expiration)
-	cs.NotBefore = wholeSeconds(cs.NotBefore)
-	cs.IssuedAt = wholeSeconds(cs.IssuedAt)
 	priv := make(map[cwt.ClaimKey]corecbor.Value, len(c.PrivateClaims)+len(eat))
 	for k, v := range c.PrivateClaims {
 		priv[k] = v
@@ -195,13 +194,6 @@ func sameEncoding(a, b corecbor.Value) bool {
 	ea, err1 := restEncoder.Encode(nil, a)
 	eb, err2 := restEncoder.Encode(nil, b)
 	return err1 == nil && err2 == nil && bytes.Equal(ea, eb)
-}
-
-func wholeSeconds(t time.Time) time.Time {
-	if t.IsZero() {
-		return t
-	}
-	return time.Unix(t.Unix(), 0)
 }
 
 func intValue(n int64) corecbor.Value {

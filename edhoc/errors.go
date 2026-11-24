@@ -21,8 +21,9 @@ var (
 	// §3.8). Also matches ErrAuthentication.
 	ErrCriticalEAD = errors.New("edhoc: unsupported critical EAD item")
 	// ErrUnknownCredential means the peer's ID_CRED referenced (by kid
-	// or x5t) a credential this party does not have; ErrorMessageFor
-	// answers it with ERR_CODE 3 (RFC 9528 §6). Returned wrapped in
+	// or x5t) a credential this party does not have. ErrorMessageFor
+	// answers it with the generic ERR_CODE 1, not ERR_CODE 3, so an
+	// active attacker can't probe which credentials exist. Returned wrapped in
 	// ErrAuthentication. A CredentialResolver may wrap it in its own
 	// error to signal the same.
 	ErrUnknownCredential = errors.New("edhoc: unknown credential referenced")

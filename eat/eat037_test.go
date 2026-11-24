@@ -663,3 +663,27 @@ func TestVerifyOptionsPlumbing037(t *testing.T) {
 		t.Error("a 16-byte budget accepted the token")
 	}
 }
+
+// TestNumericDateFraction037: Encode writes a NumericDate as RFC 8392
+// §2 allows (an integer for whole seconds, a float otherwise) instead
+// of truncating it, so it decodes back unchanged.
+func TestNumericDateFraction037(t *testing.T) {
+	for _, ts := range []time.Time{time.Unix(1700000000, 0), time.Unix(1700000000, 500_000_000), time.Unix(1700000000, 250_000_000)} {
+		c := &eat.Claims{}
+		c.IssuedAt = ts
+		b, err := c.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := eat.DecodeClaims(b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !got.IssuedAt.Equal(ts) {
+			t.Errorf("iat %v encoded as %x decodes to %v", ts, b, got.IssuedAt)
+		}
+		if ts.Nanosecond() == 0 && b[len(b)-5] != 0x1a {
+			t.Errorf("whole-second iat %x is not an integer", b)
+		}
+	}
+}

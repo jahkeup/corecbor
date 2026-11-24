@@ -102,7 +102,10 @@ const (
 //   - a *ErrorMessage the Responder produced (wrong selected suite,
 //     unsupported method) is returned as is;
 //   - an unresolvable credential reference (ErrUnknownCredential) is
-//     ERR_CODE 3;
+//     ERR_CODE 1 "message rejected", like any other failure: ERR_CODE 3
+//     would let an active attacker, who can alter message_2's
+//     unprotected kid, learn which credential references exist. It is
+//     never produced (receiving one is still understood);
 //   - ErrStateViolation is ERR_CODE 1 "session aborted";
 //   - any other failure (format, authentication, critical EAD,
 //     credential policy) is ERR_CODE 1 "message rejected".
@@ -126,8 +129,6 @@ func ErrorMessageFor(err error) *ErrorMessage {
 		return em
 	}
 	switch {
-	case errors.Is(err, ErrUnknownCredential):
-		return &ErrorMessage{Code: ErrCodeUnknownCredential}
 	case errors.Is(err, ErrStateViolation) && !errors.Is(err, ErrAuthentication) && !errors.Is(err, ErrMessageFormat):
 		return &ErrorMessage{Code: ErrCodeUnspecified, Info: errInfoAborted}
 	}

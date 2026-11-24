@@ -14,6 +14,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -541,7 +542,8 @@ func TestE6_ErrorMessageFor(t *testing.T) {
 		t.Error("answer to ERR_CODE 0")
 	}
 
-	// An unknown kid is ERR_CODE 3.
+	// An unknown kid is ERR_CODE 1 "message rejected", never ERR_CODE 3,
+	// which would tell a prober which kids exist.
 	ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
 		ic.Credential = &Credential{Raw: ccsWith(t, ic.PrivateKey.Public()), IDCred: IDCred{KID: []byte{0x2a}}}
 	})
@@ -549,8 +551,11 @@ func TestE6_ErrorMessageFor(t *testing.T) {
 	if !errors.Is(err, ErrUnknownCredential) || !errors.Is(err, ErrAuthentication) {
 		t.Fatalf("unknown kid: %v, want ErrUnknownCredential", err)
 	}
-	if got := wire(err); !bytes.Equal(got, []byte{0x03, 0xf5}) {
-		t.Errorf("unknown kid: %x, want 03 f5", got)
+	if got, want := wire(err), wire(fmt.Errorf("x: %w", ErrAuthentication)); !bytes.Equal(got, want) {
+		t.Errorf("unknown kid: %x, want the generic %x", got, want)
+	}
+	if bytes.HasPrefix(wire(err), []byte{0x03}) {
+		t.Error("unknown kid answered with ERR_CODE 3")
 	}
 	// Using an endpoint out of order is "session aborted".
 	if got := wire(errNoSession); !bytes.Contains(got, []byte("session aborted")) {

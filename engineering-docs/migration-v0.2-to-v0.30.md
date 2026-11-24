@@ -409,6 +409,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | A CWT sent with the CWT tag (61) in kcwt, or configured that way in `CWTBytes`, enters the transcript untagged as CRED_x (RFC 9528 §3.5.2); `IDCred.KCWT` keeps the bytes as sent | the tagged bytes were used as CRED_x, so the MAC differed from a conforming peer's | none (contract defect: RFC 9528 §3.5.2) |
 | Received messages (and error messages) must be deterministically encoded CBOR; ID_CRED maps need only preferred serialization (labels unsorted is fine, §3.5.3). Duplicate map keys are always rejected | non-shortest heads and unsorted maps accepted | `AcceptNonDeterministicEncoding` (RFC 9528 §9 RECOMMENDs aborting) |
 | A received C_I, C_R or compact kid that is a one-byte CBOR integer encoding sent as a byte string (`41 01` for `01`) is rejected with `ErrMessageFormat` (RFC 9528 §3.3.2) | accepted, though the docs said such identifiers are sent as integers | `AcceptNonDeterministicEncoding` |
+| `ExportOSCORE`/`OSCORE` fail with `ErrStateViolation` when C_I or C_R is longer than an OSCORE Sender/Recipient ID may be for the suite's AEAD (nonce length − 6: 7 bytes for AES-CCM, 6 for GCM/ChaCha20, RFC 8613 §3.3) | a context with unusable IDs was returned | none (contract defect: RFC 8613 §3.3) |
 
 ## eat (032)
 

@@ -147,7 +147,10 @@ func (i *Initiator) Export(label int, context []byte, length int) ([]byte, error
 }
 
 // ExportOSCORE derives an OSCORE context with the default parameters
-// (RFC 9528 Appendix A.1). The Initiator's Sender ID is C_R.
+// (RFC 9528 Appendix A.1). The Initiator's Sender ID is C_R. It fails
+// with ErrStateViolation when C_I or C_R is longer than an OSCORE ID may
+// be for the suite's AEAD (RFC 8613 §3.3: 7 bytes for AES-CCM, 6 for
+// 12-byte nonces); the session itself stays usable.
 func (i *Initiator) ExportOSCORE() (*OSCOREContext, error) {
 	if i != nil && i.legacy != nil {
 		return i.legacy.ExportOSCORE()

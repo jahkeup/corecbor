@@ -677,6 +677,33 @@ func TestE9_E10_DeterministicInput(t *testing.T) {
 	}
 }
 
+// E12: an OSCORE context is not exported with a Sender or Recipient ID
+// longer than the AEAD nonce allows (RFC 8613 §3.3).
+func TestE12_OSCOREIDLength(t *testing.T) {
+	for _, c := range []struct {
+		ci, cr []byte
+		ok     bool
+	}{
+		{bytes.Repeat([]byte{0xaa}, 7), []byte{2}, true}, // suite 0: AES-CCM, 13-byte nonce: 7
+		{bytes.Repeat([]byte{0xaa}, 8), []byte{2}, false},
+		{[]byte{1}, bytes.Repeat([]byte{0xbb}, 8), false},
+	} {
+		ini, res := pair(t, c.ci, c.cr, nil)
+		if err := handshake(t, ini, res); err != nil {
+			t.Fatal(err)
+		}
+		for name, f := range map[string]func() (*OSCOREContext, error){
+			"initiator": ini.ExportOSCORE, "responder": res.ExportOSCORE,
+			"initiator OSCORE": func() (*OSCOREContext, error) { return ini.OSCORE(OSCOREParams{}) },
+		} {
+			_, err := f()
+			if c.ok != (err == nil) || (!c.ok && !errors.Is(err, ErrStateViolation)) {
+				t.Errorf("%s with C_I %d bytes, C_R %d bytes: %v", name, len(c.ci), len(c.cr), err)
+			}
+		}
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

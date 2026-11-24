@@ -824,6 +824,18 @@ func (s *session) oscore(p OSCOREParams) (*OSCOREContext, error) {
 	if err := s.want(stateCompleted); err != nil {
 		return nil, err
 	}
+	// RFC 8613 §3.3: a Sender or Recipient ID is at most the AEAD nonce
+	// length minus 6 bytes (7 for AES-CCM-16-64-128, 6 for the 12-byte
+	// nonce AEADs).
+	_, nonce := aeadSizes(s.suite.appAEAD)
+	for _, id := range []struct {
+		name string
+		v    []byte
+	}{{"Sender ID (the peer's connection identifier)", s.peerCID}, {"Recipient ID (this party's connection identifier)", s.ownCID}} {
+		if len(id.v) > nonce-6 {
+			return nil, fmt.Errorf("%w: OSCORE %s is %d bytes; the suite's AEAD allows at most %d (RFC 8613 §3.3)", ErrStateViolation, id.name, len(id.v), nonce-6)
+		}
+	}
 	if p.MasterSecretLen == 0 {
 		p.MasterSecretLen = s.suite.appKey
 	}

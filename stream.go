@@ -53,6 +53,11 @@ func (e *Encoder) EncodeTo(w io.Writer, v Value) error {
 // verifies it, returning ErrStreamMapOrder for a key that is out of
 // order or repeated. Callers that can't pre-sort keys should build a
 // Value and use EncodeTo.
+//
+// ModePreferredPlus keeps map entries in the order written, and returns
+// an error wrapping ErrDuplicateMapKey for a key whose bytes repeat an
+// earlier key of the same map, as Encode does for a Value (proposal 037
+// C11). Permissive streams don't check keys.
 type StreamEncoder struct {
 	w       io.Writer // out, or &tee while a map key is being captured
 	out     io.Writer
@@ -61,7 +66,9 @@ type StreamEncoder struct {
 	stack   []containerState
 	scratch [9]byte
 
-	deterministic bool
+	deterministic bool // verify key order (sorting modes)
+	uniqueKeys    bool // verify keys don't repeat (ModePreferredPlus, 037 C11)
+	checkKeys     bool // deterministic || uniqueKeys: capture map keys
 	sortMode      rfc8949.SortMode
 	capturing     int // frames currently capturing a map key's bytes
 }
@@ -80,6 +87,7 @@ type containerState struct {
 	key       []byte // bytes of the key being written
 	prevKey   []byte
 	hasPrev   bool
+	seen      map[string]struct{} // keys so far, under uniqueKeys
 }
 
 // startItem prepares the innermost container for the next item: it
@@ -95,7 +103,7 @@ func (s *StreamEncoder) startItem(count bool) error {
 		if top.remaining >= 0 && top.written >= top.remaining {
 			return ErrContainerOverflow
 		}
-		if top.isMap && s.deterministic {
+		if top.isMap && s.checkKeys {
 			if top.written%2 == 0 {
 				top.capturing = true
 				top.key = top.key[:0]
@@ -125,7 +133,7 @@ func (s *StreamEncoder) trackWrite() error {
 
 func (s *StreamEncoder) trackNested() error {
 	top := &s.stack[len(s.stack)-1]
-	if top.started || (top.isMap && s.deterministic) {
+	if top.started || (top.isMap && s.checkKeys) {
 		return s.startItem(true)
 	}
 	if top.remaining >= 0 && top.written >= top.remaining {
@@ -140,6 +148,19 @@ func (s *StreamEncoder) trackNested() error {
 func (s *StreamEncoder) finishKey(top *containerState) error {
 	top.capturing = false
 	s.endCapture()
+	if s.uniqueKeys {
+		// Insertion order: a repeat may be any earlier key. Keys compare
+		// by their bytes, which preferred serialization makes one per
+		// value.
+		if _, dup := top.seen[string(top.key)]; dup {
+			return fmt.Errorf("corecbor: stream map: %w", cbor.ErrDuplicateMapKey)
+		}
+		if top.seen == nil {
+			top.seen = make(map[string]struct{})
+		}
+		top.seen[string(top.key)] = struct{}{}
+		return nil
+	}
 	if top.hasPrev {
 		switch compareStreamKeys(s.sortMode, top.prevKey, top.key) {
 		case 0:
@@ -217,7 +238,13 @@ func (e *Encoder) Stream(w io.Writer) *StreamEncoder {
 	opts := e.encodeOpts()
 	// Key order is verified only for modes that sort map keys.
 	sorted := opts.Deterministic && opts.SortMode != rfc8949.SortNone
-	return &StreamEncoder{w: w, out: w, enc: e, deterministic: sorted, sortMode: opts.SortMode}
+	// ModePreferredPlus keeps insertion order but, as Encode does, must
+	// not write a key twice (037 C11).
+	unique := opts.Deterministic && opts.SortMode == rfc8949.SortNone
+	return &StreamEncoder{
+		w: w, out: w, enc: e, sortMode: opts.SortMode,
+		deterministic: sorted, uniqueKeys: unique, checkKeys: sorted || unique,
+	}
 }
 
 // BeginArray starts a CBOR array. Pass n >= 0 for a definite-length array,

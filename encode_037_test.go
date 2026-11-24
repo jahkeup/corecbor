@@ -116,6 +116,72 @@ func TestC12SplitUTF8AcrossChunks(t *testing.T) {
 	}
 }
 
+// 037 C11: the stream encoder in ModePreferredPlus rejects a map key
+// that repeats an earlier key of the same map, in any order, and keeps
+// insertion order otherwise.
+func TestC11StreamPreferredPlusDuplicateKeys(t *testing.T) {
+	write := func(keys ...string) ([]byte, error) {
+		var buf bytes.Buffer
+		s := New(ModePreferredPlus).Stream(&buf)
+		if err := s.BeginMap(len(keys)); err != nil {
+			return nil, err
+		}
+		for i, k := range keys {
+			if err := s.WriteText(k); err != nil {
+				return nil, err
+			}
+			if err := s.WriteUint(uint64(i)); err != nil {
+				return nil, err
+			}
+		}
+		return buf.Bytes(), s.EndContainer()
+	}
+	if out, err := write("b", "a", "c"); err != nil || !bytes.Equal(out, []byte{0xa3, 0x61, 'b', 0, 0x61, 'a', 1, 0x61, 'c', 2}) {
+		t.Fatalf("distinct keys: %x, %v", out, err)
+	}
+	if _, err := write("b", "a", "b"); !errors.Is(err, ErrDuplicateMapKey) {
+		t.Fatalf("repeat: err = %v, want ErrDuplicateMapKey", err)
+	}
+	many := make([]string, 40)
+	for i := range many {
+		many[i] = string(rune('A' + i))
+	}
+	if _, err := write(many...); err != nil {
+		t.Fatalf("40 keys: %v", err)
+	}
+	if _, err := write(append(many, "Q")...); !errors.Is(err, ErrDuplicateMapKey) {
+		t.Fatalf("repeat among 41: %v", err)
+	}
+	// Nested maps track their own keys; a container key counts as one key.
+	var buf bytes.Buffer
+	s := New(ModePreferredPlus).Stream(&buf)
+	steps := []func() error{
+		func() error { return s.BeginMap(2) },
+		func() error { return s.WriteText("a") },
+		func() error { return s.BeginMap(1) },
+		func() error { return s.WriteText("a") },
+		func() error { return s.WriteUint(1) },
+		func() error { return s.EndContainer() },
+		func() error { return s.WriteValue(MakeArray(Uint(1))) },
+		func() error { return s.WriteUint(2) },
+		func() error { return s.EndContainer() },
+	}
+	for i, f := range steps {
+		if err := f(); err != nil {
+			t.Fatalf("step %d: %v", i, err)
+		}
+	}
+	// Permissive streams are unchecked.
+	var pb bytes.Buffer
+	ps := New(ModePermissive).Stream(&pb)
+	_ = ps.BeginMap(2)
+	_ = ps.WriteText("a")
+	_ = ps.WriteUint(1)
+	if err := ps.WriteText("a"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // 037 C11: ModePreferredPlus rejects maps with repeated keys, as the
 // other deterministic modes do; Permissive writes them unless
 // CheckDuplicateMapKeys is set. Keys compare in the data model.

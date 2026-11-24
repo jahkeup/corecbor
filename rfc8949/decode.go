@@ -492,6 +492,10 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		return cbor.MakeArrayFromSlice(arr), pos, nil
 	}
 	srcLen := len(src)
+	// Short strings take the inline paths below unless a memory budget
+	// or a string limit under 24 bytes needs the checked path (037 C3,
+	// C5). Deciding once keeps the per-element cost to one test.
+	inlineStr := opts.Budget == nil && (opts.MaxByteStringLength <= 0 || opts.MaxByteStringLength >= 23)
 	_ = arr[count-1]
 	for i := range count {
 		if pos >= srcLen {
@@ -568,17 +572,12 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		}
 
 		// Inline fast-path: short text (major 3, AI < 24)
-		if ib&0xe0 == 0x60 && ib&0x1f < 24 {
+		if inlineStr && ib&0xe0 == 0x60 && ib&0x1f < 24 {
 			length := int(ib & 0x1f)
 			end := pos + 1 + length
-			if end <= srcLen && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
+			if end <= srcLen {
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
 					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrInvalidUTF8, pos), opts, i)
-				}
-				if opts.Budget != nil {
-					if err := opts.Budget.charge(length, pos); err != nil {
-						return cbor.Value{}, pos, indexPath(err, opts, i)
-					}
 				}
 				var s string
 				if opts.Interner != nil {
@@ -598,15 +597,10 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		}
 
 		// Inline fast-path: short bytes (major 2, AI < 24)
-		if ib&0xe0 == 0x40 && ib&0x1f < 24 {
+		if inlineStr && ib&0xe0 == 0x40 && ib&0x1f < 24 {
 			length := int(ib & 0x1f)
 			end := pos + 1 + length
-			if end <= srcLen && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
-				if opts.Budget != nil {
-					if err := opts.Budget.charge(length, pos); err != nil {
-						return cbor.Value{}, pos, indexPath(err, opts, i)
-					}
-				}
+			if end <= srcLen {
 				if opts.ZeroCopy {
 					arr[i] = cbor.Bytes(src[pos+1 : end])
 				} else {
@@ -722,6 +716,9 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		m = make([]cbor.MapEntry, 0, count)
 	}
 	pos := off + h.N
+	// As in decodeArray: the inline key path only without a budget or a
+	// string limit under 24 bytes.
+	inlineKey := opts.Budget == nil && (opts.MaxByteStringLength <= 0 || opts.MaxByteStringLength >= 23)
 	for i := range count {
 		keyOff := pos
 		// Bytes the remaining pairs of this map still need.
@@ -730,19 +727,14 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		// Inline fast-path: short definite-length text key (covers >90% of real map keys)
 		var k cbor.Value
 		var encodedKey []byte
-		if pos < len(src) && src[pos]&0xe0 == 0x60 && src[pos]&0x1f < 24 {
+		if inlineKey && pos < len(src) && src[pos]&0xe0 == 0x60 && src[pos]&0x1f < 24 {
 			length := int(src[pos] & 0x1f)
 			end := pos + 1 + length
-			if end <= len(src) && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
+			if end <= len(src) {
 				raw := src[pos:end]
 				var s string
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
 					return cbor.Value{}, pos, decodeErr(cbor.ErrInvalidUTF8, pos)
-				}
-				if opts.Budget != nil {
-					if err := opts.Budget.charge(length, pos); err != nil {
-						return cbor.Value{}, pos, err
-					}
 				}
 				if opts.Interner != nil {
 					s = opts.Interner.Intern(src[pos+1 : end])

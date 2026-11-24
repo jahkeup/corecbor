@@ -137,6 +137,26 @@ func DecodeUintArray(src []byte, opts DecodeOpts) ([]uint64, int, error) {
 	}
 	result := make([]uint64, count)
 	for i := range count {
+		// Inline path for a well-formed unsigned integer head; anything
+		// else, or a shortest-form check, goes through elemHead.
+		if pos < len(src) {
+			if ib := src[pos]; ib < 0x18 {
+				result[i] = uint64(ib)
+				pos++
+				continue
+			} else if ib <= 0x1b && !opts.RejectNonShortest {
+				n := 1 << (ib - 0x18) // 1, 2, 4 or 8 argument bytes
+				if n < len(src)-pos {
+					var arg uint64
+					for _, b := range src[pos+1 : pos+1+n] {
+						arg = arg<<8 | uint64(b)
+					}
+					result[i] = arg
+					pos += 1 + n
+					continue
+				}
+			}
+		}
 		eh, err := elemHead(src, pos, &opts)
 		if err != nil {
 			return nil, pos, err

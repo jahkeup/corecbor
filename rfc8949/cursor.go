@@ -359,23 +359,30 @@ func (c *Cursor) FindMapKey(key string) error {
 			return decodeErr(cbor.ErrTruncated, c.pos)
 		}
 		keyStart := c.pos
-		if wire.ParseHead(c.src[keyStart:]).N == 0 {
+		h := wire.ParseHead(c.src[keyStart:])
+		if h.N == 0 {
 			return decodeErr(cbor.ErrTruncated, keyStart)
 		}
-		if match, keyEnd := c.matchTextKey(keyStart, key); match {
-			if reject && (found || seen) {
-				return decodeErr(cbor.ErrDuplicateMapKey, keyStart)
-			}
-			found = true
-			valPos, valRemaining = keyEnd, top.remaining
-			if valRemaining > 0 {
-				valRemaining--
-			}
-			if o.KeepDuplicateMapKeys {
-				break
+		keyEnd := 0
+		if h.Major == wire.MajorText {
+			var match bool
+			if match, keyEnd = c.matchTextKey(keyStart, h, key); match {
+				if reject && (found || seen) {
+					return decodeErr(cbor.ErrDuplicateMapKey, keyStart)
+				}
+				found = true
+				valPos, valRemaining = keyEnd, top.remaining
+				if valRemaining > 0 {
+					valRemaining--
+				}
+				if o.KeepDuplicateMapKeys {
+					break
+				}
 			}
 		}
-		if err := c.skipItem(); err != nil {
+		if keyEnd > 0 {
+			c.pos = keyEnd // a text key already checked
+		} else if err := c.skipItem(); err != nil {
 			return err
 		}
 		if err := c.skipItem(); err != nil {
@@ -399,8 +406,10 @@ func (c *Cursor) keyBefore(start int, key string) (bool, error) {
 	defer func() { c.pos = end }()
 	c.pos = start
 	for c.pos < end {
-		if match, _ := c.matchTextKey(c.pos, key); match {
-			return true, nil
+		if h := wire.ParseHead(c.src[c.pos:]); h.Major == wire.MajorText {
+			if match, _ := c.matchTextKey(c.pos, h, key); match {
+				return true, nil
+			}
 		}
 		for range 2 { // the key and its value
 			if c.pos >= end {
@@ -414,27 +423,30 @@ func (c *Cursor) keyBefore(start int, key string) (bool, error) {
 	return false, nil
 }
 
-// matchTextKey reports whether the item at off is a text string that
-// decodes to key under the cursor's options, and returns the offset
-// just past it. Anything it can't match (another type, or a malformed
-// text item) is no match; skipping the item reports any error.
-func (c *Cursor) matchTextKey(off int, key string) (bool, int) {
+// matchTextKey reports whether the text string item at off, whose head
+// is h, decodes to key under the cursor's options. It returns the offset
+// just past the item when it matches, or when it is a definite-length
+// string within the limits (so the caller can step over it); otherwise
+// 0, and skipping the item reports any error.
+func (c *Cursor) matchTextKey(off int, h wire.HeadResult, key string) (bool, int) {
 	src := c.src
-	h := wire.ParseHead(src[off:])
-	if h.N == 0 || h.Major != wire.MajorText || (h.AI >= 28 && h.AI <= 30) {
+	if h.N == 0 || (h.AI >= 28 && h.AI <= 30) {
 		return false, 0
 	}
 	start := off + h.N
 	if h.AI != wire.AIIndefinite {
 		// Compare in uint64: a huge length would wrap as an int.
-		if h.Arg > uint64(len(src)-start) {
-			return false, 0
-		}
-		if c.opts.KeyIdentity == KeyIdentityEncoded && !h.IsShortest() {
+		if h.Arg > uint64(len(src)-start) || h.Arg > uint64(c.opts.maxBytes()) {
 			return false, 0
 		}
 		end := start + int(h.Arg)
-		return c.textIs(src[start:end], key), end
+		if c.opts.KeyIdentity == KeyIdentityEncoded && !h.IsShortest() {
+			return false, end
+		}
+		if h.Arg == uint64(len(key)) && string(src[start:end]) == key {
+			return true, end
+		}
+		return c.opts.ReplaceInvalidUTF8 && c.textIs(src[start:end], key), end
 	}
 	if c.opts.KeyIdentity == KeyIdentityEncoded {
 		return false, 0
@@ -443,7 +455,10 @@ func (c *Cursor) matchTextKey(off int, key string) (bool, int) {
 	var text []byte
 	for pos := start; pos < len(src); {
 		if src[pos] == wire.BreakCode {
-			return c.textIs(text, key), pos + 1
+			if c.textIs(text, key) {
+				return true, pos + 1
+			}
+			return false, 0
 		}
 		ch := wire.ParseHead(src[pos:])
 		if ch.N == 0 || ch.Major != wire.MajorText || ch.AI > wire.AI8Bytes || ch.Arg > uint64(len(src)-pos-ch.N) {

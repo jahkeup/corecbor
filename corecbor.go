@@ -96,6 +96,7 @@ var (
 	ErrNotPreferred        = cbor.ErrNotPreferred
 	ErrInvalidOption       = cbor.ErrInvalidOption
 	ErrInvalidChunk        = cbor.ErrInvalidChunk
+	ErrMaxItemSize         = cbor.ErrMaxItemSize
 )
 
 func AsTime(t Value) (time.Time, error)  { return cbor.AsTime(t) }

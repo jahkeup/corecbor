@@ -12,6 +12,7 @@ import (
 type decodeConfig struct {
 	opts            rfc8949.DecodeOpts
 	noInternalArena bool
+	maxItemSize     int  // WithMaxItemSize: 0 default, < 0 none (proposal 037)
 	textLossless    bool // InvalidUTF8Lossless: Unmarshal into string accepts non-UTF-8 forms
 
 	// RequireDeterministic's NaN rule (proposal 037 C9), applied when
@@ -252,6 +253,23 @@ func WithMaxArrayLength(n int) DecoderOption {
 
 func WithMaxByteStringLength(n int) DecoderOption {
 	return func(c *decodeConfig) { c.opts.MaxByteStringLength = n }
+}
+
+// DefaultMaxItemSize is the default limit on the encoded size of one
+// item that DecodeFrom or Stream reads: 64 MiB.
+const DefaultMaxItemSize = rfc8949.DefaultMaxItemSize
+
+// WithMaxItemSize limits the encoded size of one item read from an
+// io.Reader by Decoder.DecodeFrom or a Stream to n bytes. An item over
+// the limit returns an error wrapping ErrMaxItemSize as soon as a head
+// shows it, before its bytes are read. The default (n == 0) is
+// DefaultMaxItemSize, so reading is bounded even without a memory
+// budget; a negative n removes the limit, leaving only the per-string,
+// per-container and nesting limits (and WithMemoryBudget, if set). It
+// doesn't apply to Decode, whose input is already in memory (proposal
+// 037 C4).
+func WithMaxItemSize(n int) DecoderOption {
+	return func(c *decodeConfig) { c.maxItemSize = n }
 }
 
 // WithMemoryBudget sets a global allocation budget (in bytes) for a

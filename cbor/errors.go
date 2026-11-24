@@ -130,6 +130,11 @@ var (
 	// type (RFC 8949 §3.2.3): the input is not well-formed. It used to
 	// be reported as ErrTruncated.
 	ErrInvalidChunk = errors.New("cbor: invalid chunk in indefinite-length string")
+
+	// ErrMaxItemSize indicates an item read from an io.Reader whose
+	// encoded size exceeds the item size limit (DecodeFrom, Stream;
+	// WithMaxItemSize in the root package).
+	ErrMaxItemSize = errors.New("cbor: item size exceeds limit")
 )
 
 // Proposal 025.

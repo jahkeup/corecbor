@@ -49,7 +49,7 @@ func TestDecodeFromNoAllocationAheadOfData(t *testing.T) {
 	var before, after runtime.MemStats
 	runtime.GC()
 	runtime.ReadMemStats(&before)
-	_, err := DecodeFrom(bytes.NewReader(src), DecodeOpts{MaxByteStringLength: 2 << 30})
+	_, err := DecodeFromLimit(bytes.NewReader(src), DecodeOpts{MaxByteStringLength: 2 << 30}, -1)
 	runtime.ReadMemStats(&after)
 	if !errors.Is(err, cbor.ErrTruncated) || !errors.Is(err, io.ErrUnexpectedEOF) {
 		t.Fatalf("err = %v, want ErrTruncated and io.ErrUnexpectedEOF", err)

@@ -204,6 +204,7 @@ func RejectInvalidTagContent() DecoderOption        // RFC 8949 §3.4, §5.3.2 (
 func WithMaxNestingDepth(n int) DecoderOption       // default 256
 func WithMaxArrayLength(n int) DecoderOption        // default 1<<20
 func WithMaxByteStringLength(n int) DecoderOption   // default 16<<20
+func WithMaxItemSize(n int) DecoderOption           // reader decoding; default 64<<20, < 0 none (037)
 
 func NewDecoder(opts ...DecoderOption) *Decoder
 
@@ -384,6 +385,7 @@ forbidden.
 | `ErrNullMapKey` | map key is the Null value | decoder (knob) |
 | `ErrTrailingBytes` | bytes remain after first complete value (single-value mode) | decoder |
 | `ErrTruncated` | input ended mid-value | decoder |
+| `ErrMaxItemSize` | item read from an `io.Reader` larger than `WithMaxItemSize` (default 64 MiB) | decoder (always, proposal 037) |
 | `ErrInvalidChunk` | chunk of an indefinite-length string that is not a definite-length string of the same major type (RFC 8949 §3.2.3) | decoder (always, proposal 037) |
 | `ErrMaxNestingDepth` | nesting limit exceeded | decoder (always) |
 | `ErrMaxArrayLength` | array element count exceeds limit | decoder (always) |

@@ -77,6 +77,7 @@ v0.2.2 and under the new version and diffs the output.
 | `MaxByteStringLength` below 24 applies to short strings inside arrays and to short text map keys (037 C3) | `Decode` with `WithMaxByteStringLength(n)`, n < 24 | short strings in those positions bypassed the limit | none (safety defect, 034) |
 | `WithMemoryBudget` charges what decoding allocates at its real size: indefinite-length arrays, maps and strings, short strings on the inline paths, tag content, `DecodeSequence` items, and `Value` / `MapEntry` slots at their size (104 / 208 bytes on 64-bit) (037 C5) | decoders with `WithMemoryBudget`, `rfc8949.DecodeOpts.Budget` | indefinite-length items, short strings, tags and sequence items were not charged; slots were charged 16 / 32 bytes | none (safety defect, 034); raise the budget if a legitimate input now exceeds it |
 | `DecodeFrom` and `Stream` charge the bytes they buffer for an item to the memory budget as they read them, and each `Decoder.DecodeFrom` call and `Stream.Next` item starts a fresh budget (037 C4) | `DecodeFrom`, `Stream` with `WithMemoryBudget` | an item was read and buffered in full before any charge (400 MB read under a 1 MiB budget); the budget accumulated across items until the stream failed | none (safety defect, 034) |
+| `DecodeFrom` and `Stream` limit one item's encoded size to `DefaultMaxItemSize` (64 MiB) when reading from an `io.Reader`, with or without a memory budget; an item over it returns the new `ErrMaxItemSize` before its bytes are read (037 C4) | `Decoder.DecodeFrom`, `Stream`, `rfc8949.DecodeFrom` | no bound beyond the per-string, per-container and nesting limits | `WithMaxItemSize(n)` for another bound, `WithMaxItemSize(-1)` for none; `rfc8949.DecodeFromLimit(r, opts, -1)` |
 | `Stream.Next` stops with an error, wrapping `ErrTruncated` and `io.ErrUnexpectedEOF`, when the reader ends inside an item; only an end between items is a clean end (037 C6) | `Stream` | a truncated last item ended the stream silently, as if it were not there | none (silent data loss, 034) |
 | A chunk of the wrong type in an indefinite-length string returns the new `ErrInvalidChunk` (037 C6) | `Decode`, `Cursor`, `DecodeFrom`, `Stream` | `ErrTruncated` (and `Stream` ended silently) | none; match `ErrInvalidChunk` |
 | `Cursor.FindMapKey` returns the value `Decode` keeps: it scans to the end of the map and takes the last of repeated keys; under `RejectDuplicateMapKeys` (and so `StrictDecoder`) a repeat of the key anywhere in the map returns `ErrDuplicateMapKey`; keys match under the key identity, so a non-shortest or indefinite-length text key matches by default and only the shortest encoding under `KeyIdentityEncoded`; under `KeepDuplicateMapKeys` it stops at the next occurrence (037 C7) | `Cursor.FindMapKey` | the first occurrence; duplicates never rejected; only a definite-length key compared byte-for-byte | none (parser differential, 034); use `KeepDuplicateMapKeys` to step through every occurrence |
@@ -207,7 +208,9 @@ goroutine (for example from a `sync.Pool`).
   validation with `RejectInvalidTagContent()` (decoder),
   `CheckTagContent()` (encoder) and `rfc8949.DecodeOpts` /
   `EncodeOpts.RejectInvalidTagContent`; `CheckDuplicateMapKeys()` and
-  `rfc8949.EncodeOpts.RejectDuplicateMapKeys`; `rfc8949.DecodeAt`.
+  `rfc8949.EncodeOpts.RejectDuplicateMapKeys`; `rfc8949.DecodeAt`;
+  `WithMaxItemSize`, `DefaultMaxItemSize`, `ErrMaxItemSize`,
+  `rfc8949.DecodeFromLimit`.
 - Strict reflection (037 C15–C17): `DisallowDroppedTags()`,
   `DisallowUndefined()` and `UnmarshalStrict` (StrictDecoder plus
   both). Package `Unmarshal` is unchanged and forgiving: it drops tags

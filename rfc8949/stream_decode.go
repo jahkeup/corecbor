@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"sync"
 
 	"github.com/jahkeup/corecbor/cbor"
@@ -32,14 +33,38 @@ import (
 // buffered for the item are charged as they are read, in addition to
 // what decoding them allocates, so the budget bounds how much one item
 // makes DecodeFrom read.
+//
+// The item's encoded size is limited to DefaultMaxItemSize; use
+// DecodeFromLimit to choose another bound or none (proposal 037 C4).
 func DecodeFrom(r io.Reader, opts DecodeOpts) (cbor.Value, error) {
+	return DecodeFromLimit(r, opts, 0)
+}
+
+// DefaultMaxItemSize is the default limit on the encoded size of one
+// item read by DecodeFrom: 64 MiB.
+const DefaultMaxItemSize = 64 << 20
+
+// DecodeFromLimit is DecodeFrom with a limit of maxItemSize bytes on the
+// item's encoded size: 0 means DefaultMaxItemSize and a negative value
+// means no limit. An item over the limit returns an error wrapping
+// cbor.ErrMaxItemSize as soon as a head shows it, before its bytes are
+// read, so the limit bounds the memory reading one item can take even
+// without a memory budget.
+func DecodeFromLimit(r io.Reader, opts DecodeOpts, maxItemSize int) (cbor.Value, error) {
+	limit := uint64(maxItemSize)
+	switch {
+	case maxItemSize == 0:
+		limit = DefaultMaxItemSize
+	case maxItemSize < 0:
+		limit = math.MaxUint64
+	}
 	if b, ok := r.(*BufferedReader); ok {
-		if v, ok := b.decodeBuffered(opts); ok {
+		if v, ok := b.decodeBuffered(opts, limit); ok {
 			return v, nil
 		}
 	}
 	ir := itemReaderPool.Get().(*itemReader)
-	ir.r, ir.opts = r, opts
+	ir.r, ir.opts, ir.limit = r, opts, limit
 	if br, ok := r.(io.ByteReader); ok {
 		ir.br = br
 	}
@@ -71,7 +96,7 @@ func (ir *itemReader) release(reuseBuf bool) {
 		ir.stack = nil
 	}
 	ir.stack = ir.stack[:0]
-	ir.r, ir.br, ir.opts = nil, nil, DecodeOpts{}
+	ir.r, ir.br, ir.opts, ir.limit = nil, nil, DecodeOpts{}, 0
 	itemReaderPool.Put(ir)
 }
 
@@ -87,12 +112,12 @@ func (ir *itemReader) release(reuseBuf bool) {
 // Decode bounds preallocation by the input it is given, so decoding
 // from the buffer allocates no more than the item reader would for the
 // same bytes.
-func (br *BufferedReader) decodeBuffered(opts DecodeOpts) (cbor.Value, bool) {
+func (br *BufferedReader) decodeBuffered(opts DecodeOpts, limit uint64) (cbor.Value, bool) {
 	if br.off >= len(br.buf) || opts.ZeroCopy || opts.Budget != nil || opts.Arena != nil {
 		return cbor.Value{}, false
 	}
 	v, n, err := Decode(br.buf[br.off:], opts)
-	if err != nil {
+	if err != nil || uint64(n) > limit {
 		return cbor.Value{}, false
 	}
 	br.off += n
@@ -172,6 +197,7 @@ type itemReader struct {
 	r     io.Reader
 	br    io.ByteReader
 	opts  DecodeOpts
+	limit uint64 // maximum item size in bytes
 	buf   []byte
 	stack []itemFrame
 }
@@ -226,6 +252,9 @@ func (ir *itemReader) readByte() (byte, error) {
 // readN appends exactly n more bytes from the reader to buf, growing it
 // in bounded chunks so a declared length never allocates ahead of data.
 func (ir *itemReader) readN(n uint64) error {
+	if n > ir.limit-uint64(len(ir.buf)) {
+		return ir.tooLarge(n)
+	}
 	const maxChunk = 64 << 10
 	for n > 0 {
 		chunk := uint64(maxChunk)
@@ -252,6 +281,13 @@ func (ir *itemReader) readN(n uint64) error {
 		n -= chunk
 	}
 	return nil
+}
+
+// tooLarge reports that reading n more bytes would take the item past
+// the item size limit.
+func (ir *itemReader) tooLarge(n uint64) error {
+	return decerr.Text(cbor.ErrMaxItemSize, len(ir.buf), fmt.Sprintf("%s at offset %d: %d more bytes, limit %d",
+		cbor.ErrMaxItemSize, len(ir.buf), n, ir.limit))
 }
 
 // readErr maps a reader error: EOF of any kind inside an item becomes
@@ -308,6 +344,9 @@ func (ir *itemReader) read() error {
 			if err := ir.opts.Budget.charge(1, off); err != nil {
 				return err
 			}
+		}
+		if uint64(off) >= ir.limit {
+			return ir.tooLarge(1)
 		}
 		ir.buf = append(ir.buf, ib)
 

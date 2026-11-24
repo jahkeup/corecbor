@@ -561,10 +561,11 @@ func (s *StreamEncoder) WriteRawCBOR(raw []byte) error {
 
 // DecodeFrom reads exactly one CBOR value from r. A memory budget
 // (WithMemoryBudget) covers the call: the bytes buffered for the item
-// as well as what decoding it allocates.
+// as well as what decoding it allocates. The item's encoded size is
+// limited by WithMaxItemSize (DefaultMaxItemSize by default).
 func (d *Decoder) DecodeFrom(r io.Reader) (Value, error) {
 	d.resetBudget()
-	return rfc8949.DecodeFrom(r, d.cfg.opts)
+	return rfc8949.DecodeFromLimit(r, d.cfg.opts, d.cfg.maxItemSize)
 }
 
 // resetBudget starts a new decode operation's memory budget.
@@ -591,7 +592,7 @@ func (d *Decoder) Stream(r io.Reader) *Stream {
 // are available or an error occurred.
 func (s *Stream) Next() bool {
 	s.dec.resetBudget() // the budget covers one item
-	v, err := rfc8949.DecodeFromBuffered(s.br, s.dec.cfg.opts)
+	v, err := rfc8949.DecodeFromLimit(s.br, s.dec.cfg.opts, s.dec.cfg.maxItemSize)
 	if err != nil {
 		// Only a reader that ends between items ends the stream cleanly
 		// (RFC 8742 §2): a partial last item is an error (037 C6).

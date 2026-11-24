@@ -129,17 +129,36 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...
 	if recipientIndex < 0 || recipientIndex >= len(msg.Recipients) {
 		return fmt.Errorf("%w: recipient index out of range", ErrMACVerification)
 	}
+	return verifyMACMultiPath(msg, recipient, []int{recipientIndex}, opts)
+}
+
+// VerifyMACMultiNested is VerifyMACMulti for a recipient nested under
+// others; path and the layers above it are as for DecryptMultiNested.
+// A path that doesn't name a recipient is ErrMACVerification.
+func VerifyMACMultiNested(msg *Mac, recipient KeyDeriver, path []int, opts ...MACOption) error {
+	if msg.Payload == nil {
+		return ErrMissingPayload
+	}
+	return verifyMACMultiPath(msg, recipient, path, opts)
+}
+
+func verifyMACMultiPath(msg *Mac, recipient KeyDeriver, path []int, opts []MACOption) error {
+	layers, err := recipientPath(msg.Recipients, path)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrMACVerification, err)
+	}
 	var o macOpts
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	r := msg.Recipients[recipientIndex]
 	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
 		return err
 	}
-	if err := checkCrit(&r.Protected, &r.Unprotected, &o.policy); err != nil {
-		return err
+	for _, r := range layers {
+		if err := checkCrit(&r.Protected, &r.Unprotected, &o.policy); err != nil {
+			return err
+		}
 	}
 	alg, err := multiAlg(&msg.Protected, &msg.Unprotected, &o.policy, defaultMACMultiAlgs)
 	if err != nil {
@@ -152,7 +171,7 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...
 	}
 
 	cekLen := hmacKeyLen(alg)
-	cek, err := openRecipient(&r, recipient, alg, cekLen, &encryptOpts{policy: o.policy, legacy: o.legacy, allowProtRecipient: o.allowProtRecipient})
+	cek, err := openRecipientPath(layers, recipient, alg, cekLen, &encryptOpts{policy: o.policy, legacy: o.legacy, allowProtRecipient: o.allowProtRecipient})
 	if err != nil {
 		if errors.Is(err, ErrAlgorithmMismatch) || errors.Is(err, ErrCriticalHeader) || errors.Is(err, ErrMalformed) {
 			return err

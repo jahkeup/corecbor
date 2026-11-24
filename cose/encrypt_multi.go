@@ -99,12 +99,32 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts .
 	if recipientIndex < 0 || recipientIndex >= len(msg.Recipients) {
 		return nil, fmt.Errorf("%w: recipient index out of range", ErrDecryption)
 	}
+	return decryptMultiPath(msg, recipient, []int{recipientIndex}, opts)
+}
+
+// DecryptMultiNested is DecryptMulti for a recipient nested under others
+// (RFC 9052 §5.1, Appendix B). path[0] indexes msg.Recipients, path[1]
+// that recipient's Recipients, and so on; recipient opens the last one.
+// The key it recovers is the key of the layer above, which is opened
+// with it, up to the content key. A layer above the last must be AES
+// key wrap (A128KW, A192KW, A256KW) or direct; others are
+// ErrUnsupportedAlgorithm. Each layer's headers are checked as
+// DecryptMulti checks a recipient's. A path that doesn't name a
+// recipient is ErrDecryption.
+func DecryptMultiNested(msg *Encrypt, recipient KeyDeriver, path []int, opts ...EncryptOption) ([]byte, error) {
+	return decryptMultiPath(msg, recipient, path, opts)
+}
+
+func decryptMultiPath(msg *Encrypt, recipient KeyDeriver, path []int, opts []EncryptOption) ([]byte, error) {
+	layers, err := recipientPath(msg.Recipients, path)
+	if err != nil {
+		return nil, err
+	}
 	var o encryptOpts
 	for _, opt := range opts {
 		opt(&o)
 	}
 
-	r := &msg.Recipients[recipientIndex]
 	if err := checkCrit(&msg.Protected, &msg.Unprotected, &o.policy); err != nil {
 		return nil, err
 	}
@@ -117,7 +137,7 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts .
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedAlgorithm, contentAlg)
 	}
 
-	cek, err := openRecipient(r, recipient, contentAlg, cekLen, &o)
+	cek, err := openRecipientPath(layers, recipient, contentAlg, cekLen, &o)
 	if err != nil {
 		return nil, err
 	}

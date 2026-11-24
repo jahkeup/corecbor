@@ -167,6 +167,74 @@ func agreeRecipient(ka KeyAgreer, contentAlg Algorithm, keyLen int) ([]byte, Rec
 	return cek, Recipient{Protected: prot, Unprotected: headers}, nil
 }
 
+// recipientPath returns the recipients path names, outermost first:
+// path[0] indexes rs, path[1] that recipient's Recipients, and so on.
+func recipientPath(rs []Recipient, path []int) ([]*Recipient, error) {
+	if len(path) == 0 {
+		return nil, fmt.Errorf("%w: empty recipient path", ErrDecryption)
+	}
+	out := make([]*Recipient, 0, len(path))
+	for depth, i := range path {
+		if i < 0 || i >= len(rs) {
+			return nil, fmt.Errorf("%w: recipient path %v: index %d out of range at depth %d", ErrDecryption, path, i, depth)
+		}
+		out = append(out, &rs[i])
+		rs = rs[i].Recipients
+	}
+	return out, nil
+}
+
+// openRecipientPath recovers the content key through layers (outermost
+// first): leaf opens the last layer, and each key recovered is the
+// key-wrap key of the layer above it (RFC 9052 §5.1, Appendix B).
+func openRecipientPath(layers []*Recipient, leaf KeyDeriver, contentAlg Algorithm, keyLen int, o *encryptOpts) ([]byte, error) {
+	// forAlg[i], forLen[i]: what layer i's recovered key is used for.
+	n := len(layers)
+	forAlg := make([]Algorithm, n)
+	forLen := make([]int, n)
+	forAlg[0], forLen[0] = contentAlg, keyLen
+	for i := 1; i < n; i++ {
+		a, _, err := headerAlg(&layers[i-1].Protected, &layers[i-1].Unprotected)
+		if err != nil {
+			return nil, err
+		}
+		l := aesKWKeyLen(a)
+		if l == 0 {
+			return nil, fmt.Errorf("%w: recipient layer %d has alg %s; only AES key wrap can carry a nested recipient's key", ErrUnsupportedAlgorithm, i-1, a)
+		}
+		forAlg[i], forLen[i] = a, l
+	}
+	deriver := leaf
+	for i := n - 1; i >= 0; i-- {
+		k, err := openRecipient(layers[i], deriver, forAlg[i], forLen[i], o)
+		if err != nil {
+			return nil, err
+		}
+		if i == 0 {
+			return k, nil
+		}
+		if len(k) != forLen[i] {
+			return nil, fmt.Errorf("%w: recipient layer %d yielded a %d-byte key for %s", ErrDecryption, i, len(k), forAlg[i])
+		}
+		deriver = &AESKWKey{Key: k}
+	}
+	return nil, fmt.Errorf("%w: empty recipient path", ErrDecryption)
+}
+
+// aesKWKeyLen is the key length of an AES key wrap algorithm, or 0.
+func aesKWKeyLen(a Algorithm) int {
+	switch a {
+	case AlgA128KW:
+		return 16
+	case AlgA192KW:
+		return 24
+	case AlgA256KW:
+		return 32
+	default:
+		return 0
+	}
+}
+
 // openRecipient recovers the content key from r with deriver. The
 // recipient's alg must be present (RFC 9052 §8.5, proposal 037 S9) and
 // be the deriver's: an alg that doesn't match would

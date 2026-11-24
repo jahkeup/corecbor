@@ -72,8 +72,8 @@ type Recipient struct {
 	Ciphertext  []byte
 	// Recipients holds nested recipients, for a layer whose key is
 	// itself distributed by further recipients (RFC 9052 §5.1,
-	// Appendix B). They are parsed and written back; DecryptMulti and
-	// VerifyMACMulti open the top-level recipient they are given and
-	// don't descend into them.
+	// Appendix B). They are parsed and written back;
+	// DecryptMultiNested and VerifyMACMultiNested open a recipient
+	// nested here.
 	Recipients []Recipient
 }

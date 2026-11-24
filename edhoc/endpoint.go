@@ -60,6 +60,22 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 	return &Initiator{s: s, suites: slices.Clone(cfg.Suites)}, nil
 }
 
+// sess returns the RFC 9528 session, or nil for a zero-value or nil
+// endpoint; session methods then return ErrStateViolation.
+func (i *Initiator) sess() *session {
+	if i == nil {
+		return nil
+	}
+	return i.s
+}
+
+func (r *Responder) sess() *session {
+	if r == nil {
+		return nil
+	}
+	return r.s
+}
+
 // checkMethodKey fails fast when the method needs a key this party
 // lacks: PrivateKey to sign, DHKey for static DH. A signing key is never
 // used as a DH key (RFC 9528 §3.5.1).
@@ -84,8 +100,11 @@ func checkKeys(own, peer bool) error {
 
 // CreateMessage1 returns message_1.
 func (i *Initiator) CreateMessage1() ([]byte, error) {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return i.legacy.CreateMessage1()
+	}
+	if i.sess() == nil {
+		return nil, errNoSession
 	}
 	return i.s.createMessage1(i.suites)
 }
@@ -101,61 +120,61 @@ func (i *Initiator) ProcessMessage2(msg2Raw []byte) ([]byte, error) {
 // ProcessMessage2Context is ProcessMessage2 with a context for the
 // credential resolver.
 func (i *Initiator) ProcessMessage2Context(ctx context.Context, msg2 []byte) ([]byte, error) {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return i.legacy.ProcessMessage2(msg2)
 	}
-	return i.s.processMessage2(ctx, msg2)
+	return i.sess().processMessage2(ctx, msg2)
 }
 
 // ProcessMessage4 verifies the optional message_4 (key confirmation).
 func (i *Initiator) ProcessMessage4(msg4 []byte) error {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return i.legacy.ProcessMessage4(msg4)
 	}
-	return i.s.processMessage4(msg4)
+	return i.sess().processMessage4(msg4)
 }
 
 // Export is EDHOC_Exporter(label, context, length) (RFC 9528 §4.2.1),
 // valid once the handshake is complete.
 func (i *Initiator) Export(label int, context []byte, length int) ([]byte, error) {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return i.legacy.Export(label, context, length)
 	}
-	return i.s.export(label, context, length)
+	return i.sess().export(label, context, length)
 }
 
 // ExportOSCORE derives an OSCORE context with the default parameters
 // (RFC 9528 Appendix A.1). The Initiator's Sender ID is C_R.
 func (i *Initiator) ExportOSCORE() (*OSCOREContext, error) {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return i.legacy.ExportOSCORE()
 	}
-	return i.s.oscore(OSCOREParams{})
+	return i.sess().oscore(OSCOREParams{})
 }
 
 // OSCORE derives an OSCORE context with explicit parameters.
 func (i *Initiator) OSCORE(p OSCOREParams) (*OSCOREContext, error) {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return nil, fmt.Errorf("%w: not available with the legacy protocol", ErrStateViolation)
 	}
-	return i.s.oscore(p)
+	return i.sess().oscore(p)
 }
 
 // PRKOut returns a copy of PRK_out (RFC 9528 §4.1.3).
 func (i *Initiator) PRKOut() ([]byte, error) {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return nil, fmt.Errorf("%w: not available with the legacy protocol", ErrStateViolation)
 	}
-	return i.s.prkOutCopy()
+	return i.sess().prkOutCopy()
 }
 
 // KeyUpdate derives a new PRK_out and PRK_exporter (RFC 9528
 // Appendix H). Both peers must call it with the same context.
 func (i *Initiator) KeyUpdate(context []byte) error {
-	if i.legacy != nil {
+	if i != nil && i.legacy != nil {
 		return fmt.Errorf("%w: not available with the legacy protocol", ErrStateViolation)
 	}
-	return i.s.keyUpdate(context)
+	return i.sess().keyUpdate(context)
 }
 
 // PeerEAD returns the EAD items received in the most recent message,
@@ -163,10 +182,10 @@ func (i *Initiator) KeyUpdate(context []byte) error {
 // EAD_4 after ProcessMessage4. It returns nil before then and after any
 // failure.
 func (i *Initiator) PeerEAD() []EADItem {
-	if i.s == nil {
+	if i.sess() == nil {
 		return nil
 	}
-	return slices.Clone(i.s.peerEAD)
+	return slices.Clone(i.sess().peerEAD)
 }
 
 // PeerCredential returns the Responder's credential once message_2 has
@@ -174,17 +193,17 @@ func (i *Initiator) PeerEAD() []EADItem {
 // including a credential that resolved but whose signature or MAC did
 // not verify.
 func (i *Initiator) PeerCredential() *Credential {
-	if i.s == nil {
+	if i.sess() == nil {
 		return nil
 	}
-	return i.s.peerCred
+	return i.sess().peerCred
 }
 
 // Close zeroizes the session's secrets. It is idempotent; later calls
 // return ErrStateViolation.
 func (i *Initiator) Close() {
-	if i.s != nil {
-		i.s.close()
+	if i.sess() != nil {
+		i.sess().close()
 	}
 }
 
@@ -241,8 +260,11 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 // Responder can't continue (for example, an unsupported selected suite)
 // the error is an *ErrorMessage; send its MarshalCBOR() to the peer.
 func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return r.legacy.ProcessMessage1(msg1Raw)
+	}
+	if r.sess() == nil {
+		return nil, errNoSession
 	}
 	accept := func(m Method) bool { return r.cfg.AnyMethod || m == r.cfg.Method }
 	return r.s.processMessage1(msg1Raw, r.cfg.Suites, accept)
@@ -257,60 +279,60 @@ func (r *Responder) ProcessMessage3(msg3Raw []byte) error {
 // ProcessMessage3Context is ProcessMessage3 with a context for the
 // credential resolver.
 func (r *Responder) ProcessMessage3Context(ctx context.Context, msg3 []byte) error {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return r.legacy.ProcessMessage3(msg3)
 	}
-	return r.s.processMessage3(ctx, msg3)
+	return r.sess().processMessage3(ctx, msg3)
 }
 
 // CreateMessage4 returns the optional message_4 (key confirmation).
 func (r *Responder) CreateMessage4() ([]byte, error) {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return r.legacy.CreateMessage4()
 	}
-	return r.s.createMessage4()
+	return r.sess().createMessage4()
 }
 
 // Export is EDHOC_Exporter(label, context, length) (RFC 9528 §4.2.1).
 func (r *Responder) Export(label int, context []byte, length int) ([]byte, error) {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return r.legacy.Export(label, context, length)
 	}
-	return r.s.export(label, context, length)
+	return r.sess().export(label, context, length)
 }
 
 // ExportOSCORE derives an OSCORE context with the default parameters
 // (RFC 9528 Appendix A.1). The Responder's Sender ID is C_I.
 func (r *Responder) ExportOSCORE() (*OSCOREContext, error) {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return r.legacy.ExportOSCORE()
 	}
-	return r.s.oscore(OSCOREParams{})
+	return r.sess().oscore(OSCOREParams{})
 }
 
 // OSCORE derives an OSCORE context with explicit parameters.
 func (r *Responder) OSCORE(p OSCOREParams) (*OSCOREContext, error) {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return nil, fmt.Errorf("%w: not available with the legacy protocol", ErrStateViolation)
 	}
-	return r.s.oscore(p)
+	return r.sess().oscore(p)
 }
 
 // PRKOut returns a copy of PRK_out.
 func (r *Responder) PRKOut() ([]byte, error) {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return nil, fmt.Errorf("%w: not available with the legacy protocol", ErrStateViolation)
 	}
-	return r.s.prkOutCopy()
+	return r.sess().prkOutCopy()
 }
 
 // KeyUpdate derives a new PRK_out and PRK_exporter (RFC 9528
 // Appendix H).
 func (r *Responder) KeyUpdate(context []byte) error {
-	if r.legacy != nil {
+	if r != nil && r.legacy != nil {
 		return fmt.Errorf("%w: not available with the legacy protocol", ErrStateViolation)
 	}
-	return r.s.keyUpdate(context)
+	return r.sess().keyUpdate(context)
 }
 
 // PeerEAD returns the EAD items received in the most recent message:
@@ -318,10 +340,10 @@ func (r *Responder) KeyUpdate(context []byte) error {
 // message_1 is not authenticated, so EAD_1 is unverified until
 // ProcessMessage3 succeeds. It returns nil after any failure.
 func (r *Responder) PeerEAD() []EADItem {
-	if r.s == nil {
+	if r.sess() == nil {
 		return nil
 	}
-	return slices.Clone(r.s.peerEAD)
+	return slices.Clone(r.sess().peerEAD)
 }
 
 // PeerCredential returns the Initiator's credential once message_3 has
@@ -329,15 +351,15 @@ func (r *Responder) PeerEAD() []EADItem {
 // including a credential that resolved but whose signature or MAC did
 // not verify.
 func (r *Responder) PeerCredential() *Credential {
-	if r.s == nil {
+	if r.sess() == nil {
 		return nil
 	}
-	return r.s.peerCred
+	return r.sess().peerCred
 }
 
 // Close zeroizes the session's secrets. It is idempotent.
 func (r *Responder) Close() {
-	if r.s != nil {
-		r.s.close()
+	if r.sess() != nil {
+		r.sess().close()
 	}
 }

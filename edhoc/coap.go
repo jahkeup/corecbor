@@ -132,8 +132,14 @@ func byteStringLen(b []byte) (int, error) {
 // Responder prepends it in the reverse message flow; it is also the
 // Initiator's OSCORE Recipient ID.
 func (i *Initiator) ConnectionID() ConnectionID {
+	if i == nil {
+		return nil
+	}
 	if i.legacy != nil {
 		return slices.Clone(ConnectionID(i.legacy.connectionID))
+	}
+	if i.s == nil {
+		return nil
 	}
 	return slices.Clone(ConnectionID(i.s.ownCID))
 }
@@ -143,8 +149,14 @@ func (i *Initiator) ConnectionID() ConnectionID {
 // the Initiator prepends it to message_3 (CoAPMessageWithCID) or sends it
 // as the OSCORE 'kid' of a combined request.
 func (i *Initiator) PeerConnectionID() ConnectionID {
+	if i == nil {
+		return nil
+	}
 	if i.legacy != nil {
 		return slices.Clone(ConnectionID(i.legacy.peerConnID))
+	}
+	if i.s == nil {
+		return nil
 	}
 	return slices.Clone(ConnectionID(i.s.peerCID))
 }
@@ -154,8 +166,14 @@ func (i *Initiator) PeerConnectionID() ConnectionID {
 // requests to this session by it (SplitCoAPPrefix, or the OSCORE 'kid'
 // of a combined request).
 func (r *Responder) ConnectionID() ConnectionID {
+	if r == nil {
+		return nil
+	}
 	if r.legacy != nil {
 		return slices.Clone(ConnectionID(r.legacy.connectionID))
+	}
+	if r.s == nil {
+		return nil
 	}
 	return slices.Clone(ConnectionID(r.s.ownCID))
 }
@@ -163,8 +181,14 @@ func (r *Responder) ConnectionID() ConnectionID {
 // PeerConnectionID returns the Initiator's connection identifier C_I once
 // message_1 has been processed, or nil.
 func (r *Responder) PeerConnectionID() ConnectionID {
+	if r == nil {
+		return nil
+	}
 	if r.legacy != nil {
 		return slices.Clone(ConnectionID(r.legacy.peerConnID))
+	}
+	if r.s == nil {
+		return nil
 	}
 	return slices.Clone(ConnectionID(r.s.peerCID))
 }

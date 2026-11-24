@@ -115,7 +115,13 @@ func (s *session) close() {
 	s.state = stateClosed
 }
 
+// errNoSession is returned by a zero-value or nil endpoint.
+var errNoSession = fmt.Errorf("%w: endpoint not created by NewInitiator or NewResponder", ErrStateViolation)
+
 func (s *session) want(st sessionState) error {
+	if s == nil {
+		return errNoSession
+	}
 	if s.state != st {
 		return fmt.Errorf("%w: operation not valid in current state", ErrStateViolation)
 	}

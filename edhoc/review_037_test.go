@@ -349,6 +349,59 @@ func TestE5_AllocatorHook(t *testing.T) {
 	}
 }
 
+// E19: zero-value endpoints return ErrStateViolation instead of
+// panicking.
+func TestE19_ZeroValueEndpoints(t *testing.T) {
+	check := func(name string, err error) {
+		t.Helper()
+		if !errors.Is(err, ErrStateViolation) {
+			t.Errorf("%s: %v, want ErrStateViolation", name, err)
+		}
+	}
+	for _, i := range []*Initiator{{}, nil} {
+		_, err := i.CreateMessage1()
+		check("CreateMessage1", err)
+		_, err = i.ProcessMessage2([]byte{0x40})
+		check("ProcessMessage2", err)
+		check("ProcessMessage4", i.ProcessMessage4([]byte{0x40}))
+		_, err = i.Export(0, nil, 16)
+		check("Export", err)
+		_, err = i.ExportOSCORE()
+		check("ExportOSCORE", err)
+		_, err = i.OSCORE(OSCOREParams{})
+		check("OSCORE", err)
+		_, err = i.PRKOut()
+		check("PRKOut", err)
+		check("KeyUpdate", i.KeyUpdate(nil))
+		_ = i.ConnectionID()
+		_ = i.PeerConnectionID()
+		_ = i.PeerEAD()
+		_ = i.PeerCredential()
+		i.Close()
+	}
+	for _, r := range []*Responder{{}, nil} {
+		_, err := r.ProcessMessage1([]byte{0x00})
+		check("ProcessMessage1", err)
+		check("ProcessMessage3", r.ProcessMessage3([]byte{0x40}))
+		_, err = r.CreateMessage4()
+		check("CreateMessage4", err)
+		_, err = r.Export(0, nil, 16)
+		check("Export", err)
+		_, err = r.ExportOSCORE()
+		check("ExportOSCORE", err)
+		_, err = r.OSCORE(OSCOREParams{})
+		check("OSCORE", err)
+		_, err = r.PRKOut()
+		check("PRKOut", err)
+		check("KeyUpdate", r.KeyUpdate(nil))
+		_ = r.ConnectionID()
+		_ = r.PeerConnectionID()
+		_ = r.PeerEAD()
+		_ = r.PeerCredential()
+		r.Close()
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

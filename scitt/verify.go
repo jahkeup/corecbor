@@ -49,10 +49,11 @@ type VerifyOptions struct {
 	// IssuerOptions and ServiceOptions apply to the issuer and receipt
 	// signature checks (for example cose.WithAllowedAlgorithms).
 	IssuerOptions, ServiceOptions []cose.VerifierOption
-	// Validator checks the statement's CWT Claims: its validity period
-	// (exp, nbf; RFC 9943 §7.1) and aud. nil means DefaultValidator().
-	// To check a statement as of another time, as an auditor might,
-	// pass a Validator with Now set.
+	// Validator checks the CWT Claims of the statement and of each
+	// receipt: their validity period (exp, nbf; RFC 9943 §7.1) and aud.
+	// A receipt that fails it doesn't count toward MinReceipts. nil
+	// means DefaultValidator(). To check a statement as of another
+	// time, as an auditor might, pass a Validator with Now set.
 	Validator *cwt.Validator
 }
 
@@ -120,7 +121,7 @@ func Verify(ctx context.Context, data []byte, o VerifyOptions) (*Statement, erro
 	got := 0
 	var last error
 	for i, r := range rs {
-		iss, err := verifyReceipt(ctx, r, entry, o)
+		iss, err := verifyReceipt(ctx, r, entry, o, v)
 		if err != nil {
 			last = fmt.Errorf("receipt %d: %w", i, err)
 			continue
@@ -159,7 +160,7 @@ func verifyIssuer(ctx context.Context, st *Statement, o VerifyOptions) error {
 
 // verifyReceipt verifies r and returns its issuer, the identity
 // MinReceipts counts.
-func verifyReceipt(ctx context.Context, r *receipt.Receipt, entry []byte, o VerifyOptions) (string, error) {
+func verifyReceipt(ctx context.Context, r *receipt.Receipt, entry []byte, o VerifyOptions, v *cwt.Validator) (string, error) {
 	claims, ok, err := cwt.ClaimsFromHeaders(&r.Msg.Protected)
 	if err != nil {
 		return "", err
@@ -174,6 +175,11 @@ func verifyReceipt(ctx context.Context, r *receipt.Receipt, entry []byte, o Veri
 	}
 	if err := r.VerifyInclusion(ctx, entry, o.ServiceKeys, o.ServiceOptions...); err != nil {
 		return "", err
+	}
+	// The receipt's own validity period, checked after its signature
+	// with the statement's validator (exp, nbf, aud).
+	if err := v.Validate(claims); err != nil {
+		return "", fmt.Errorf("receipt claims: %w", err)
 	}
 	return claims.Issuer, nil
 }

@@ -550,6 +550,7 @@ behavior; these rows change the 030 release candidate (037).
 | `MinReceipts` (and `VerifyTransparent`'s `minReceipts`) counts distinct transparency services, identified by the receipt's protected CWT `iss`: a receipt attached twice, or several from one service, count once (037 W5) | every verifying receipt counted, duplicates included | none (safety defect, 034); `ServiceKeys` should resolve a key only for its own issuer |
 | `Verify` and `VerifyTransparent` check the statement's `exp` and `nbf` (RFC 9943 §7.1) with the new `DefaultValidator()` (60 s leeway, `exp` optional; a statement carrying `aud` is rejected unless the validator lists it), or `VerifyOptions.Validator` (037 W11) | validity period ignored | none (safety defect, 034); set `Validator.Now` to check a statement as of another time |
 | A receipt counts only if it carries a protected `kid`, or protected x5t/x5chain with an X.509-suitable `iss`, as for signed statements (RFC 9943 §6; 037 W28). CWT Claims in both buckets were already malformed COSE | receipts without any key identifier counted | none |
+| A receipt's own protected CWT Claims are validated with the same `VerifyOptions.Validator` (default `DefaultValidator()`): an expired or not-yet-valid receipt doesn't count toward `MinReceipts` (037) | receipt `exp`/`nbf` ignored | none; set `Validator.Now` to check as of another time |
 
 ## Deprecated legacy selectors
 

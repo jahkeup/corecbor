@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cose/receipt"
 	"github.com/jahkeup/corecbor/cwt"
 	"github.com/jahkeup/corecbor/scitt"
@@ -121,6 +122,61 @@ func TestReceiptHeaders037(t *testing.T) {
 		if tc.ok != (err == nil) || (!tc.ok && !tc.unprot && !errors.Is(err, scitt.ErrInsufficientReceipts)) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// A receipt's own validity period (exp, nbf in its protected CWT Claims)
+// is checked with the same validator as the statement's.
+func TestReceiptValidity037(t *testing.T) {
+	ctx := context.Background()
+	issuer := newParty(t, "issuer-1")
+	ts := newService(t, "ts.example", 3)
+	now := time.Now()
+	withClaims := func(st *scitt.Statement, rc *cwt.ClaimsSet) *receipt.Receipt {
+		t.Helper()
+		entry, _ := scitt.Entry(st.Msg)
+		idx := ts.tree.Append(entry)
+		size := ts.tree.Size()
+		p, _ := ts.tree.InclusionProof(idx, size)
+		root, _ := ts.tree.Root(size)
+		var prot cose.Headers
+		if err := cwt.SetClaimsHeader(&prot, rc); err != nil {
+			t.Fatal(err)
+		}
+		prot.SetKeyID(ts.kid)
+		r, err := receipt.Issue(ctx, ts.signer, root, p, prot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	verify := func(rc *cwt.ClaimsSet, v *cwt.Validator) error {
+		st := issueWith(t, issuer, nil)
+		if err := receipt.Attach(st.Msg, withClaims(st, rc)); err != nil {
+			t.Fatal(err)
+		}
+		_, err := scitt.Verify(ctx, marshal(t, st.Msg), scitt.VerifyOptions{IssuerKeys: issuer.keys, ServiceKeys: ts.keys, Validator: v})
+		return err
+	}
+	base := func() *cwt.ClaimsSet { return &cwt.ClaimsSet{Issuer: ts.iss, Subject: "statement"} }
+	expired := base()
+	expired.Expiration = now.Add(-time.Hour)
+	if err := verify(expired, nil); !errors.Is(err, scitt.ErrInsufficientReceipts) || !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("expired receipt: %v, want ErrInsufficientReceipts wrapping cwt.ErrTokenExpired", err)
+	}
+	early := base()
+	early.NotBefore = now.Add(time.Hour)
+	if err := verify(early, nil); !errors.Is(err, cwt.ErrTokenNotYetValid) {
+		t.Errorf("not-yet-valid receipt: %v", err)
+	}
+	valid := base()
+	valid.Expiration = now.Add(time.Hour)
+	if err := verify(valid, nil); err != nil {
+		t.Errorf("valid receipt: %v", err)
+	}
+	past := &cwt.Validator{Now: func() time.Time { return now.Add(-2 * time.Hour) }}
+	if err := verify(expired, past); err != nil {
+		t.Errorf("expired receipt, Validator.Now in its window: %v", err)
 	}
 }
 

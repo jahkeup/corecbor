@@ -99,6 +99,11 @@ const (
 // given) is not satisfied, including when no signature verifies. A nil
 // msg.Payload means the payload is detached; set it before calling, or
 // VerifyMulti returns ErrMissingPayload.
+//
+// Every verifier is tried on every signature until one verifies, so the
+// work is up to len(msg.Signatures) × len(verifiers) signature checks.
+// UnmarshalSign caps the signatures at DecodeLimits.MaxSignatures (32
+// by default).
 func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]int, error) {
 	if len(verifiers) == 0 {
 		return nil, fmt.Errorf("%w: at least one verifier required", ErrInvalidKey)

@@ -236,11 +236,11 @@ func newMessageDecoder(lim DecodeLimits) *corecbor.Decoder {
 	if !lim.AllowDuplicateLabels {
 		opts = append(opts, corecbor.RejectDuplicateMapKeys())
 	}
-	if lim.MemoryBudget > 0 {
-		opts = append(opts, corecbor.WithMemoryBudget(lim.MemoryBudget))
+	if b := limit(lim.MemoryBudget, defaultMemoryBudget); b > 0 {
+		opts = append(opts, corecbor.WithMemoryBudget(b))
 	}
-	if lim.MaxDepth > 0 {
-		opts = append(opts, corecbor.WithMaxNestingDepth(lim.MaxDepth))
+	if d := limit(lim.MaxDepth, defaultMaxDepth); d > 0 {
+		opts = append(opts, corecbor.WithMaxNestingDepth(d))
 	}
 	return corecbor.NewDecoder(opts...)
 }

@@ -21,15 +21,29 @@ const (
 
 var sharedEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic)
 
-// DecodeLimits bounds the work of the Unmarshal*With functions. The zero
-// value applies the same limits as the Unmarshal* functions (the core
-// decoder's defaults), so DecodeLimits{} changes nothing.
+// DecodeLimits bounds the work of decoding a message. The Unmarshal*
+// functions use the zero value, and a zero field means its default:
+// together they are RecommendedDecodeLimits, a bound suited to
+// untrusted input. A negative field removes that bound;
+// InsecureUnboundedDecodeLimits removes them all.
+//
+// v0.2 decoded with no budget, nesting depth 256 and any number of
+// signatures and recipients (proposal 037 S8).
 type DecodeLimits struct {
-	// MemoryBudget caps decode allocations in bytes; 0 means the core
-	// default (no budget).
+	// MemoryBudget caps decode allocations in bytes; 0 means 1 MiB, and
+	// a negative value means no budget.
 	MemoryBudget int
-	// MaxDepth caps nesting depth; 0 means the core default (256).
+	// MaxDepth caps nesting depth; 0 means 16, and a negative value
+	// means the core decoder's limit (256).
 	MaxDepth int
+	// MaxSignatures caps the signatures in a COSE_Sign; 0 means 32,
+	// and a negative value means no cap. VerifyMulti tries every
+	// verifier on every signature, so this bounds its work.
+	MaxSignatures int
+	// MaxRecipients caps the recipients of a COSE_Encrypt or COSE_Mac,
+	// counting nested recipients; 0 means 64, and a negative value
+	// means no cap.
+	MaxRecipients int
 	// AllowDuplicateLabels restores v0.2.2 behavior: a label repeated in
 	// a bucket resolves last-wins, and a label may appear in both the
 	// protected and unprotected buckets.
@@ -40,10 +54,45 @@ type DecodeLimits struct {
 	AllowDuplicateLabels bool
 }
 
-// RecommendedDecodeLimits is the recommended bound for untrusted input:
-// a 1 MiB decode budget and nesting depth 16, ample for any COSE
-// structure this package produces.
+// RecommendedDecodeLimits is the recommended bound for untrusted input
+// and the default: a 1 MiB decode budget, nesting depth 16, at most 32
+// signatures and 64 recipients. Raise MemoryBudget for larger payloads.
 var RecommendedDecodeLimits = DecodeLimits{MemoryBudget: 1 << 20, MaxDepth: 16}
+
+// InsecureUnboundedDecodeLimits removes the decode budget and the
+// signature and recipient caps, and leaves only the core decoder's
+// nesting limit (256), as v0.2 decoded. Use it only for trusted input:
+// an attacker can make decoding allocate without bound and VerifyMulti
+// do work proportional to the number of signatures.
+var InsecureUnboundedDecodeLimits = DecodeLimits{MemoryBudget: -1, MaxDepth: -1, MaxSignatures: -1, MaxRecipients: -1}
+
+const (
+	defaultMemoryBudget  = 1 << 20
+	defaultMaxDepth      = 16
+	defaultMaxSignatures = 32
+	defaultMaxRecipients = 64
+)
+
+// limit resolves one DecodeLimits field: 0 is def, negative is no limit
+// (returned as -1).
+func limit(v, def int) int {
+	switch {
+	case v == 0:
+		return def
+	case v < 0:
+		return -1
+	default:
+		return v
+	}
+}
+
+// checkCount enforces a signature or recipient cap.
+func checkCount(what string, n, v, def int) error {
+	if m := limit(v, def); m >= 0 && n > m {
+		return fmt.Errorf("%w: %w: %d %s, at most %d (see DecodeLimits)", ErrMalformed, ErrLimitExceeded, n, what, m)
+	}
+	return nil
+}
 
 // MarshalSign1 encodes a Sign1 message as CBOR with tag 18.
 func MarshalSign1(msg *Sign1) ([]byte, error) {
@@ -81,6 +130,9 @@ func MarshalSign1(msg *Sign1) ([]byte, error) {
 }
 
 // UnmarshalSign1 decodes a Sign1 message from CBOR (tagged or untagged).
+// It and the other Unmarshal* functions decode under the default
+// DecodeLimits (RecommendedDecodeLimits); use the Unmarshal*With
+// functions to change them.
 func UnmarshalSign1(data []byte) (*Sign1, error) {
 	return UnmarshalSign1With(data, DecodeLimits{})
 }
@@ -479,6 +531,9 @@ func UnmarshalEncryptWith(data []byte, lim DecodeLimits) (*Encrypt, error) {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
 
+	if err := checkCount("recipients", len(recipientsArr), lim.MaxRecipients, defaultMaxRecipients); err != nil {
+		return nil, err
+	}
 	recipients := make([]Recipient, len(recipientsArr))
 	for i, rv := range recipientsArr {
 		rArr := rv.Array()
@@ -641,6 +696,9 @@ func UnmarshalSignWith(data []byte, lim DecodeLimits) (*Sign, error) {
 		return nil, fmt.Errorf("%w: signatures must be array", ErrMalformed)
 	}
 
+	if err := checkCount("signatures", len(sigsArr), lim.MaxSignatures, defaultMaxSignatures); err != nil {
+		return nil, err
+	}
 	signatures := make([]Signature, len(sigsArr))
 	for i, sv := range sigsArr {
 		sArr := sv.Array()
@@ -812,6 +870,9 @@ func UnmarshalMacWith(data []byte, lim DecodeLimits) (*Mac, error) {
 		return nil, fmt.Errorf("%w: recipients must be array", ErrMalformed)
 	}
 
+	if err := checkCount("recipients", len(recipientsArr), lim.MaxRecipients, defaultMaxRecipients); err != nil {
+		return nil, err
+	}
 	recipients := make([]Recipient, len(recipientsArr))
 	for i, rv := range recipientsArr {
 		rArr := rv.Array()

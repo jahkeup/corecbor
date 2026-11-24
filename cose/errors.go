@@ -49,6 +49,11 @@ var (
 	// inside a *KeyParamError and also wraps ErrMalformed.
 	// KeepParamsAsReceived keeps such parameters instead.
 	ErrNonFiniteKeyParam = errors.New("cose: non-finite float in key parameter")
+
+	// ErrLimitExceeded indicates a message with more signatures or
+	// recipients than its DecodeLimits allow. The Unmarshal* functions
+	// return it wrapped with ErrMalformed.
+	ErrLimitExceeded = errors.New("cose: decode limit exceeded")
 )
 
 // KeyParamError reports which COSE_Key parameter failed and why. Label

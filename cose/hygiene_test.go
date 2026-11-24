@@ -170,8 +170,11 @@ func TestErrorChains(t *testing.T) {
 	if !errors.Is(err, ErrMalformed) || !errors.Is(err, corecbor.ErrMaxNestingDepth) {
 		t.Fatalf("err = %v, want ErrMalformed and corecbor.ErrMaxNestingDepth", err)
 	}
-	if _, err := UnmarshalSign1(hx(t, deep)); err != nil {
-		t.Fatalf("UnmarshalSign1 keeps v0.2.2 limits: %v", err)
+	if _, err := UnmarshalSign1(hx(t, deep)); !errors.Is(err, corecbor.ErrMaxNestingDepth) {
+		t.Fatalf("UnmarshalSign1 is bounded by default (037 S8): err = %v", err)
+	}
+	if _, err := UnmarshalSign1With(hx(t, deep), InsecureUnboundedDecodeLimits); err != nil {
+		t.Fatalf("InsecureUnboundedDecodeLimits keeps v0.2.2 limits: %v", err)
 	}
 
 	// Key errors keep their cause.
@@ -184,11 +187,11 @@ func TestErrorChains(t *testing.T) {
 func TestDecodeLimits(t *testing.T) {
 	big := "84" + "40" + "a1" + "04" + "5a00100000" + strings.Repeat("00", 1<<20) + "40" + "40" // kid of 1 MiB
 	data := hx(t, big)
-	if _, err := UnmarshalSign1(data); err != nil {
-		t.Fatalf("zero limits: %v", err)
+	if _, err := UnmarshalSign1(data); !errors.Is(err, cbor.ErrMemoryBudgetExceeded) {
+		t.Fatalf("default limits (037 S8): err = %v, want ErrMemoryBudgetExceeded", err)
 	}
-	if _, err := UnmarshalSign1With(data, DecodeLimits{}); err != nil {
-		t.Fatalf("DecodeLimits{}: %v", err)
+	if _, err := UnmarshalSign1With(data, InsecureUnboundedDecodeLimits); err != nil {
+		t.Fatalf("InsecureUnboundedDecodeLimits: %v", err)
 	}
 	if _, err := UnmarshalSign1With(data, RecommendedDecodeLimits); !errors.Is(err, cbor.ErrMemoryBudgetExceeded) {
 		t.Fatalf("recommended: err = %v, want ErrMemoryBudgetExceeded", err)

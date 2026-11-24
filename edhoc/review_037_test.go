@@ -152,10 +152,12 @@ func TestE2_PeerKeyUseFromCOSEKey(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite2}, Method: method, PrivateKey: rSig, ConnectionID: []byte{2},
+		res, err := NewResponder(ResponderConfig{
+			Suites: []CipherSuite{Suite2}, Method: method, PrivateKey: rSig, ConnectionID: []byte{2},
 			Peers: resolverFunc(func(context.Context, IDCred) (*Credential, error) {
 				return &Credential{Raw: ccs, PublicKey: iPub}, nil
-			})})
+			}),
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +169,8 @@ func TestE2_PeerKeyUseFromCOSEKey(t *testing.T) {
 		alg    cose.Algorithm
 		ops    []cose.KeyOp
 	}{
-		{"ES256 key for static DH", MethodStatSig, cose.AlgES256, nil},
+		{"ESP256 key for static DH", MethodStatSig, cose.AlgESP256, nil},
+		{"ES256 key for static DH", MethodStatSig, cose.Algorithm(-7), nil},
 		{"verify-only key for static DH", MethodStatSig, 0, []cose.KeyOp{cose.KeyOpVerify}},
 		{"ECDH-ES key for signatures", MethodSigSig, cose.AlgECDH_ES_HKDF_256, nil},
 		{"deriveBits-only key for signatures", MethodSigSig, 0, []cose.KeyOp{cose.KeyOpDeriveBits}},
@@ -186,7 +189,7 @@ func TestE2_PeerKeyUseFromCOSEKey(t *testing.T) {
 	if err := run(MethodStatSig, true, cose.AlgECDH_ES_HKDF_256); err != nil {
 		t.Errorf("ECDH-ES key for static DH: %v", err)
 	}
-	if err := run(MethodSigSig, true, cose.AlgES256, cose.KeyOpVerify); err != nil {
+	if err := run(MethodSigSig, true, cose.Algorithm(-7), cose.KeyOpVerify); err != nil { // ES256
 		t.Errorf("ES256 key for signatures: %v", err)
 	}
 }
@@ -623,8 +626,10 @@ func TestE15_TaggedKCWTIsUntaggedCRED(t *testing.T) {
 	caPriv, caPub := edPair(t)
 	tok := cwtFor(t, caPriv, iPub, func(c *cwt.ClaimsSet) { c.Expiration = time.Now().Add(time.Hour) })
 	tagged := append([]byte{0xd8, 0x3d}, tok...) // 61(CWT)
-	ini, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{1},
-		Credential: &Credential{Type: CredentialCWT, CWTBytes: tagged}})
+	ini, err := NewInitiator(InitiatorConfig{
+		Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{1},
+		Credential: &Credential{Type: CredentialCWT, CWTBytes: tagged},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -873,8 +878,10 @@ func TestE20_Limits(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite0}, PrivateKey: rKey, ConnectionID: []byte{2}, Credential: rCred, Peers: X509Resolver(pki.policy()),
-			Limits: Limits{MaxCertificates: c.limit}})
+		res, err := NewResponder(ResponderConfig{
+			Suites: []CipherSuite{Suite0}, PrivateKey: rKey, ConnectionID: []byte{2}, Credential: rCred, Peers: X509Resolver(pki.policy()),
+			Limits: Limits{MaxCertificates: c.limit},
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -919,8 +926,10 @@ func cwtPair(t *testing.T, mut func(*cwt.ClaimsSet), rmut func(*ResponderConfig)
 	rPriv, rPub := edPair(t)
 	caPriv, caPub := edPair(t)
 	tok := cwtFor(t, caPriv, iPub, mut)
-	ic := InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{1},
-		Credential: &Credential{Type: CredentialCWT, CWTBytes: tok}}
+	ic := InitiatorConfig{
+		Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{1},
+		Credential: &Credential{Type: CredentialCWT, CWTBytes: tok},
+	}
 	rc := ResponderConfig{Suites: []CipherSuite{Suite0}, PrivateKey: rPriv, CWTIssuerKey: caPub, ConnectionID: []byte{2}}
 	if rmut != nil {
 		rmut(&rc)

@@ -77,6 +77,7 @@ type session struct {
 	th2, th3, th4            []byte
 	prk2e, prk3e2m, prk4e3m  []byte
 	prkOut, prkExporter      []byte
+	k4, iv4, a4              []byte // message_4 AEAD inputs, kept until used
 	message4Sent, message4OK bool
 
 	// trace, when set (tests), receives intermediate values by their
@@ -104,12 +105,19 @@ func (s *session) fail(err error) error {
 }
 
 func (s *session) zeroize() {
-	for _, b := range [][]byte{s.th2, s.th3, s.th4, s.prk2e, s.prk3e2m, s.prk4e3m, s.prkOut, s.prkExporter, s.hMsg1} {
-		clear(b)
-	}
-	s.th2, s.th3, s.th4 = nil, nil, nil
-	s.prk2e, s.prk3e2m, s.prk4e3m, s.prkOut, s.prkExporter, s.hMsg1 = nil, nil, nil, nil, nil, nil
+	drop(&s.th2, &s.th3, &s.th4, &s.prk2e, &s.prk3e2m, &s.prk4e3m, &s.prkOut, &s.prkExporter, &s.hMsg1, &s.k4, &s.iv4, &s.a4)
 	s.eph = nil
+}
+
+// drop zeroizes and forgets intermediate values once nothing derives
+// from them any more (RFC 9528 §9: intermediate values MUST be deleted
+// after key derivation). An *ecdh.PrivateKey can't be zeroized in
+// place; dropping the reference is the most Go allows.
+func drop(bs ...*[]byte) {
+	for _, b := range bs {
+		clear(*b)
+		*b = nil
+	}
 }
 
 func (s *session) close() {
@@ -265,6 +273,7 @@ func (s *session) computeTH2(gy []byte) {
 	s.th2 = s.suite.h(bstrItem(gy), bstrItem(s.hMsg1))
 	s.t("H(message_1)", s.hMsg1)
 	s.t("TH_2", s.th2)
+	drop(&s.hMsg1)
 }
 
 func (s *session) createMessage2() ([]byte, error) {
@@ -338,6 +347,10 @@ func (s *session) createMessage2() ([]byte, error) {
 	clear(ks)
 	s.th3 = su.h(bstrItem(s.th2), pt2, s.ownCred.Raw)
 	s.t("TH_3", s.th3)
+	drop(&s.prk2e, &s.th2)
+	if s.method.initiatorSigns() {
+		s.eph = nil // only PRK_4e3m for a static DH Initiator needs Y
+	}
 	s.state = stateWaitM3
 	return bstrItem(append(gy, ct2...)), nil
 }
@@ -431,6 +444,9 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 			return nil, s.fail(err)
 		}
 	}
+	// X is not needed past PRK_3e2m: PRK_4e3m uses the Initiator's
+	// static key and G_Y.
+	s.eph = nil
 	if err := s.verifySignOrMAC(2, encodeCID(s.peerCID), peerID, peerCred, s.th2, ead2Raw, som, s.method.responderSigns()); err != nil {
 		return nil, s.fail(err)
 	}
@@ -439,6 +455,7 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 	s.peerCred, s.peerEAD = peerCred, ead2
 	s.th3 = su.h(bstrItem(s.th2), pt2, peerCred.Raw)
 	s.t("TH_3", s.th3)
+	drop(&s.prk2e, &s.th2)
 
 	// PRK_4e3m (§4.1.1.3).
 	if s.method.initiatorSigns() {
@@ -683,6 +700,7 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 			return s.fail(err)
 		}
 	}
+	s.eph = nil
 	if err := s.verifySignOrMAC(3, nil, peerID, peerCred, s.th3, ead3Raw, som, s.method.initiatorSigns()); err != nil {
 		return s.fail(err)
 	}
@@ -699,7 +717,9 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 }
 
 // deriveOut computes PRK_out and PRK_exporter (§4.1.3, §4.2.1) and
-// drops values no longer needed.
+// the message_4 key and nonce, then drops every intermediate value:
+// afterwards only PRK_out, PRK_exporter and, until message_4 is sent or
+// received, K_4 and IV_4 remain.
 func (s *session) deriveOut() error {
 	var err error
 	if s.prkOut, err = s.suite.kdf(s.prk4e3m, labelPRKOut, s.th4, s.suite.hashSize); err != nil {
@@ -710,8 +730,12 @@ func (s *session) deriveOut() error {
 	}
 	s.t("PRK_out", s.prkOut)
 	s.t("PRK_exporter", s.prkExporter)
-	clear(s.prk2e)
-	s.prk2e, s.eph = nil, nil
+	if s.k4, s.iv4, err = s.aead(s.prk4e3m, labelK4, labelIV4, s.th4); err != nil {
+		return err
+	}
+	s.a4 = encStructure(s.th4)
+	drop(&s.prk2e, &s.prk3e2m, &s.prk4e3m, &s.th2, &s.th3, &s.th4, &s.hMsg1)
+	s.eph = nil
 	return nil
 }
 
@@ -737,12 +761,16 @@ func (s *session) seal(prk []byte, kl, ivl int64, th, pt []byte) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	defer clear(key)
+	defer drop(&key, &iv)
+	return s.sealWith(key, iv, encStructure(th), pt)
+}
+
+func (s *session) sealWith(key, iv, aad, pt []byte) ([]byte, error) {
 	a, err := newAEAD(s.suite.aead, key)
 	if err != nil {
 		return nil, err
 	}
-	return a.Seal(nil, iv, pt, encStructure(th)), nil
+	return a.Seal(nil, iv, pt, aad), nil
 }
 
 func (s *session) open(prk []byte, kl, ivl int64, th, ct []byte) ([]byte, error) {
@@ -750,12 +778,16 @@ func (s *session) open(prk []byte, kl, ivl int64, th, ct []byte) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
-	defer clear(key)
+	defer drop(&key, &iv)
+	return s.openWith(key, iv, encStructure(th), ct)
+}
+
+func (s *session) openWith(key, iv, aad, ct []byte) ([]byte, error) {
 	a, err := newAEAD(s.suite.aead, key)
 	if err != nil {
 		return nil, err
 	}
-	pt, err := a.Open(nil, iv, ct, encStructure(th))
+	pt, err := a.Open(nil, iv, ct, aad)
 	if err != nil {
 		return nil, fmt.Errorf("%w: decryption failed", ErrAuthentication)
 	}
@@ -775,10 +807,11 @@ func (s *session) createMessage4() ([]byte, error) {
 	if err != nil {
 		return nil, s.fail(err)
 	}
-	ct4, err := s.seal(s.prk4e3m, labelK4, labelIV4, s.th4, ead4)
+	ct4, err := s.sealWith(s.k4, s.iv4, s.a4, ead4)
 	if err != nil {
 		return nil, s.fail(err)
 	}
+	drop(&s.k4, &s.iv4, &s.a4)
 	s.message4Sent = true
 	return bstrItem(ct4), nil
 }
@@ -801,10 +834,11 @@ func (s *session) processMessage4(msg4 []byte) error {
 	if r.more() {
 		return s.fail(fmt.Errorf("%w: trailing bytes after message_4", ErrMessageFormat))
 	}
-	pt4, err := s.open(s.prk4e3m, labelK4, labelIV4, s.th4, ct4)
+	pt4, err := s.openWith(s.k4, s.iv4, s.a4, ct4)
 	if err != nil {
 		return s.fail(err)
 	}
+	drop(&s.k4, &s.iv4, &s.a4)
 	ead4, err := decodeEAD(s.reader(pt4), s.accept)
 	if err != nil {
 		return s.fail(err)

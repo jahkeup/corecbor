@@ -411,6 +411,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | A received C_I, C_R or compact kid that is a one-byte CBOR integer encoding sent as a byte string (`41 01` for `01`) is rejected with `ErrMessageFormat` (RFC 9528 §3.3.2) | accepted, though the docs said such identifiers are sent as integers | `AcceptNonDeterministicEncoding` |
 | `ExportOSCORE`/`OSCORE` fail with `ErrStateViolation` when C_I or C_R is longer than an OSCORE Sender/Recipient ID may be for the suite's AEAD (nonce length − 6: 7 bytes for AES-CCM, 6 for GCM/ChaCha20, RFC 8613 §3.3) | a context with unusable IDs was returned | none (contract defect: RFC 8613 §3.3) |
 | PLAINTEXT_2 longer than 255 hash lengths (8160 bytes for SHA-256, RFC 9528 Appendix G) fails up front, naming PLAINTEXT_2: `ErrStateViolation` when building message_2, `ErrMessageFormat` when receiving it | an `ErrMessageFormat` from EDHOC_KDF after the key schedule had run | none (contract defect) |
+| Intermediate values (ephemeral keys, PRK_2e/3e2m/4e3m, TH_2–TH_4, H(message_1)) are zeroized as soon as nothing derives from them; a completed session keeps only PRK_out, PRK_exporter and, until message_4, K_4/IV_4 | kept until `Close` or failure | none (safety defect, 034; RFC 9528 §9) |
 
 ## eat (032)
 

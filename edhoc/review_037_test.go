@@ -723,6 +723,54 @@ func TestE13_Plaintext2Size(t *testing.T) {
 	}
 }
 
+// E16: intermediate keys are deleted once derived from (RFC 9528 §9),
+// not kept until Close.
+func TestE16_IntermediateValuesDeleted(t *testing.T) {
+	for _, m := range []Method{MethodSigSig, MethodStatStat} {
+		ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
+			if m == MethodStatStat {
+				iDH, _ := ecdh.X25519().GenerateKey(rand.Reader)
+				rDH, _ := ecdh.X25519().GenerateKey(rand.Reader)
+				ic.Method, ic.DHKey, ic.PeerPublic = m, iDH, rDH.PublicKey()
+				rc.Method, rc.DHKey, rc.PeerPublic = m, rDH, iDH.PublicKey()
+			}
+		})
+		m1, _ := ini.CreateMessage1()
+		m2, err := res.ProcessMessage1(m1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s := res.s; s.prk2e != nil || s.th2 != nil || s.hMsg1 != nil {
+			t.Errorf("method %d: Responder keeps PRK_2e/TH_2/H(message_1) after message_2", m)
+		}
+		m3, err := ini.ProcessMessage2(m2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := res.ProcessMessage3(m3); err != nil {
+			t.Fatal(err)
+		}
+		for name, s := range map[string]*session{"Initiator": ini.s, "Responder": res.s} {
+			if s.eph != nil || s.prk2e != nil || s.prk3e2m != nil || s.prk4e3m != nil || s.th2 != nil || s.th3 != nil || s.th4 != nil || s.hMsg1 != nil {
+				t.Errorf("method %d: %s keeps intermediate values after completion", m, name)
+			}
+			if s.prkOut == nil || s.prkExporter == nil {
+				t.Errorf("method %d: %s lost PRK_out/PRK_exporter", m, name)
+			}
+		}
+		m4, err := res.CreateMessage4()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ini.ProcessMessage4(m4); err != nil {
+			t.Fatal(err)
+		}
+		if ini.s.k4 != nil || res.s.k4 != nil {
+			t.Errorf("method %d: K_4 kept after message_4", m)
+		}
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

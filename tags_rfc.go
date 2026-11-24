@@ -9,8 +9,8 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 )
 
-// Tag numbers and helpers for envelope formats and published tag RFCs
-// (proposal 026). See package cbor for the documentation of each.
+// Tag numbers and helpers for envelope formats and published tag RFCs.
+// See package cbor for the documentation of each.
 
 const (
 	TagCOSEEncrypt0      = cbor.TagCOSEEncrypt0

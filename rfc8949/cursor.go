@@ -185,7 +185,7 @@ func (c *Cursor) Bytes() ([]byte, error) {
 // Advances the cursor past the item.
 func (c *Cursor) Decode() (cbor.Value, error) {
 	// Nesting depth continues from the containers the cursor is in.
-	// Error offsets are offsets in the cursor's source (037 C19).
+	// Error offsets are offsets in the cursor's source.
 	v, next, err := decodeFrom(c.src, c.pos, c.depth(), c.opts)
 	if err != nil {
 		return cbor.Value{}, err
@@ -318,7 +318,7 @@ func (c *Cursor) ExitMap() error {
 
 // FindMapKey positions the cursor at the value that Decode would keep
 // for the text key key in the current map, scanning forward from the
-// cursor. Keys are resolved as Decode resolves them (proposal 037 C7):
+// cursor. Keys are resolved as Decode resolves them:
 //
 //   - Under the default KeyIdentityValue, any encoding of the text
 //     matches: a non-shortest length, or an indefinite-length text
@@ -622,7 +622,7 @@ func (c *Cursor) skipAt(off, depth, reserve int, strip bool) (int, error) {
 			return off, decodeErr(cbor.ErrUnknownTag, off)
 		}
 		if strip && h.Arg == cbor.TagSelfDescribe {
-			// Strip the whole chain in a loop, as Decode does (037 C1).
+			// Strip the whole chain in a loop, as Decode does.
 			return c.skipAt(skipSelfDescribe(src, pos, &o), depth, reserve, true)
 		}
 		if depth+1 > o.maxNesting() {

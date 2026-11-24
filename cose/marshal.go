@@ -28,7 +28,7 @@ var sharedEncoder = corecbor.NewShared(corecbor.ModeCoreDeterministic)
 // InsecureUnboundedDecodeLimits removes them all.
 //
 // v0.2 decoded with no budget, nesting depth 256 and any number of
-// signatures and recipients (proposal 037 S8).
+// signatures and recipients.
 type DecodeLimits struct {
 	// MemoryBudget caps decode allocations in bytes; 0 means 1 MiB, and
 	// a negative value means no budget.
@@ -53,9 +53,8 @@ type DecodeLimits struct {
 	// a bucket resolves last-wins, and a label may appear in both the
 	// protected and unprotected buckets.
 	//
-	// Deprecated: duplicate labels are invalid (RFC 9052 §3, proposal
-	// 027 H4). Retained for migration only; removed no earlier than
-	// v0.5.0.
+	// Deprecated: duplicate labels are invalid (RFC 9052 §3). Retained for
+	// migration only; removed no earlier than v0.5.0.
 	AllowDuplicateLabels bool
 }
 

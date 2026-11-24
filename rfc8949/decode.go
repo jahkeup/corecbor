@@ -26,7 +26,7 @@ type DecodeOpts struct {
 	RejectNonFiniteFloats  bool
 	RejectNullMapKeys      bool
 	// ReplaceInvalidUTF8 substitutes U+FFFD per invalid byte in decoded
-	// text strings (InvalidUTF8Replace, proposal 035). Ignored when
+	// text strings (InvalidUTF8Replace). Ignored when
 	// RejectInvalidUTF8 is set.
 	ReplaceInvalidUTF8 bool
 
@@ -50,7 +50,7 @@ type DecodeOpts struct {
 	ZeroCopy bool
 
 	// KeyIdentity selects when two map keys are the same key for
-	// duplicate handling (proposal 024). The zero value is
+	// duplicate handling. The zero value is
 	// KeyIdentityValue (RFC 8949 §5.6.1 data model).
 	KeyIdentity KeyIdentity
 	// KeepDuplicateMapKeys keeps every map entry in input order instead
@@ -63,7 +63,7 @@ type DecodeOpts struct {
 	// Deprecated: v0.2 compatibility only; removed no earlier than v0.5.0.
 	LegacyFloatKeyEquality bool
 
-	// Checking decoder (proposal 024). These run after a successful
+	// Checking decoder. These run after a successful
 	// decode, over the item's bytes.
 	//
 	// RequirePreferred rejects input not in RFC 8949 §4.1 preferred
@@ -81,13 +81,13 @@ type DecodeOpts struct {
 	// the deterministic encoders write: the rule of
 	// draft-ietf-cbor-serialization-13 §4, and of the root package's
 	// RequireDeterministic so that accepted input re-encodes to the same
-	// bytes (proposal 037 C9). Errors wrap ErrNotPreferred.
+	// bytes. Errors wrap ErrNotPreferred.
 	RequireCanonicalNaN bool
 	// RejectInvalidTagContent rejects a tag whose content is not valid
 	// for it (RFC 8949 §3.4, §5.3.2) with an error wrapping
 	// cbor.ErrMalformedTag. It covers the tags RFC 8949 §3.4 defines,
 	// the modeled tags and the RFC 8746 typed arrays; others accept any
-	// content (proposal 037 C10). It sits with the other one-byte
+	// content. It sits with the other one-byte
 	// fields so DecodeOpts, copied per nested item, doesn't grow.
 	RejectInvalidTagContent bool
 
@@ -154,7 +154,7 @@ func StrictOpts() DecodeOpts {
 		RejectNonFiniteFloats:  true,
 		RejectNullMapKeys:      true,
 		// Strict decoding rejects invalid data items, and invalid tag
-		// content makes an item invalid (RFC 8949 §5.3.2, 037 C10).
+		// content makes an item invalid (RFC 8949 §5.3.2).
 		RejectInvalidTagContent: true,
 	}
 }
@@ -187,8 +187,7 @@ func Decode(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
 // DecodeAt decodes the item that starts at src[off:], as Decode decodes
 // src[off:], and returns it with the offset in src just past it. Error
 // offsets are offsets in src, so a caller decoding consecutive items of
-// one buffer (a CBOR sequence) gets offsets in the whole buffer
-// (proposal 037 C19).
+// one buffer (a CBOR sequence) gets offsets in the whole buffer.
 func DecodeAt(src []byte, off int, opts DecodeOpts) (cbor.Value, int, error) {
 	return decodeFrom(src, off, 0, opts)
 }
@@ -462,7 +461,7 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
 		// Each chunk is a text string in its own right, so a character
-		// can't be split between chunks (RFC 8949 §3.2.3, 037 C12).
+		// can't be split between chunks (RFC 8949 §3.2.3).
 		if opts.RejectInvalidUTF8 && !utf8.Valid(src[start:end]) {
 			return cbor.Value{}, off, decodeErr(cbor.ErrInvalidUTF8, off)
 		}
@@ -509,8 +508,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	}
 	srcLen := len(src)
 	// Short strings take the inline paths below unless a memory budget
-	// or a string limit under 24 bytes needs the checked path (037 C3,
-	// C5). Deciding once keeps the per-element cost to one test; charging
+	// or a string limit under 24 bytes needs the checked path. Deciding once keeps the per-element cost to one test; charging
 	// the budget inline instead cost the no-budget path 7–13%.
 	inlineStr := opts.Budget == nil && (opts.MaxByteStringLength <= 0 || opts.MaxByteStringLength >= 23)
 	_ = arr[count-1]
@@ -821,7 +819,7 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 	opts.spans = nil
 	// Start as a small map does and switch to the hashed key set once the
 	// map outgrows dedupThreshold, so duplicate tracking stays linear in
-	// the number of entries (037 C2).
+	// the number of entries.
 	ks := getKeySet(0, &opts)
 	defer func() { putKeySet(ks) }()
 	pos := off
@@ -888,7 +886,7 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if tagID == cbor.TagSelfDescribe && stripSelfDescribe {
 		// Strip the whole chain of leading self-describe tags in a loop:
 		// they add no nesting depth, so recursing once per tag would let
-		// a long chain overflow the stack (proposal 037 C1). The item
+		// a long chain overflow the stack. The item
 		// after the chain is decoded as before; a head the loop doesn't
 		// take (another tag, or a 55799 head the options reject) is
 		// checked there.

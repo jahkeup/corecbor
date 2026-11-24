@@ -14,8 +14,7 @@ import (
 // value keeps its v0.2.2 behavior (exp optional, iat unchecked) except
 // for the audience check: a token carrying aud is rejected unless the
 // Validator accepts one of its audiences (RFC 7519 §4.1.3; v0.2.2
-// accepted any aud when Audience was unset, a fail-open defect fixed
-// under proposal 034). Use NewValidator for current-standards defaults.
+// accepted any aud when Audience was unset, a fail-open defect). Use NewValidator for current-standards defaults.
 // Other fields added after v0.2.2 change nothing at their zero value.
 type Validator struct {
 	// Audience, when set, is an audience this processor identifies

@@ -45,8 +45,8 @@ func WithMACKnownCriticalHeaders(labels ...any) MACOption {
 }
 
 // WithStrictMACKeyLength requires the HMAC key to be at least as long as
-// the hash output (RFC 9053 §3.1). That is the default since proposal
-// 037, so this option changes nothing; it undoes an earlier
+// the hash output (RFC 9053 §3.1). That is the default since v0.3, so this option changes nothing; it
+// undoes an earlier
 // InsecureAllowShortMACKeys in the same option list.
 func WithStrictMACKeyLength() MACOption {
 	return func(o *macOpts) { o.shortKey = false }
@@ -86,7 +86,7 @@ func AllowMACProtectedRecipientHeaders() MACOption {
 // verification. There is no MAC counterpart to WithLegacyECDHES: v0.2
 // ECDH-ES MAC recipients discarded the MAC key and never verified.
 //
-// Deprecated: interop with corecbor v0.2 only (proposal 029); removed
+// Deprecated: interop with corecbor v0.2 only; removed
 // no earlier than v0.5.0.
 func WithLegacyMACPBES2Labels() MACOption {
 	return func(o *macOpts) { o.legacy.pbes2 = true }
@@ -98,8 +98,8 @@ func WithLegacyMACPBES2Labels() MACOption {
 // (VerifyMACMulti), and crit isn't processed. It does not re-enable
 // header-selected HMAC 256/64 in VerifyMACMulti; use WithMACAlgorithms.
 //
-// Deprecated: proposal 027 H2/H3 (RFC 9052 §3.1). Retained for
-// migration only; removed no earlier than v0.5.0.
+// Deprecated: ignores the header alg and crit (RFC 9052 §3.1). Retained
+// for migration only; removed no earlier than v0.5.0.
 func WithLegacyMACHeaders() MACOption {
 	return func(o *macOpts) {
 		o.policy.legacyAlg = true

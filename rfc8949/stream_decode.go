@@ -35,7 +35,7 @@ import (
 // makes DecodeFrom read.
 //
 // The item's encoded size is limited to DefaultMaxItemSize; use
-// DecodeFromLimit to choose another bound or none (proposal 037 C4).
+// DecodeFromLimit to choose another bound or none.
 func DecodeFrom(r io.Reader, opts DecodeOpts) (cbor.Value, error) {
 	return DecodeFromLimit(r, opts, 0)
 }
@@ -263,7 +263,7 @@ func (ir *itemReader) readN(n uint64) error {
 		}
 		start := len(ir.buf)
 		// The buffered bytes count toward the memory budget before they
-		// are read, so a budget bounds the reading (037 C4).
+		// are read, so a budget bounds the reading.
 		if err := ir.opts.Budget.charge(int(chunk), start); err != nil {
 			return err
 		}
@@ -451,7 +451,7 @@ func (ir *itemReader) read() error {
 			if h.Arg == cbor.TagSelfDescribe && top == nil {
 				// A leading self-describe tag is stripped: it adds no
 				// nesting and needs no frame, so a long chain of them
-				// costs no memory beyond its bytes (037 C1).
+				// costs no memory beyond its bytes.
 				continue
 			}
 			if depth+1 > opts.maxNesting() {

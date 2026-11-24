@@ -26,7 +26,7 @@ const (
 // The zero value verifies with no key (VerifyToken returns
 // ErrKeyResolution) and validates with NewValidator().
 type VerifyOptions struct {
-	// Keys resolves the verification key for VerifyToken (proposal 028).
+	// Keys resolves the verification key for VerifyToken.
 	// Unused by VerifyMACToken and OpenToken, which take the key.
 	Keys cose.KeyResolver
 

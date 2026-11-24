@@ -28,8 +28,8 @@ const (
 	// serialization of draft-ietf-cbor-serialization-13 §4 (shortest
 	// arguments and floats, NaN as f97e00, preferred bignums, definite
 	// lengths) while keeping map entries in insertion order. The name and
-	// rules are provisional until the draft is published as an RFC
-	// (proposal 034, Draft class). Go maps marshaled in this mode follow
+	// rules are provisional until the draft is published as an RFC.
+	// Go maps marshaled in this mode follow
 	// Go's map iteration order and are therefore not deterministic.
 	ModePreferredPlus Mode = iota
 )
@@ -43,9 +43,9 @@ type encodeConfig struct {
 	legacyBignum         bool
 	bufferPool           *sync.Pool
 	invalidUTF8          rfc8949.InvalidUTF8
-	goNames              bool // WithGoFieldNames (proposal 025)
-	checkTagContent      bool // CheckTagContent (proposal 037)
-	checkDuplicateKeys   bool // CheckDuplicateMapKeys (proposal 037)
+	goNames              bool // WithGoFieldNames
+	checkTagContent      bool // CheckTagContent
+	checkDuplicateKeys   bool // CheckDuplicateMapKeys
 }
 
 type Option func(*encodeConfig)
@@ -62,7 +62,7 @@ func AllowInvalidUTF8() Option {
 }
 
 // WithInvalidUTF8 selects how the encoder writes text that is not valid
-// UTF-8 (proposal 035): InvalidUTF8Reject (the default) returns
+// UTF-8: InvalidUTF8Reject (the default) returns
 // ErrInvalidUTF8; InvalidUTF8Allow writes it unchanged (not conformant);
 // InvalidUTF8Replace substitutes U+FFFD for each invalid byte;
 // InvalidUTF8Lossless writes conformant CBOR that keeps the exact bytes
@@ -82,7 +82,7 @@ func WithInvalidUTF8(p InvalidUTF8) Option {
 // modes write the RFC 8949 §3.4.3 preferred form: leading zeros
 // stripped, and values that fit 64 bits as plain integers.
 //
-// Deprecated: v0.2 compatibility only (proposal 024); removed no
+// Deprecated: v0.2 compatibility only; removed no
 // earlier than v0.5.0.
 func WithLegacyBignumPassthrough() Option {
 	return func(c *encodeConfig) { c.legacyBignum = true }
@@ -90,7 +90,7 @@ func WithLegacyBignumPassthrough() Option {
 
 // CompatV02 applies every encoder selector needed to reproduce v0.2.x
 // output: currently WithLegacyBignumPassthrough. It exists to unblock
-// upgrades, not as a long-term mode (proposal 034).
+// upgrades, not as a long-term mode.
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02() Option {
@@ -101,7 +101,7 @@ func CompatV02() Option {
 // ErrMalformedTag for a tag Value whose content is not valid for it,
 // such as tag 2 around a text string or tag 0 around an integer, under
 // the rules RejectInvalidTagContent applies on decode. Without it the
-// encoder writes tag content as given (proposal 037 C10).
+// encoder writes tag content as given.
 func CheckTagContent() Option {
 	return func(c *encodeConfig) { c.checkTagContent = true }
 }
@@ -109,8 +109,7 @@ func CheckTagContent() Option {
 // CheckDuplicateMapKeys makes ModePermissive return an error wrapping
 // ErrDuplicateMapKey for a map whose keys repeat in the CBOR data model
 // (RFC 8949 §5.6), as the other modes always do: such a map is not
-// valid CBOR. Without it Permissive writes the entries as given
-// (proposal 037 C11).
+// valid CBOR. Without it Permissive writes the entries as given.
 func CheckDuplicateMapKeys() Option {
 	return func(c *encodeConfig) { c.checkDuplicateKeys = true }
 }
@@ -212,8 +211,7 @@ func (e *Encoder) encodeOpts() rfc8949.EncodeOpts {
 		opts.Deterministic = true
 		opts.SortMode = rfc8949.SortNone
 		opts.FloatMode = rfc8949.FloatShortest
-		// It doesn't sort, so the sort can't catch repeated keys
-		// (037 C11).
+		// It doesn't sort, so the sort can't catch repeated keys.
 		opts.RejectDuplicateMapKeys = true
 	}
 	return opts

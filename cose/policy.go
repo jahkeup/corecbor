@@ -12,15 +12,15 @@ import (
 )
 
 // headerPolicy is the verification policy shared by the Sign, MAC and
-// Encrypt paths (proposal 027 H2, H3).
+// Encrypt paths.
 type headerPolicy struct {
 	allowed    []Algorithm // nil: the default for the path
 	knownCrit  []any       // labels the caller processes (normalized)
 	legacyAlg  bool        // v0.2.2: don't bind the header alg
 	legacyCrit bool        // v0.2.2: ignore crit
 
-	emptyAsReceived     bool // Allow…EmptyProtectedAsReceived (037 S14)
-	requireProtectedAlg bool // Require…ProtectedAlgorithm (037 S10)
+	emptyAsReceived     bool // Allow…EmptyProtectedAsReceived
+	requireProtectedAlg bool // Require…ProtectedAlgorithm
 }
 
 // normalizeLabel converts a caller-supplied label to the form header

@@ -22,7 +22,7 @@ import (
 // assigns the real ones on publication, and they WILL change. Every
 // entry point returns ErrUnsupportedAlgorithm unless WithDraftHPKE27 is
 // passed, and the selector is renamed (not aliased) when the RFC is
-// published (proposal 034).
+// published.
 
 const (
 	headerLabelHPKEEncapsulatedKey int64 = -4 // "ek", draft-27 §7.3.1 (assumed)
@@ -36,7 +36,7 @@ const (
 //
 // Experimental: implements draft-ietf-cose-hpke-27. Code points are the
 // draft's assumed values and WILL change when IANA assigns them; this
-// selector is then renamed, per proposal 034.
+// selector is then renamed.
 func WithDraftHPKE27() EncryptOption {
 	return func(o *encryptOpts) { o.legacy.draftHPKE27 = true }
 }
@@ -148,7 +148,7 @@ func hpkeSuiteFor(alg Algorithm, ke bool) (HPKESuite, bool) {
 // checkHPKEKeyMix refuses the deprecated HPKEKey under WithDraftHPKE27:
 // it labels its recipients alg 35, which the draft assigns to HPKE-0
 // (integrated encryption), so one message would mix two meanings of
-// the identifier (proposal 037 S18).
+// the identifier.
 func checkHPKEKeyMix(d KeyDeriver, legacy legacyEncoding) error {
 	if _, ok := d.(*HPKEKey); ok && legacy.draftHPKE27 {
 		return fmt.Errorf("%w: HPKEKey's alg 35 is HPKE-0 under draft-ietf-cose-hpke-27; use HPKERecipient", ErrUnsupportedAlgorithm)

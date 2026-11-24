@@ -5,8 +5,7 @@ package cbor
 
 import "fmt"
 
-// Tag numbers for envelope formats and published tag RFCs (proposal
-// 026). These hand-picked names are the ones to use in code; the
+// Tag numbers for envelope formats and published tag RFCs. These hand-picked names are the ones to use in code; the
 // generated names in package registry exist for lookup and diagnostics.
 const (
 	TagCOSEEncrypt0      uint64 = 16    // RFC 9052 §2

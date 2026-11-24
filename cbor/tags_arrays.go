@@ -14,7 +14,7 @@ import (
 )
 
 // --- RFC 8746: float arrays of any width, multi-dimensional and
-// homogeneous arrays (proposal 037 C18) ---
+// homogeneous arrays ---
 
 // RFC 8746 §3 tags.
 const (

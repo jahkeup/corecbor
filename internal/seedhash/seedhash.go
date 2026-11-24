@@ -4,8 +4,8 @@
 // Package seedhash provides the keyed hash primitives behind map-key
 // duplicate tracking and map equality. The key is chosen at random once
 // per process (hash/maphash), so input can't be crafted to make keys
-// collide and turn linear work quadratic (hash flooding, proposal 037
-// C2). Only performance depends on the hash: callers decide equality
+// collide and turn linear work quadratic (hash flooding).
+// Only performance depends on the hash: callers decide equality
 // with an exact comparison, so results are the same in every process.
 package seedhash
 

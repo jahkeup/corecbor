@@ -167,7 +167,7 @@ func (h *Headers) encodeProtected() ([]byte, error) {
 // puts in the Sig_structure, MAC_structure or Enc_structure: those of
 // encodeProtected, except that with p.emptyAsReceived an empty bucket
 // received as a non-empty encoding (h'a0') is used as received, for
-// senders that computed over it (proposal 037 S14).
+// senders that computed over it.
 func (h *Headers) authProtected(p *headerPolicy) ([]byte, error) {
 	if p.emptyAsReceived && h.IsEmpty() && len(h.raw) > 0 {
 		return h.raw, nil

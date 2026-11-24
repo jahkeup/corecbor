@@ -12,8 +12,8 @@ import (
 	"github.com/jahkeup/corecbor/wire"
 )
 
-// InvalidUTF8 selects how text that is not valid UTF-8 is handled
-// (proposal 035). Valid UTF-8 is unaffected by every policy.
+// InvalidUTF8 selects how text that is not valid UTF-8 is handled.
+// Valid UTF-8 is unaffected by every policy.
 type InvalidUTF8 int
 
 const (

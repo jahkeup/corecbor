@@ -5,7 +5,7 @@ package corecbor
 
 import "errors"
 
-// Reflection options and sentinels (proposal 025).
+// Reflection options and sentinels.
 
 // ErrUnknownField indicates a map key that names no field of the
 // target struct, under DisallowUnknownFields.
@@ -30,7 +30,7 @@ func DisallowUnknownFields() DecoderOption {
 // int64. Targets that keep tags are unaffected: Value, any, RawTag, an
 // Unmarshaler, time.Time for tags 0 and 1, big.Int for tags 2 and 3,
 // and struct fields that declare the tag. Tag 55799 (self-describe),
-// which carries no meaning, is still dropped (proposal 037 C15).
+// which carries no meaning, is still dropped.
 func DisallowDroppedTags() DecoderOption {
 	return func(c *decodeConfig) { c.disallowDroppedTags = true }
 }
@@ -39,7 +39,7 @@ func DisallowDroppedTags() DecoderOption {
 // ErrTypeMismatch where it would store undefined (f7) into a target
 // that can't tell it from null: by default both leave a Go value at its
 // zero value, and any gets nil for both. A Value or an Unmarshaler
-// still receives undefined as it is (proposal 037 C16).
+// still receives undefined as it is.
 func DisallowUndefined() DecoderOption {
 	return func(c *decodeConfig) { c.disallowUndefined = true }
 }
@@ -48,13 +48,13 @@ func DisallowUndefined() DecoderOption {
 // it is safe for concurrent use.
 var strictUnmarshaler = StrictDecoder(WithoutInternalArena(), DisallowDroppedTags(), DisallowUndefined())
 
-// UnmarshalStrict is Unmarshal with StrictDecoder's checks (spec §3.2:
-// indefinite lengths, non-shortest arguments, invalid UTF-8, duplicate
+// UnmarshalStrict is Unmarshal with StrictDecoder's checks (indefinite
+// lengths, non-shortest arguments, invalid UTF-8, duplicate
 // map keys, non-finite floats, null map keys and invalid tag content
 // are rejected), DisallowDroppedTags and DisallowUndefined. Package
 // Unmarshal stays forgiving; use UnmarshalStrict, or a StrictDecoder's
 // Unmarshal with options of your choice, for input that must be
-// canonical and lose nothing (proposal 037 C17). It is safe for
+// canonical and lose nothing. It is safe for
 // concurrent use.
 func UnmarshalStrict(data []byte, v any) error {
 	return strictUnmarshaler.Unmarshal(data, v)
@@ -76,7 +76,7 @@ func WithCaseInsensitiveFieldNames() DecoderOption {
 // []byte-kinded targets that implement them, and other implementers
 // get a type mismatch.
 //
-// Deprecated: v0.2 compatibility only (proposal 025); removed no
+// Deprecated: v0.2 compatibility only; removed no
 // earlier than v0.5.0.
 func WithLegacyNoTextBinaryUnmarshal() DecoderOption {
 	return func(c *decodeConfig) { c.legacyNoTextBinary = true }

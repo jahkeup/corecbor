@@ -2,7 +2,7 @@
 // Copyright The corecbor Authors
 
 // Package goldentest implements the v0.2.2 golden-vector harness that
-// enforces proposal 034's semantic API stability rule: existing
+// enforces semantic API stability: existing
 // identifiers called with no new options must reproduce v0.2.2 results,
 // except for changes listed in a per-module allowlist.
 //
@@ -56,7 +56,7 @@ type file struct {
 
 // Check runs cases and compares them to the vectors in path. changes maps
 // vector IDs whose results are allowed to differ from v0.2.2 to the
-// proposal that changes them. Allowlisted mismatches are logged; any
+// reason they change. Allowlisted mismatches are logged; any
 // other mismatch, missing vector, or stale allowlist entry fails.
 func Check(t *testing.T, path string, cases []Case, changes map[string]string) {
 	t.Helper()

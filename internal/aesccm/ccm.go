@@ -5,7 +5,7 @@
 // RFC 3610, for the COSE AES-CCM algorithms (RFC 9053 §4.2): 16- or
 // 32-byte keys, 7- or 13-byte nonces, 8- or 16-byte tags.
 //
-// It is shared by the cose and edhoc modules (proposal 029), which both
+// It is shared by the cose and edhoc modules, which both
 // live under this module's import path and so may use its internal
 // packages.
 package aesccm

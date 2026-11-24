@@ -9,7 +9,7 @@ import (
 	"math"
 )
 
-// --- RFC 8746 §2: typed arrays (proposal 037 C18) ---
+// --- RFC 8746 §2: typed arrays ---
 
 // TypedArrayElem lists the Go element types of the RFC 8746 typed
 // arrays these helpers support: tags 64–75 and 77–79 (integers, in

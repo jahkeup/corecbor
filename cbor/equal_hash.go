@@ -11,8 +11,8 @@ import (
 
 // valueHash hashes a Value's data-model form with the process-keyed
 // hash, consistent with Equal: values Equal reports as equal hash
-// equally. Keyed so that input can't be crafted to collide (proposal
-// 037 C2); only performance depends on it. It follows the decoder's
+// equally. Keyed so that input can't be crafted to collide; only
+// performance depends on it. It follows the decoder's
 // map-key hash (rfc8949 keyHash); keep the two in step.
 func valueHash(v Value) uint64 {
 	switch v.Kind {

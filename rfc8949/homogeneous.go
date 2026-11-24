@@ -13,8 +13,7 @@ import (
 )
 
 // The homogeneous array decoders apply the same well-formedness rules,
-// strictness knobs, limits and memory budget as Decode (proposal 037
-// C3), and the checking-decoder options (RequirePreferred and the rest)
+// strictness knobs, limits and memory budget as Decode, and the checking-decoder options (RequirePreferred and the rest)
 // over the array's bytes. Indefinite-length arrays and string chunks
 // are not supported (ErrTypeMismatch, or ErrIndefiniteLength under
 // RejectIndefiniteLength). Interner, Arena and ZeroCopy don't apply.

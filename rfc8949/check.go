@@ -14,7 +14,7 @@ import (
 
 // checkSerialization verifies that src, one item Decode has already
 // accepted (so it is well-formed and within limits), also follows the
-// serialization rules opts asks for (proposal 024): RequirePreferred,
+// serialization rules opts asks for: RequirePreferred,
 // RequireSortedMapKeys, RequireCanonicalNaN.
 func checkSerialization(src []byte, opts DecodeOpts) error {
 	_, err := checkItem(src, 0, &opts)
@@ -30,8 +30,8 @@ func notPreferred(off int, cause error, what string) error {
 
 func checkItem(src []byte, off int, o *DecodeOpts) (int, error) {
 	// A tag's content is checked by looping rather than recursing, so a
-	// chain of self-describe tags (which Decode accepts at any length,
-	// 037 C1) can't overflow the stack.
+	// chain of self-describe tags (which Decode accepts at any length)
+	// can't overflow the stack.
 	for {
 		h := wire.ParseHead(src[off:])
 		if h.Major != wire.MajorTag {

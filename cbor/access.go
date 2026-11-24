@@ -134,7 +134,7 @@ func (v Value) Equal(w Value) bool {
 		}
 		if len(v.Pairs) > pairmatch.Small {
 			// Index w's pairs by hash so large maps compare in linear
-			// time rather than quadratic (proposal 037 C2).
+			// time rather than quadratic.
 			a, b := v.Pairs, w.Pairs
 			return pairmatch.Match(len(a),
 				func(i int) uint64 { return pairHash(&a[i]) },

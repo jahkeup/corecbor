@@ -13,7 +13,7 @@ import (
 // TextLossless returns Text(s) when s is valid UTF-8, and otherwise a
 // conformant form that keeps s's exact bytes: tag 273 (WTF-8) around a
 // byte string when s is well-formed WTF-8, or a plain byte string. It
-// lets a caller opt in to lossless text field by field (proposal 035);
+// lets a caller opt in to lossless text field by field;
 // AsText reverses it.
 func TextLossless(s string) Value {
 	if utf8.ValidString(s) {

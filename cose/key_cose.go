@@ -733,8 +733,8 @@ func (k *Key) SymmetricKey() ([]byte, error) {
 // KeyDeriver adapts a symmetric key to the encryption KeyDeriver
 // interface: alg direct gives a direct-encryption recipient whose key is
 // the content key (RFC 9052 §8.5.1), A128KW/A192KW/A256KW an AESKWKey.
-// Other key types and algorithms are ErrUnsupportedAlgorithm (ECDH-ES
-// from EC2/OKP keys is proposal 029).
+// Other key types and algorithms are ErrUnsupportedAlgorithm; for
+// ECDH-ES from EC2/OKP keys use the ECDH-ES derivers.
 //
 // For direct, the key's alg, when set, is direct or the content
 // algorithm (for example A128GCM or HMAC 256/256), and the deriver then

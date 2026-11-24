@@ -15,7 +15,7 @@ import (
 )
 
 // KeyIdentity selects when two map keys are the same key for duplicate
-// detection (proposal 024).
+// detection.
 type KeyIdentity uint8
 
 const (
@@ -93,7 +93,7 @@ func keysEqual(a, b cbor.Value, legacyFloat bool) bool {
 			return false
 		}
 		if len(a.Pairs) > pairmatch.Small {
-			// Linear rather than quadratic (037 C2). Legacy equality is
+			// Linear rather than quadratic. Legacy equality is
 			// finer than the data model, so keyHash serves it too.
 			ap, bp := a.Pairs, b.Pairs
 			return pairmatch.Match(len(ap),
@@ -149,7 +149,7 @@ func floatKeysEqual(a, b cbor.Value) bool {
 }
 
 // keyHash hashes a key's data-model form with the process-keyed hash
-// (internal/seedhash), so input can't be crafted to collide (037 C2).
+// (internal/seedhash), so input can't be crafted to collide.
 // Consistent with keysEqual (non-legacy): equal keys hash equally.
 // Legacy float equality is strictly finer, so the same hash serves it
 // too. Text and integer keys, the common case, take the short paths.

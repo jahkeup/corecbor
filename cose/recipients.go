@@ -236,9 +236,9 @@ func aesKWKeyLen(a Algorithm) int {
 }
 
 // openRecipient recovers the content key from r with deriver. The
-// recipient's alg must be present (RFC 9052 §8.5, proposal 037 S9) and
+// recipient's alg must be present (RFC 9052 §8.5) and
 // be the deriver's: an alg that doesn't match would
-// otherwise be processed as the deriver's algorithm (proposal 027 H2).
+// otherwise be processed as the deriver's algorithm.
 // The legacy PBES2 identifiers are accepted only under
 // WithLegacyPBES2Labels.
 func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLen int, o *encryptOpts) ([]byte, error) {

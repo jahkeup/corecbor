@@ -12,7 +12,7 @@
 //	# Generate from existing cache (no network):
 //	go run ./cmd/cbor-registry-gen -cache registry/registry.json -out registry/tags_gen.go
 //
-//	# Keep generated names stable (proposal 026): names in the frozen
+//	# Keep generated names stable: names in the frozen
 //	# list are always used, and new tags are appended to it.
 //	go run ./cmd/cbor-registry-gen -cache registry/registry.json -frozen registry/names_frozen.txt -out registry/tags_gen.go
 //
@@ -287,7 +287,7 @@ func unassigned(semantics string) bool {
 }
 
 // frozenNames is the checked-in tag -> constant name list. Generated
-// identifiers are API (proposal 026): once a tag has a name it keeps it.
+// identifiers are API: once a tag has a name it keeps it.
 type frozenNames struct {
 	header []string
 	byTag  map[uint64]string

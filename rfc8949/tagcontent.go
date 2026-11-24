@@ -12,8 +12,8 @@ import (
 )
 
 // tagContentProblem reports why content is not valid content for tag
-// id, or "" when it is valid or the tag is not one this check covers
-// (proposal 037 C10). It covers the tags whose content RFC 8949 §3.4
+// id, or "" when it is valid or the tag is not one this check covers.
+// It covers the tags whose content RFC 8949 §3.4
 // defines, and the tags the library models (encoder-decoder-spec.md
 // §4.3) or has helpers for:
 //

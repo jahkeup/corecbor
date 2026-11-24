@@ -56,8 +56,8 @@ func (e *Encoder) EncodeTo(w io.Writer, v Value) error {
 //
 // ModePreferredPlus keeps map entries in the order written, and returns
 // an error wrapping ErrDuplicateMapKey for a key whose bytes repeat an
-// earlier key of the same map, as Encode does for a Value (proposal 037
-// C11). Permissive streams don't check keys.
+// earlier key of the same map, as Encode does for a Value.
+// Permissive streams don't check keys.
 type StreamEncoder struct {
 	w       io.Writer // out, or &tee while a map key is being captured
 	out     io.Writer
@@ -67,7 +67,7 @@ type StreamEncoder struct {
 	scratch [9]byte
 
 	deterministic bool // verify key order (sorting modes)
-	uniqueKeys    bool // verify keys don't repeat (ModePreferredPlus, 037 C11)
+	uniqueKeys    bool // verify keys don't repeat (ModePreferredPlus)
 	checkKeys     bool // deterministic || uniqueKeys: capture map keys
 	sortMode      rfc8949.SortMode
 	capturing     int // frames currently capturing a map key's bytes
@@ -239,7 +239,7 @@ func (e *Encoder) Stream(w io.Writer) *StreamEncoder {
 	// Key order is verified only for modes that sort map keys.
 	sorted := opts.Deterministic && opts.SortMode != rfc8949.SortNone
 	// ModePreferredPlus keeps insertion order but, as Encode does, must
-	// not write a key twice (037 C11).
+	// not write a key twice.
 	unique := opts.Deterministic && opts.SortMode == rfc8949.SortNone
 	return &StreamEncoder{
 		w: w, out: w, enc: e, sortMode: opts.SortMode,
@@ -497,7 +497,7 @@ func (s *StreamEncoder) WriteUndefined() error {
 // WriteFloat32 writes a CBOR float. It writes what Encode writes for
 // Float32(v) in the encoder's mode: a single-precision float in
 // Permissive, the shortest exact width in the deterministic modes, and
-// a double in CTAP2 (proposal 037 C13). Rejects NaN/Inf unless the
+// a double in CTAP2. Rejects NaN/Inf unless the
 // encoder was constructed with AllowNonFiniteFloats.
 func (s *StreamEncoder) WriteFloat32(v float32) error {
 	if err := s.trackWrite(); err != nil {
@@ -515,8 +515,7 @@ func (s *StreamEncoder) WriteFloat32(v float32) error {
 
 // WriteFloat64 writes a CBOR float. It writes what Encode writes for
 // Float64(v) in the encoder's mode: a double in Permissive and CTAP2,
-// the shortest exact width in the other deterministic modes (proposal
-// 037 C13). Rejects NaN/Inf unless the encoder was constructed with
+// the shortest exact width in the other deterministic modes. Rejects NaN/Inf unless the encoder was constructed with
 // AllowNonFiniteFloats.
 func (s *StreamEncoder) WriteFloat64(v float64) error {
 	if err := s.trackWrite(); err != nil {
@@ -567,7 +566,7 @@ func (s *StreamEncoder) WriteSimple(v uint8) error {
 // The head is written immediately, so a tag 2/3 bignum written as
 // WriteTag + WriteBytes keeps its content as supplied. In deterministic
 // modes, pass the whole Value to WriteValue to get the RFC 8949 §3.4.3
-// preferred form Encode writes (proposal 024).
+// preferred form Encode writes.
 func (s *StreamEncoder) WriteTag(id uint64) error {
 	if err := s.startItem(false); err != nil {
 		return err
@@ -622,7 +621,7 @@ func (s *Stream) Next() bool {
 	v, err := rfc8949.DecodeFromLimit(s.br, s.dec.cfg.opts, s.dec.cfg.maxItemSize)
 	if err != nil {
 		// Only a reader that ends between items ends the stream cleanly
-		// (RFC 8742 §2): a partial last item is an error (037 C6).
+		// (RFC 8742 §2): a partial last item is an error.
 		if err != io.EOF {
 			s.err = err
 		}
@@ -642,7 +641,7 @@ func (s *Stream) Value() Value {
 // stream, not an error. A reader that ends inside an item is: the error
 // wraps ErrTruncated and io.ErrUnexpectedEOF. A DecodeError's Offset
 // counts from the start of the failing item, since a reader has no
-// position of its own (proposal 037 C19).
+// position of its own.
 func (s *Stream) Err() error {
 	return s.err
 }

@@ -22,7 +22,7 @@ type fieldInfo struct {
 	hasInt bool
 	omit   bool
 	// omitZero omits the field when its IsZero() bool method returns
-	// true, or else when reflect.Value.IsZero is (proposal 025).
+	// true, or else when reflect.Value.IsZero is.
 	omitZero bool
 	tagID    uint64
 	hasTag   bool

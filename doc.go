@@ -52,6 +52,4 @@
 // ([Uint], [NegInt], [Bytes], [Text], [Array], [Map], [Tag], ...) — not a
 // reflection-based marshal/unmarshal surface. Higher layers
 // (schema-aware codecs, COSE, CWT) build on top of this layer.
-//
-// See engineering-docs/encoder-decoder-spec.md for the full contract.
 package corecbor

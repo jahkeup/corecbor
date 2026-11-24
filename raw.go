@@ -16,8 +16,7 @@ import (
 // one well-formed item and then, in ModePermissive, writes them
 // verbatim, so the encoder's options (WithInvalidUTF8,
 // CheckDuplicateMapKeys, CheckTagContent) don't apply to what they
-// contain: text that isn't valid UTF-8 stays as it is (proposal 037
-// C20). The deterministic modes decode and re-encode the bytes, which
+// contain: text that isn't valid UTF-8 stays as it is. The deterministic modes decode and re-encode the bytes, which
 // applies those options and the mode's rules. A nil RawMessage
 // marshals as null.
 type RawMessage []byte

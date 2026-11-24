@@ -5,7 +5,7 @@ package corecbor
 
 import "github.com/jahkeup/corecbor/cbor"
 
-// RFC 8746 typed arrays (proposal 037 C18). See package cbor for the
+// RFC 8746 typed arrays. See package cbor for the
 // documentation of each.
 
 // TypedArrayElem lists the Go element types of the supported typed

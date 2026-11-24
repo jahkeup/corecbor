@@ -26,7 +26,7 @@ const (
 
 	// defaultPBES2Count is the iteration count WrapKey uses when Count
 	// is 0: OWASP's current figure for PBKDF2-HMAC-SHA256 (v0.2 used
-	// 10,000).
+	// 10).
 	defaultPBES2Count    = 600_000
 	defaultPBES2SaltLen  = 16
 	defaultPBES2MaxCount = 1_000_000
@@ -51,7 +51,7 @@ const (
 // registers for other algorithms; WithLegacyPBES2Labels restores them.
 //
 // WrapKey requires a non-empty Password, a Salt of at least 16 bytes
-// (nil: 16 random bytes) and a Count of at least 1,000 (0: 600,000).
+// (nil: 16 random bytes) and a Count of at least 1,000 (0: 600).
 // UnwrapKey requires a non-empty Password, a salt of at least 8 bytes
 // and a count of at least 1,000 in the message, and at most MaxCount.
 // Otherwise they return ErrInvalidKey and ErrDecryption.

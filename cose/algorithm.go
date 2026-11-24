@@ -81,7 +81,7 @@ const (
 
 	// AlgChaCha20Poly1305 (RFC 9053 §4.3). Registered only: there is no
 	// ChaCha20-Poly1305 in the standard library, and the cose module takes
-	// no golang.org/x/crypto dependency (proposal 029 open question).
+	// no golang.org/x/crypto dependency.
 	AlgChaCha20Poly1305 Algorithm = 24
 
 	// MAC algorithms (RFC 9053 §3.1)

@@ -12,7 +12,7 @@ import (
 	"github.com/jahkeup/corecbor/wire"
 )
 
-// Proposal 022: every Unmarshaler receives the bytes of its item
+// Every Unmarshaler receives the bytes of its item
 // exactly as they appear in the input. Targets that can reach an
 // Unmarshaler are filled by walking the (already validated) source
 // bytes; everything else keeps the Value-based path in
@@ -383,8 +383,7 @@ func (r rawState) rawMap(span []byte, val cbor.Value, target reflect.Value) erro
 // rawMapMerged handles maps whose repeated keys the decoder merged, or
 // indefinite-length maps. It asks the decoder for each resulting
 // entry's source spans (rfc8949.MapEntrySpans), so merging follows
-// exactly the configured key identity and duplicate policy (proposal
-// 024) instead of being re-derived here.
+// exactly the configured key identity and duplicate policy instead of being re-derived here.
 func (r rawState) rawMapMerged(span []byte, mt mapTarget) error {
 	m, spans, err := rfc8949.MapEntrySpans(span, r.opts)
 	if err != nil {

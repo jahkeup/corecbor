@@ -23,15 +23,13 @@ type unmarshalState struct {
 	clone bool
 	// lossless lets string targets take byte strings (and tags
 	// 272/273/274 around them) with their exact bytes
-	// (InvalidUTF8Lossless, proposal 035).
+	// (InvalidUTF8Lossless).
 	lossless bool
 
-	// Proposal 025.
 	disallowUnknown    bool // DisallowUnknownFields
 	caseInsensitive    bool // WithCaseInsensitiveFieldNames
 	legacyNoTextBinary bool // WithLegacyNoTextBinaryUnmarshal
 
-	// Proposal 037.
 	disallowDroppedTags bool // DisallowDroppedTags
 	disallowUndefined   bool // DisallowUndefined
 }
@@ -87,8 +85,7 @@ func (u unmarshalState) valueToGo(val cbor.Value, target reflect.Value) error {
 	}
 
 	// encoding.BinaryUnmarshaler takes byte strings and
-	// encoding.TextUnmarshaler text strings, mirroring encode (proposal
-	// 025; 008 documents both as supported).
+	// encoding.TextUnmarshaler text strings, mirroring encode.
 	if !u.legacyNoTextBinary && (val.Kind == cbor.KindText || val.Kind == cbor.KindBytes) &&
 		target.CanAddr() && mayHaveMethods(target.Type()) {
 		if done, err := callTextBinary(val, target); done {
@@ -237,7 +234,7 @@ func setFloat(f float64, kind cbor.Kind, target reflect.Value) error {
 	case reflect.Float32:
 		if target.OverflowFloat(f) {
 			// A float overflow, not an integer one: keep ErrOverflow but
-			// not its "integer overflow" text (037 C22).
+			// not its "integer overflow" text.
 			return &UnmarshalTypeError{
 				CBORKind: kind, GoType: target.Type(), Err: ErrOverflow,
 				msg: fmt.Sprintf("cbor: float %g overflows %s", f, target.Type()),
@@ -695,7 +692,7 @@ func decodeTime(val cbor.Value, target reflect.Value) error {
 }
 
 // decodeBigInt accepts a tag 2/3 bignum or, since deterministic modes
-// write small bignums as plain integers (RFC 8949 §3.4.3, proposal 024),
+// write small bignums as plain integers (RFC 8949 §3.4.3),
 // a major type 0/1 integer.
 func decodeBigInt(val cbor.Value, target reflect.Value) error {
 	if val.Kind != cbor.KindTag && val.Kind != cbor.KindUint && val.Kind != cbor.KindNegInt {

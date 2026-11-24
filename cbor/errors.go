@@ -123,7 +123,6 @@ var (
 	ErrInvalidOption = errors.New("cbor: conflicting options")
 )
 
-// Proposal 037.
 var (
 	// ErrInvalidChunk indicates a chunk of an indefinite-length byte or
 	// text string that is not a definite-length string of the same major
@@ -137,10 +136,7 @@ var (
 	ErrMaxItemSize = errors.New("cbor: item size exceeds limit")
 )
 
-// Proposal 025.
-var (
-	// ErrOverflow indicates that a CBOR integer value overflows the
-	// target Go type. The root package's corecbor.ErrOverflow is the
-	// same value.
-	ErrOverflow = errors.New("cbor: integer overflow for target type")
-)
+// ErrOverflow indicates that a CBOR integer value overflows the
+// target Go type. The root package's corecbor.ErrOverflow is the
+// same value.
+var ErrOverflow = errors.New("cbor: integer overflow for target type")

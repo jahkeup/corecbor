@@ -579,7 +579,7 @@ func (cs *ClaimsSet) decodeRegistered(key ClaimKey, val corecbor.Value, opts Dec
 	case ClaimScope, ClaimACEProfile, ClaimCNonce, ClaimExi:
 		// v0.2.2 kept these in Private; they stay there and also fill
 		// their typed field. An ill-typed value is an error naming the
-		// claim (RFC 9200 §5.10, 037 W21): kept as a private claim it
+		// claim (RFC 9200 §5.10): kept as a private claim it
 		// would silently not be applied.
 		if !cs.decodeACE(key.Int, val) {
 			return true, claimErr(key, aceTypes[key.Int], nil)
@@ -861,8 +861,8 @@ func decodeCnfKey(v corecbor.Value) (*cose.Key, error) {
 		return nil, fmt.Errorf("%w: COSE_Key: %w", errCnf, err)
 	}
 	// Short EC2 coordinates are left-padded as in v0.2.2; oversize ones,
-	// OKP keys without crv and off-curve points are rejected (proposal
-	// 028, RFC 9053 §7).
+	// OKP keys without crv and off-curve points are rejected
+	// (RFC 9053 §7).
 	k, err := cose.ParseKey(b, cose.AllowShortCoordinates())
 	if err != nil {
 		return nil, fmt.Errorf("%w: COSE_Key: %w", errCnf, err)

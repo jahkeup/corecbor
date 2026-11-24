@@ -3,8 +3,8 @@
 
 // Package rawvalue carries pre-encoded CBOR through a Value tree so the
 // encoder can splice it verbatim. It is internal: such Values only
-// exist between reflection and encoding (proposal 022, Permissive-mode
-// RawMessage/RawTag), never in a tree a caller can see.
+// exist between reflection and encoding (Permissive-mode RawMessage and
+// RawTag), never in a tree a caller can see.
 package rawvalue
 
 import "github.com/jahkeup/corecbor/cbor"

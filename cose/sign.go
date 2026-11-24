@@ -406,7 +406,7 @@ func WithKnownCriticalHeaders(labels ...any) VerifierOption {
 // algorithm the key implies.
 //
 // Deprecated: an unbound alg header is a contract defect (RFC 9052
-// §3.1, proposal 027 H2). Retained for migration only; removed no
+// §3.1). Retained for migration only; removed no
 // earlier than v0.5.0.
 func WithLegacyAlgorithmFromKey() VerifierOption {
 	return func(v *Verifier) { v.policy.legacyAlg = true }
@@ -415,8 +415,8 @@ func WithLegacyAlgorithmFromKey() VerifierOption {
 // WithLegacyIgnoreCritical restores v0.2.2 behavior: the crit header is
 // not processed.
 //
-// Deprecated: RFC 9052 §3.1 requires critical headers to be understood
-// (proposal 027 H3). Retained for migration only; removed no earlier
+// Deprecated: RFC 9052 §3.1 requires critical headers to be understood.
+// Retained for migration only; removed no earlier
 // than v0.5.0.
 func WithLegacyIgnoreCritical() VerifierOption {
 	return func(v *Verifier) { v.policy.legacyCrit = true }

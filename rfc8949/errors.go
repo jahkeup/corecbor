@@ -13,7 +13,7 @@ import (
 )
 
 // Decoder errors are *cbor.DecodeError values built here, so every one
-// carries its offset (proposal 023) while keeping the v0.2.2 message
+// carries its offset while keeping the v0.2.2 message
 // text "<sentinel> at offset N[: detail]".
 
 // decodeErr returns "<err> at offset <off>".

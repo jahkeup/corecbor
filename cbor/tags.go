@@ -176,8 +176,7 @@ func AsBigIntAny(v Value) (*big.Int, error) {
 
 // AsNestedCBOR returns the embedded bytes of a tag 24 value. It does
 // not check them: they may be empty, ill-formed, or hold more than one
-// data item, none of which is valid tag 24 content (RFC 8949 §3.4.5.1,
-// proposal 037 C21). Decoder.DecodeEncodedCBOR in the root package
+// data item, none of which is valid tag 24 content (RFC 8949 §3.4.5.1). Decoder.DecodeEncodedCBOR in the root package
 // requires exactly one well-formed item and decodes it, and the
 // decoder's RejectInvalidTagContent checks the same while decoding; to
 // build a tag 24 value, use WrapEncodedCBOR or Encoder.EncodeEncodedCBOR.

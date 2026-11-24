@@ -77,8 +77,8 @@ type EncodeOpts struct {
 	AllowNonFiniteFloats bool
 	AllowInvalidUTF8     bool
 	SkipUTF8Validation   bool
-	// InvalidUTF8 selects how text that is not valid UTF-8 is written
-	// (proposal 035). It applies when neither AllowInvalidUTF8 nor
+	// InvalidUTF8 selects how text that is not valid UTF-8 is written.
+	// It applies when neither AllowInvalidUTF8 nor
 	// SkipUTF8Validation is set; the zero value rejects.
 	InvalidUTF8 InvalidUTF8
 	// LegacyBignumPassthrough emits tag 2/3 contents as supplied in
@@ -90,13 +90,12 @@ type EncodeOpts struct {
 	LegacyBignumPassthrough bool
 	// RejectInvalidTagContent returns an error wrapping
 	// cbor.ErrMalformedTag for a tag whose content is not valid for it,
-	// under the rules DecodeOpts.RejectInvalidTagContent applies
-	// (proposal 037 C10).
+	// under the rules DecodeOpts.RejectInvalidTagContent applies.
 	RejectInvalidTagContent bool
 	// RejectDuplicateMapKeys returns an error wrapping
 	// cbor.ErrDuplicateMapKey for a map whose keys repeat in the CBOR
 	// data model, in modes that don't sort (the sorting modes always
-	// reject repeats) (proposal 037 C11). The bools sit together so the struct,
+	// reject repeats). The bools sit together so the struct,
 	// copied per call, doesn't grow.
 	RejectDuplicateMapKeys bool
 	SortCache              *SortStateCache
@@ -220,8 +219,7 @@ func encodeOther(dst []byte, v *cbor.Value) ([]byte, error) {
 }
 
 // encodeTag writes a tag Value. It is out of line so encode's hot switch
-// stays small: carrying the tag 2/3 preferred-bignum branch (proposal
-// 024) inside encode cost ~27% on scalar-array encoding through code
+// stays small: carrying the tag 2/3 preferred-bignum branch inside encode cost ~27% on scalar-array encoding through code
 // generation alone, as raw values did for encodeOther.
 //
 //go:noinline
@@ -269,7 +267,7 @@ func appendPreferredBignum(dst []byte, tag uint64, b []byte) []byte {
 }
 
 // canonicalNaN64 is the binary64 quiet NaN CTAP2 (FloatForce64) emits
-// for every NaN, the double-width form of f97e00 (spec §2.2).
+// for every NaN, the double-width form of f97e00.
 const canonicalNaN64 = 0x7ff8000000000000
 
 func encodeFloat32(dst []byte, val float32, opts *EncodeOpts) ([]byte, error) {

@@ -12,15 +12,15 @@ import (
 type decodeConfig struct {
 	opts            rfc8949.DecodeOpts
 	noInternalArena bool
-	maxItemSize     int  // WithMaxItemSize: 0 default, < 0 none (proposal 037)
+	maxItemSize     int  // WithMaxItemSize: 0 default, < 0 none
 	textLossless    bool // InvalidUTF8Lossless: Unmarshal into string accepts non-UTF-8 forms
 
-	// RequireDeterministic's NaN rule (proposal 037 C9), applied when
+	// RequireDeterministic's NaN rule, applied when
 	// the Decoder is built so option order doesn't matter.
 	deterministicNaN bool
 	allowNaNPayloads bool
 
-	// Reflection options (proposal 025, 037).
+	// Reflection options.
 	disallowUnknown     bool
 	disallowDroppedTags bool
 	disallowUndefined   bool
@@ -46,7 +46,7 @@ func RejectInvalidUTF8() DecoderOption {
 }
 
 // WithInvalidUTF8Decoding selects how the decoder handles text strings
-// that are not valid UTF-8 (proposal 035):
+// that are not valid UTF-8:
 //   - InvalidUTF8Allow (the default) keeps their bytes unchanged;
 //   - InvalidUTF8Reject returns ErrInvalidUTF8;
 //   - InvalidUTF8Replace substitutes U+FFFD for each invalid byte,
@@ -130,7 +130,7 @@ func RejectNonFiniteFloats() DecoderOption {
 // RFC 8746 typed array whose length isn't a multiple of its element
 // size, and so on for the tags RFC 8949 §3.4 defines, the modeled tags
 // (TagsModeled) and the typed arrays. Other tags accept any content.
-// StrictDecoder and DeterministicDecoder include it (proposal 037 C10).
+// StrictDecoder and DeterministicDecoder include it.
 func RejectInvalidTagContent() DecoderOption {
 	return func(c *decodeConfig) { c.opts.RejectInvalidTagContent = true }
 }
@@ -176,15 +176,15 @@ func KeepDuplicateMapKeys() DecoderOption {
 // widths are different keys) instead of per RFC 8949 §5.6.1 and
 // erratum 8589.
 //
-// Deprecated: v0.2 compatibility only (proposal 024); removed no
+// Deprecated: v0.2 compatibility only; removed no
 // earlier than v0.5.0.
 func WithLegacyFloatKeyEquality() DecoderOption {
 	return func(c *decodeConfig) { c.opts.LegacyFloatKeyEquality = true }
 }
 
 // CompatV02Decoding applies every decoder selector needed to reproduce
-// v0.2.x results: WithLegacyFloatKeyEquality (proposal 024) and
-// WithLegacyNoTextBinaryUnmarshal (proposal 025).
+// v0.2.x results: WithLegacyFloatKeyEquality and
+// WithLegacyNoTextBinaryUnmarshal.
 //
 // Deprecated: migrate to explicit selectors; removed no earlier than v0.5.0.
 func CompatV02Decoding() DecoderOption {
@@ -205,8 +205,8 @@ func CompatV02Decoding() DecoderOption {
 //
 // A NaN is accepted only as f97e00, the one NaN the deterministic
 // encoders write (RFC 8949 §4.2.2 leaves NaN handling to the
-// application), so that re-encoding accepted input reproduces it
-// (proposal 037 C9). AllowNaNPayloads restores the §4.2.1 rule alone:
+// application), so that re-encoding accepted input reproduces it.
+// AllowNaNPayloads restores the §4.2.1 rule alone:
 // any NaN in the shortest width that keeps its payload and sign.
 func RequireDeterministic() DecoderOption {
 	return func(c *decodeConfig) {
@@ -230,7 +230,7 @@ func AllowNaNPayloads() DecoderOption {
 
 // RequirePreferredPlus is Experimental: it implements the checking
 // decoder of draft-ietf-cbor-serialization-13 (§4, Appendix G) and is
-// provisional until the draft is published (proposal 034, Draft class).
+// provisional until the draft is published.
 // It rejects input that is not preferred-plus serialized: non-shortest
 // arguments (including float width: a value encodable exactly in a
 // narrower float must use it), indefinite lengths, NaN other than
@@ -266,8 +266,7 @@ const DefaultMaxItemSize = rfc8949.DefaultMaxItemSize
 // DefaultMaxItemSize, so reading is bounded even without a memory
 // budget; a negative n removes the limit, leaving only the per-string,
 // per-container and nesting limits (and WithMemoryBudget, if set). It
-// doesn't apply to Decode, whose input is already in memory (proposal
-// 037 C4).
+// doesn't apply to Decode, whose input is already in memory.
 func WithMaxItemSize(n int) DecoderOption {
 	return func(c *decodeConfig) { c.maxItemSize = n }
 }

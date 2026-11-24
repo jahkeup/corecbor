@@ -2,7 +2,7 @@
 // Copyright The corecbor Authors
 
 // Package utf8x holds the UTF-8 helpers behind the invalid-UTF-8 text
-// policies (proposal 035): per-byte replacement and WTF-8 detection.
+// policies: per-byte replacement and WTF-8 detection.
 package utf8x
 
 import "unicode/utf8"

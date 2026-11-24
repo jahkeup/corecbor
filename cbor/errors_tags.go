@@ -5,7 +5,7 @@ package cbor
 
 import "errors"
 
-// Tag helper sentinels (proposal 026).
+// Tag helper sentinels.
 var (
 	// ErrMalformedTag indicates a tagged value whose tag number, inner
 	// kind or shape doesn't match what a tag helper expects (for

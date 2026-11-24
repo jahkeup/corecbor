@@ -14,6 +14,11 @@ import (
 type Mode int
 
 const (
+	// ModePermissive writes each Value as given: floats at the width of
+	// their Kind (Float32 as single, Float64 as double; a decoded
+	// half-precision float is a Float64, so it is written as a double),
+	// map entries in insertion order, repeated map keys included unless
+	// CheckDuplicateMapKeys is set, and RawMessage/RawTag bytes verbatim.
 	ModePermissive        Mode = iota
 	ModeCoreDeterministic Mode = iota
 	ModeCanonical         Mode = iota

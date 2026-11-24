@@ -112,6 +112,13 @@ func Float32(f float32) Value {
 }
 
 // Float64 creates a CBOR double-precision float (major type 7, AI 27).
+//
+// The decoder also returns half-precision floats (AI 25) as Float64:
+// there is no half-precision Kind. An encoder in a deterministic mode
+// writes such a value back at the shortest exact width, f9xxxx again;
+// ModePermissive writes a Float64 as a double, so it widens a decoded
+// half to fbxxxxxxxxxxxxxxxx (proposal 037 C14). Keep the received bytes
+// with a RawMessage if they must survive a Permissive round trip.
 func Float64(f float64) Value {
 	return Value{Kind: KindFloat64, Num: math.Float64bits(f)}
 }

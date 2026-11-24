@@ -255,6 +255,9 @@ func samePublic(a, b crypto.PublicKey) bool {
 // a CCS sent by value whose key is the pinned PeerPublic.
 func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, error) {
 	unknown := fmt.Errorf("%w: unknown peer credential", ErrAuthentication)
+	if id.isReference() {
+		unknown = fmt.Errorf("%w: %w", ErrAuthentication, ErrUnknownCredential)
+	}
 	if p.peers != nil {
 		c, err := p.peers.ResolveCredential(ctx, id)
 		if err != nil {

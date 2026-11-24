@@ -86,6 +86,54 @@ func (e *ErrorMessage) MarshalCBOR() ([]byte, error) {
 	}
 }
 
+// Fixed ERR_INFO texts for ErrorMessageFor. They never say which check
+// failed: on message_2 the plaintext is not integrity-protected until
+// the MAC verifies, so naming a parse or verification step would be an
+// oracle for an active attacker.
+const (
+	errInfoRejected = "message rejected"
+	errInfoAborted  = "session aborted"
+)
+
+// ErrorMessageFor returns the error message to send to the peer after
+// err ended an EDHOC session (RFC 9528 §6), or nil when none should be
+// sent. err is an error returned by an Initiator or Responder:
+//
+//   - a *ErrorMessage the Responder produced (wrong selected suite,
+//     unsupported method) is returned as is;
+//   - an unresolvable credential reference (ErrUnknownCredential) is
+//     ERR_CODE 3;
+//   - ErrStateViolation is ERR_CODE 1 "session aborted";
+//   - any other failure (format, authentication, critical EAD,
+//     credential policy) is ERR_CODE 1 "message rejected".
+//
+// It returns nil for a nil err and for errors about a received error
+// message: error messages are never answered with another, and
+// ERR_CODE 0 must not be (§6, §6.1). The diagnostic text is fixed, so
+// it reveals nothing about why processing failed; log err itself
+// locally. Sending is optional (§6, §9.7): skip it under load or when
+// no session is found. Send MarshalCBOR()'s bytes in place of the next
+// message.
+func ErrorMessageFor(err error) *ErrorMessage {
+	if err == nil || errors.Is(err, errBadErrorMessage) {
+		return nil
+	}
+	var em *ErrorMessage
+	if errors.As(err, &em) {
+		if em.received || em.Code == 0 {
+			return nil
+		}
+		return em
+	}
+	switch {
+	case errors.Is(err, ErrUnknownCredential):
+		return &ErrorMessage{Code: ErrCodeUnknownCredential}
+	case errors.Is(err, ErrStateViolation) && !errors.Is(err, ErrAuthentication) && !errors.Is(err, ErrMessageFormat):
+		return &ErrorMessage{Code: ErrCodeUnspecified, Info: errInfoAborted}
+	}
+	return &ErrorMessage{Code: ErrCodeUnspecified, Info: errInfoRejected}
+}
+
 // encodeSuitesItem encodes SUITES_I / SUITES_R: a single suite as an
 // int, several as an array (RFC 9528 §5.2.2).
 func encodeSuitesItem(s []CipherSuite) []byte {

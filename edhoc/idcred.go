@@ -53,6 +53,12 @@ func (id IDCred) set() int {
 	return n
 }
 
+// isReference reports whether id only references a credential (kid or
+// x5t) rather than carrying one by value.
+func (id IDCred) isReference() bool {
+	return (id.KID != nil || id.X5T != nil) && id.X5Chain == nil && id.KCCS == nil && id.KCWT == nil
+}
+
 // full returns ID_CRED_x as a single-entry COSE header map. KCCS and
 // KCWT are embedded byte-for-byte, so they enter the transcript exactly
 // as given.

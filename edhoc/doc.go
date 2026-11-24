@@ -17,7 +17,8 @@
 //
 // Afterwards both sides call ExportOSCORE (RFC 9528 Appendix A.1) or
 // Export (EDHOC_Exporter) for application keys, and Close to zeroize
-// secrets. Any error is terminal for the session.
+// secrets. Any error is terminal for the session; ErrorMessageFor gives
+// the error message to send the peer in its place (RFC 9528 §6).
 //
 // All four authentication methods (InitiatorConfig.Method) and cipher
 // suites 0–6 and 24 are supported. A party authenticates with a

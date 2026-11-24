@@ -468,6 +468,90 @@ func TestE11_ErrorMessageFieldRules(t *testing.T) {
 	}
 }
 
+// E6: ErrorMessageFor turns any processing error into the error
+// message to send, with fixed diagnostics that don't say which check
+// failed.
+func TestE6_ErrorMessageFor(t *testing.T) {
+	if ErrorMessageFor(nil) != nil {
+		t.Error("ErrorMessageFor(nil) != nil")
+	}
+	wire := func(err error) []byte {
+		t.Helper()
+		em := ErrorMessageFor(err)
+		if em == nil {
+			t.Fatalf("no error message for %v", err)
+		}
+		b, mErr := em.MarshalCBOR()
+		if mErr != nil {
+			t.Fatal(mErr)
+		}
+		return b
+	}
+	// Two different message_2 failures (parse and signature) produce the
+	// same bytes.
+	fail2 := func(flip func([]byte)) error {
+		ini, res := pair(t, []byte{1}, []byte{2}, nil)
+		m1, _ := ini.CreateMessage1()
+		m2, err := res.ProcessMessage1(m1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		flip(m2)
+		_, err = ini.ProcessMessage2(m2)
+		return err
+	}
+	sigErr := fail2(func(m []byte) { m[len(m)-1] ^= 1 })
+	// m[34] is C_R, the first byte of PLAINTEXT_2 after the bstr head
+	// and G_Y: 0x02 becomes 0xfd, a reserved head.
+	fmtErr := fail2(func(m []byte) { m[34] ^= 0xff })
+	if !errors.Is(sigErr, ErrAuthentication) || !errors.Is(fmtErr, ErrMessageFormat) {
+		t.Fatalf("signature failure: %v; format failure: %v", sigErr, fmtErr)
+	}
+	a, b := wire(sigErr), wire(fmtErr)
+	if !bytes.Equal(a, b) || !bytes.Equal(a, []byte{0x01, 0x70, 'm', 'e', 's', 's', 'a', 'g', 'e', ' ', 'r', 'e', 'j', 'e', 'c', 't', 'e', 'd'}) {
+		t.Errorf("message_2 failures: %x and %x, want both (1, \"message rejected\")", a, b)
+	}
+
+	// A Responder's suite error is returned unchanged.
+	ini, _ := pair(t, []byte{1}, []byte{2}, nil)
+	m1, _ := ini.CreateMessage1()
+	r2, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite2}, PrivateKey: ed25519.NewKeyFromSeed(make([]byte, 32)), PeerPublic: ed25519.PublicKey(make([]byte, 32)), ConnectionID: []byte{2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r2.ProcessMessage1(m1)
+	if em := ErrorMessageFor(err); em == nil || em.Code != ErrCodeWrongSelectedSuite {
+		t.Errorf("suite error: %+v", em)
+	}
+	// The Initiator receiving it does not answer.
+	raw, _ := ErrorMessageFor(err).MarshalCBOR()
+	if _, err := ini.ProcessMessage2(raw); ErrorMessageFor(err) != nil {
+		t.Errorf("answer to a received error message: %+v", ErrorMessageFor(err))
+	}
+	// Nor to a malformed one.
+	ini, _ = pair(t, []byte{1}, []byte{2}, nil)
+	_, _ = ini.CreateMessage1()
+	if _, err := ini.ProcessMessage2([]byte{0x00, 0xf5}); ErrorMessageFor(err) != nil {
+		t.Error("answer to ERR_CODE 0")
+	}
+
+	// An unknown kid is ERR_CODE 3.
+	ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
+		ic.Credential = &Credential{Raw: ccsWith(t, ic.PrivateKey.Public()), IDCred: IDCred{KID: []byte{0x2a}}}
+	})
+	err = handshake(t, ini, res)
+	if !errors.Is(err, ErrUnknownCredential) || !errors.Is(err, ErrAuthentication) {
+		t.Fatalf("unknown kid: %v, want ErrUnknownCredential", err)
+	}
+	if got := wire(err); !bytes.Equal(got, []byte{0x03, 0xf5}) {
+		t.Errorf("unknown kid: %x, want 03 f5", got)
+	}
+	// Using an endpoint out of order is "session aborted".
+	if got := wire(errNoSession); !bytes.Contains(got, []byte("session aborted")) {
+		t.Errorf("state violation: %x", got)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

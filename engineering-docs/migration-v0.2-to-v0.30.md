@@ -403,6 +403,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | Methods on a zero-value or nil `*Initiator`/`*Responder` return `ErrStateViolation` (accessors return nil) | nil pointer panic | none (safety defect, 034) |
 | An error message received in place of message_3 (`ProcessMessage3`) or message_4 (`ProcessMessage4`) is returned as the peer's `*ErrorMessage` (matches `ErrPeerError`) | reported as `ErrMessageFormat` | none (contract defect: RFC 9528 §6) |
 | A received error message must follow RFC 9528 §6: ERR_INFO present, ERR_CODE 0 never sent, ERR_CODE 1 text, 2 SUITES_R, 3 `true`; otherwise `ErrMessageFormat` (no `*ErrorMessage`). `MarshalCBOR` refuses ERR_CODE 0 | missing or mistyped ERR_INFO accepted; ERR_CODE 0 accepted and emitted | none (contract defect: RFC 9528 §6) |
+| New `ErrorMessageFor(err)`: the error message to send after any failure, with fixed ERR_INFO texts ("message rejected", "session aborted") that don't reveal which check failed; ERR_CODE 3 for an unresolvable kid/x5t reference; nil for received error messages. Such reference failures also match the new `ErrUnknownCredential` (resolvers may wrap it) | only suite and method rejections produced an error message | n/a (additive) |
 
 ## eat (032)
 

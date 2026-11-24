@@ -261,6 +261,8 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 // ProcessMessage1 processes message_1 and returns message_2. When the
 // Responder can't continue (for example, an unsupported selected suite)
 // the error is an *ErrorMessage; send its MarshalCBOR() to the peer.
+// For any error from any step, ErrorMessageFor gives the error message
+// to send, if any.
 func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	if r != nil && r.legacy != nil {
 		return r.legacy.ProcessMessage1(msg1Raw)

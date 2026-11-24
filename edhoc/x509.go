@@ -68,11 +68,11 @@ func (r x509Resolver) ResolveCredential(ctx context.Context, id IDCred) (*Creden
 		chain = id.X5Chain
 	case id.X5T != nil:
 		if r.p.Certificates == nil {
-			return nil, fmt.Errorf("%w: x5t credential without a certificate lookup", ErrAuthentication)
+			return nil, fmt.Errorf("%w: %w: x5t credential without a certificate lookup", ErrAuthentication, ErrUnknownCredential)
 		}
 		c, err := r.p.Certificates(ctx, *id.X5T)
 		if err != nil {
-			return nil, fmt.Errorf("%w: x5t lookup: %w", ErrAuthentication, err)
+			return nil, fmt.Errorf("%w: %w: x5t lookup: %w", ErrAuthentication, ErrUnknownCredential, err)
 		}
 		if len(c) == 0 || !id.X5T.Matches(c[0]) {
 			return nil, fmt.Errorf("%w: x5t does not match the resolved certificate", ErrAuthentication)

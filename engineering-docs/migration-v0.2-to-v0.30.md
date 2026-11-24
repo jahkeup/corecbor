@@ -391,7 +391,8 @@ peer does not interoperate with a v0.2 peer** unless one side passes
 `NewInitiator(cfg, ...Option)` and `NewResponder(cfg, ...Option)` gain
 optional parameters; existing calls compile unchanged.
 
-Behavior changes from the pre-v0.3.0 review (proposal 037):
+Behavior changes from the pre-v0.3.0 review (proposal 037). They apply
+to the RFC 9528 protocol; `WithLegacyPreRFCProtocol` is unchanged:
 
 | Change | Old behavior | Restore with |
 |---|---|---|

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/jahkeup/corecbor"
@@ -59,7 +60,9 @@ var b64 = base64.RawURLEncoding
 // (EC coordinates must be full length, RFC 7518 §6.2.1.2). kid becomes
 // the UTF-8 bytes of the string. "use" is converted to the equivalent
 // key_ops so a usage restriction isn't lost ("sig": sign, verify; "enc":
-// encrypt, decrypt, wrapKey, unwrapKey, deriveKey, deriveBits). For oct
+// encrypt, decrypt, wrapKey, unwrapKey, deriveKey, deriveBits); with
+// both, every key_ops value must be one use covers, and key_ops must not
+// repeat a value (RFC 7517 §4.3). For oct
 // keys, "sign" and "verify" key_ops mean MAC create and MAC verify. An
 // unknown kty, crv or alg is ErrInvalidKey / ErrUnsupportedAlgorithm.
 // Members with no COSE equivalent (x5c, x5t, …) are dropped.
@@ -138,7 +141,26 @@ func KeyFromJWK(jwk []byte) (*Key, error) {
 	return k, nil
 }
 
+// jwkUseOps lists the key_ops each JWK "use" value covers.
+var jwkUseOps = map[string][]string{
+	"sig": {"sign", "verify"},
+	"enc": {"encrypt", "decrypt", "wrapKey", "unwrapKey", "deriveKey", "deriveBits"},
+}
+
+// jwkKeyOps returns a JWK's key_ops, or those its use implies. RFC 7517
+// §4.3: key_ops has no duplicates, and use and key_ops, when both are
+// present, are consistent.
 func jwkKeyOps(m map[string]any, kty KeyType) ([]KeyOp, error) {
+	var useOps []string
+	if v, ok := m["use"]; ok {
+		use, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("%w: JWK use must be a string", ErrMalformed)
+		}
+		if useOps, ok = jwkUseOps[use]; !ok {
+			return nil, fmt.Errorf("%w: JWK use %q", ErrInvalidKey, use)
+		}
+	}
 	var names []string
 	if v, ok := m["key_ops"]; ok {
 		arr, ok := v.([]any)
@@ -150,17 +172,16 @@ func jwkKeyOps(m map[string]any, kty KeyType) ([]KeyOp, error) {
 			if !ok {
 				return nil, fmt.Errorf("%w: JWK key_ops entries must be strings", ErrMalformed)
 			}
+			if slices.Contains(names, s) {
+				return nil, fmt.Errorf("%w: JWK key_ops lists %q twice (RFC 7517 §4.3)", ErrMalformed, s)
+			}
+			if useOps != nil && !slices.Contains(useOps, s) {
+				return nil, fmt.Errorf("%w: JWK key_ops %q is inconsistent with use %q (RFC 7517 §4.3)", ErrInvalidKey, s, m["use"])
+			}
 			names = append(names, s)
 		}
-	} else if use, ok := m["use"].(string); ok {
-		switch use {
-		case "sig":
-			names = []string{"sign", "verify"}
-		case "enc":
-			names = []string{"encrypt", "decrypt", "wrapKey", "unwrapKey", "deriveKey", "deriveBits"}
-		default:
-			return nil, fmt.Errorf("%w: JWK use %q", ErrInvalidKey, use)
-		}
+	} else {
+		names = useOps
 	}
 	if names == nil {
 		return nil, nil
@@ -186,7 +207,8 @@ func jwkKeyOps(m map[string]any, kty KeyType) ([]KeyOp, error) {
 
 // JWK converts k to a JWK (JSON). Private members are included only if
 // present; use Public first to drop them. A kid that isn't valid UTF-8
-// is written base64url-encoded. Integer key_ops become JWK names (MAC
+// is ErrInvalidKey, since a JWK kid is a string and any encoding of it
+// would be a different kid. Integer key_ops become JWK names (MAC
 // create/verify as "sign"/"verify"). A parameter with no JWK equivalent
 // is ErrUnsupportedAlgorithm.
 func (k *Key) JWK() ([]byte, error) {
@@ -223,11 +245,12 @@ func (k *Key) JWK() ([]byte, error) {
 	}
 	if kid := k.ID(); kid != nil {
 		known[keyLabelKid] = true
-		if utf8.Valid(kid) {
-			out["kid"] = string(kid)
-		} else {
-			out["kid"] = b64.EncodeToString(kid)
+		// A JWK kid is a string (RFC 7517 §4.5); encoding other bytes
+		// would make it a different kid.
+		if !utf8.Valid(kid) {
+			return nil, fmt.Errorf("%w: kid %x is not UTF-8, and a JWK kid is a string (RFC 7517 §4.5)", ErrInvalidKey, kid)
 		}
+		out["kid"] = string(kid)
 	}
 	if a, ok := k.Algorithm(); ok {
 		known[keyLabelAlg] = true

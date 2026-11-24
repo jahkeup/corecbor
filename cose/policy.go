@@ -157,7 +157,7 @@ func multiAlg(prot, unprot *Headers, p *headerPolicy, defaults []Algorithm) (Alg
 // checkCrit enforces RFC 9052 §3.1 for one layer: crit must be in the
 // protected bucket and be a non-empty array of labels, and every listed
 // label must be present in the protected bucket and be one this package
-// interprets (the RFC 9052 labels 1-6) or one the caller declared with
+// interprets (labels 1-7; see critUnderstood) or one the caller declared with
 // a KnownCriticalHeaders option.
 func checkCrit(prot, unprot *Headers, p *headerPolicy) error {
 	if p.legacyCrit {
@@ -216,8 +216,13 @@ func critLabels(v any) ([]any, error) {
 	return raw, nil
 }
 
+// critUnderstood reports whether crit may list l: the RFC 9052 labels
+// 1-6, the RFC 8152 counter signature label 7 (RFC 9052 §3.1: it "must
+// be understood by new implementations"; a countersignature doesn't
+// change how the signed layer is processed, and this package passes it
+// through without verifying it), or a label the caller declared.
 func critUnderstood(l any, known []any) bool {
-	if n, ok := l.(int64); ok && n >= 1 && n <= 6 {
+	if n, ok := l.(int64); ok && n >= 1 && n <= 7 {
 		return true
 	}
 	return slices.Contains(known, l)

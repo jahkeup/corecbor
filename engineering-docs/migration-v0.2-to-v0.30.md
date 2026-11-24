@@ -224,6 +224,7 @@ goroutine (for example from a `sync.Pool`).
 | `KeyFromJWK` rejects duplicate `key_ops` values (`ErrMalformed`) and `use` inconsistent with `key_ops` (`ErrInvalidKey`), and checks `use` when `key_ops` is present (RFC 7517 §4.3); `(*Key).JWK` returns `ErrInvalidKey` for a kid that isn't UTF-8 (RFC 7517 §4.5) (037 S16) | duplicates kept, `use` ignored beside `key_ops`; a non-UTF-8 kid written base64url-encoded, which reads back as a different kid | none (028 API; set a UTF-8 kid before converting) |
 | `EncryptMulti`/`DecryptMulti` with `WithDraftHPKE27()` refuse the deprecated `HPKEKey` (`ErrUnsupportedAlgorithm`): it labels its recipients alg 35, which draft-27 assigns to HPKE-0. Without the selector `HPKEKey` works as documented (037 S18) | both meanings of 35 could meet in one call | none (use `HPKERecipient` with the draft) |
 | `UnmarshalEncrypt`/`UnmarshalMac` reject an empty recipients array and `UnmarshalSign` an empty signatures array with `ErrMalformed` (RFC 9052 §4.1, §5.1, §6.1: `[+ …]`) (037 S19) | accepted; nothing could decrypt or verify it | none |
+| `crit` may list label 7, the RFC 8152 counter signature, which RFC 9052 §3.1 says new implementations must understand. It is passed through, not verified; countersignatures (RFC 9338, labels 11 and 12) are not implemented and those labels stay critical (037 S20) | `ErrCriticalHeader` | n/a (newly accepted) |
 
 New in 028 (additive): `WithProtectedHeaders`, `WithUnprotectedHeaders`,
 `Signer.Sign1`/`Sign1Context`, `SignContext`, `SignDetached`,

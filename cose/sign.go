@@ -384,7 +384,7 @@ func AllowEmptyProtectedAsReceived() VerifierOption {
 
 // WithKnownCriticalHeaders declares header labels (int or string) that
 // the caller processes itself. A message whose crit header (RFC 9052
-// §3.1) lists a label outside this set and the RFC 9052 labels 1-6 is
+// §3.1) lists a label outside this set and the RFC 9052 labels 1-7 is
 // rejected with ErrCriticalHeader, because nobody would process it.
 func WithKnownCriticalHeaders(labels ...any) VerifierOption {
 	return func(v *Verifier) { v.policy.knownCrit = append(v.policy.knownCrit, normalizeLabels(labels)...) }

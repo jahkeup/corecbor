@@ -57,12 +57,20 @@ func TestC10TagContent(t *testing.T) {
 		{"d85243010203", false},             // 82: float64 needs 8 bytes
 		{"d852490000000000000000f0", false}, // 9 bytes
 		{"d852480000000000000000", true},
-		{"d84c4101", true},    // 76 is reserved: not checked
-		{"d5820102", true},    // 21: any content
-		{"d9d9f76161", true},  // 55799: any content
-		{"d903e76161", true},  // unknown tag: any content
-		{"81c26161", false},   // nested
-		{"a1c2616101", false}, // as a map key
+		{"d84c4101", true},                     // 76 is reserved: not checked
+		{"d8288281028201f6", true},             // 40([[2], [1, null]])
+		{"d82882810281f6", false},              // 40([[2], [null]]): count
+		{"d904108281018201f6", false},          // 1040([[1], [1, null]])
+		{"d82882810343010203", false},          // 40([[3], h'010203']): not an array
+		{"d828828103d84146000100020003", true}, // 40([[3], 65(h'000100020003')])
+		{"d829820102", true},                   // 41([1, 2])
+		{"d82982016161", false},                // 41([1, "a"])
+		{"d8298201f6", false},                  // 41([1, null])
+		{"d5820102", true},                     // 21: any content
+		{"d9d9f76161", true},                   // 55799: any content
+		{"d903e76161", true},                   // unknown tag: any content
+		{"81c26161", false},                    // nested
+		{"a1c2616101", false},                  // as a map key
 	} {
 		src, err := hex.DecodeString(tc.hex)
 		if err != nil {

@@ -15,8 +15,8 @@ import (
 // arrays these helpers support: tags 64–75 and 77–79 (integers, in
 // either byte order) and 81, 82, 85, 86 (float32 and float64). The
 // float16 (80, 84) and float128 (83, 87) arrays have no Go element type;
-// AsTypedArray rejects them, and RejectInvalidTagContent still checks
-// their length.
+// AsTypedArray rejects them. Read them with AsFloat64Array (float16,
+// widened exactly) and AsFloat128Array.
 type TypedArrayElem interface {
 	uint8 | uint16 | uint32 | uint64 | int8 | int16 | int32 | int64 | float32 | float64
 }

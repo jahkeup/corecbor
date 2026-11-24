@@ -38,6 +38,7 @@ func FuzzTagHelpersNeverPanic(f *testing.F) {
 		"d9d9f8da6374021243424f52",
 		"d81847a2616102616201",
 		"d842480000000100000002", "d8464401000000", "d856480000000000000000",
+		"d8288281028201f6", "d829820102", "d8504400013c00",
 	} {
 		b, _ := hex.DecodeString(h)
 		f.Add(b)
@@ -59,6 +60,18 @@ func FuzzTagHelpersNeverPanic(f *testing.F) {
 					t.Fatalf("typed array round trip: %v -> %v", n, enc)
 				}
 			}
+			if m, err := AsMultiDimArray(n); err == nil {
+				if back, err := MultiDimArrayTo(m); err != nil || !back.Equal(n) {
+					t.Fatalf("multi-dimensional array round trip: %v -> %v, %v", n, back, err)
+				}
+			}
+			if items, err := AsHomogeneousArray(n); err == nil {
+				if back, err := HomogeneousArrayTo(items); err != nil || !back.Equal(n) {
+					t.Fatalf("homogeneous array round trip: %v -> %v, %v", n, back, err)
+				}
+			}
+			_, _ = AsFloat64Array(n)
+			_, _ = AsFloat128Array(n)
 			if a, err := AsTypedArray[float64](n); err == nil {
 				if back, err := AsTypedArray[float64](TypedArrayToLE(a)); err != nil || len(back) != len(a) {
 					t.Fatalf("float64 typed array round trip: %v, %v", back, err)

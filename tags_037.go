@@ -23,3 +23,22 @@ func TypedArrayToLE[T TypedArrayElem](s []T) Value { return cbor.TypedArrayToLE(
 
 // AsTypedArray returns the elements of an RFC 8746 typed array of T.
 func AsTypedArray[T TypedArrayElem](t Value) ([]T, error) { return cbor.AsTypedArray[T](t) }
+
+// Tags for RFC 8746 multi-dimensional and homogeneous arrays.
+const (
+	TagMultiDimArray            = cbor.TagMultiDimArray
+	TagHomogeneousArray         = cbor.TagHomogeneousArray
+	TagMultiDimArrayColumnMajor = cbor.TagMultiDimArrayColumnMajor
+)
+
+// MultiDimArray is an RFC 8746 multi-dimensional array.
+type MultiDimArray = cbor.MultiDimArray
+
+var (
+	AsFloat64Array     = cbor.AsFloat64Array
+	AsFloat128Array    = cbor.AsFloat128Array
+	MultiDimArrayTo    = cbor.MultiDimArrayTo
+	AsMultiDimArray    = cbor.AsMultiDimArray
+	HomogeneousArrayTo = cbor.HomogeneousArrayTo
+	AsHomogeneousArray = cbor.AsHomogeneousArray
+)

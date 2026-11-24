@@ -30,7 +30,10 @@ import (
 //     zero padding bits (§3.4.5.3);
 //   - 35: a text string; 258: an array;
 //   - 64–87 (RFC 8746 typed arrays, 76 reserved): a byte string whose
-//     length is a multiple of the element size.
+//     length is a multiple of the element size;
+//   - 40, 1040 (RFC 8746 multi-dimensional arrays): [dimensions, data]
+//     with data an array or typed array of the dimensions' product;
+//     41 (homogeneous array): an array of elements of one type.
 //
 // Other tags, 21–23 and 55799 included, accept any content.
 func tagContentProblem(id uint64, c cbor.Value) string {
@@ -89,6 +92,14 @@ func tagContentProblem(id uint64, c cbor.Value) string {
 	case 258:
 		if c.Kind != cbor.KindArray {
 			return "tag 258 content must be an array"
+		}
+	case cbor.TagMultiDimArray, cbor.TagMultiDimArrayColumnMajor:
+		if _, err := cbor.AsMultiDimArray(cbor.MakeTag(id, c)); err != nil {
+			return "multi-dimensional array content must be [dimensions, data] with matching element count"
+		}
+	case cbor.TagHomogeneousArray:
+		if _, err := cbor.AsHomogeneousArray(cbor.MakeTag(id, c)); err != nil {
+			return "tag 41 content must be an array of elements of one type"
 		}
 	default:
 		if size := typedArrayElemSize(id); size > 0 {

@@ -50,7 +50,7 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		party: credParty{
 			signer: cfg.PrivateKey, dhKey: cfg.DHKey, cred: cfg.Credential,
 			peerPublic: cfg.PeerPublic, peerCred: cfg.PeerCredential,
-			cwtIssuerKey: cfg.CWTIssuerKey, peers: cfg.Peers,
+			cwtIssuerKey: cfg.CWTIssuerKey, cwtValidator: cfg.CWTValidator, peers: cfg.Peers,
 		},
 	}
 	return &Initiator{s: s, suites: slices.Clone(cfg.Suites)}, nil
@@ -208,7 +208,7 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 		party: credParty{
 			signer: cfg.PrivateKey, dhKey: cfg.DHKey, cred: cfg.Credential,
 			peerPublic: cfg.PeerPublic, peerCred: cfg.PeerCredential,
-			cwtIssuerKey: cfg.CWTIssuerKey, peers: cfg.Peers,
+			cwtIssuerKey: cfg.CWTIssuerKey, cwtValidator: cfg.CWTValidator, peers: cfg.Peers,
 		},
 	}
 	return &Responder{s: s, cfg: cfg}, nil

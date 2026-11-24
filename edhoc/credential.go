@@ -47,7 +47,11 @@ func encodeIDCredCWT(cwtBytes []byte) ([]byte, error) {
 	return cborEncodeValue(nil, cbor.Bytes(cwtBytes))
 }
 
-func extractPublicKeyFromCWT(cwtBytes []byte, issuerPub crypto.PublicKey) (crypto.PublicKey, error) {
+// extractPublicKeyFromCWT verifies a CWT with issuerPub, validates its
+// claims with v, and returns the key in its cnf claim. A nil v skips
+// claims validation; only the legacy pre-RFC protocol passes nil, which
+// keeps its v0.2.2 behavior.
+func extractPublicKeyFromCWT(cwtBytes []byte, issuerPub crypto.PublicKey, v *cwt.Validator) (crypto.PublicKey, error) {
 	verifier, err := cose.NewVerifier(issuerPub)
 	if err != nil {
 		return nil, fmt.Errorf("%w: creating CWT verifier: %v", ErrAuthentication, err)
@@ -56,6 +60,11 @@ func extractPublicKeyFromCWT(cwtBytes []byte, issuerPub crypto.PublicKey) (crypt
 	claims, err := cwt.Verify(cwtBytes, verifier)
 	if err != nil {
 		return nil, fmt.Errorf("%w: CWT verification failed: %v", ErrAuthentication, err)
+	}
+	if v != nil {
+		if err := v.Validate(claims); err != nil {
+			return nil, fmt.Errorf("%w: CWT claims: %w", ErrAuthentication, err)
+		}
 	}
 
 	// cwt decodes the cnf claim (8) into the typed Confirmation; a

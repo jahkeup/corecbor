@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
@@ -316,7 +317,8 @@ func createTestCWT(t *testing.T, signerKey ed25519.PrivateKey, subjectPub ed2551
 	}
 
 	claims := &cwt.ClaimsSet{
-		Subject: "edhoc-peer",
+		Subject:    "edhoc-peer",
+		Expiration: time.Now().Add(time.Hour), // cwt.NewValidator requires exp (037 E1)
 		Confirmation: &cwt.Confirmation{
 			Key: coseKeyObj,
 		},

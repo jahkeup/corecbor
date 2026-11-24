@@ -6,8 +6,15 @@ package edhoc
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/ed25519"
 	"errors"
 	"testing"
+	"time"
+
+	"github.com/jahkeup/corecbor/cbor"
+	"github.com/jahkeup/corecbor/cose"
+	"github.com/jahkeup/corecbor/cwt"
 )
 
 // Tests for the proposal 037 edhoc findings (E1–E20), each written to
@@ -70,5 +77,130 @@ func TestE3_NoPeerValuesAfterFailedMessage3(t *testing.T) {
 	}
 	if e := res.PeerEAD(); e != nil {
 		t.Errorf("PeerEAD after failed verification = %+v, want nil", e)
+	}
+}
+
+// cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
+// claims.
+func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {
+	t.Helper()
+	k, err := cose.NewKeyFromPublic(subject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims := &cwt.ClaimsSet{Subject: "edhoc-peer", Confirmation: &cwt.Confirmation{Key: k}}
+	if mut != nil {
+		mut(claims)
+	}
+	signer, err := cose.NewSigner(issuer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := cwt.Sign(claims, signer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// cwtPair runs a handshake where the Initiator sends a CWT by value
+// (kcwt) that the Responder verifies with CWTIssuerKey.
+func cwtPair(t *testing.T, mut func(*cwt.ClaimsSet), rmut func(*ResponderConfig)) error {
+	t.Helper()
+	iPriv, iPub := edPair(t)
+	rPriv, rPub := edPair(t)
+	caPriv, caPub := edPair(t)
+	tok := cwtFor(t, caPriv, iPub, mut)
+	ic := InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iPriv, PeerPublic: rPub, ConnectionID: []byte{1},
+		Credential: &Credential{Type: CredentialCWT, CWTBytes: tok}}
+	rc := ResponderConfig{Suites: []CipherSuite{Suite0}, PrivateKey: rPriv, CWTIssuerKey: caPub, ConnectionID: []byte{2}}
+	if rmut != nil {
+		rmut(&rc)
+	}
+	ini, err := NewInitiator(ic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewResponder(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return handshake(t, ini, res)
+}
+
+// E1: a CWT sent by value is validated, not just signature-checked.
+func TestE1_CWTClaimsValidated(t *testing.T) {
+	now := time.Now()
+	if err := cwtPair(t, func(c *cwt.ClaimsSet) { c.Expiration = now.Add(-time.Hour) }, nil); !errors.Is(err, cwt.ErrTokenExpired) || !errors.Is(err, ErrAuthentication) {
+		t.Errorf("expired CWT: err = %v, want cwt.ErrTokenExpired and ErrAuthentication", err)
+	}
+	if err := cwtPair(t, func(c *cwt.ClaimsSet) { c.Expiration = now.Add(time.Hour); c.NotBefore = now.Add(time.Hour) }, nil); !errors.Is(err, cwt.ErrTokenNotYetValid) {
+		t.Errorf("not-yet-valid CWT: err = %v, want cwt.ErrTokenNotYetValid", err)
+	}
+	// cwt.NewValidator requires exp.
+	if err := cwtPair(t, nil, nil); !errors.Is(err, cwt.ErrMissingExpiration) {
+		t.Errorf("CWT without exp: err = %v, want cwt.ErrMissingExpiration", err)
+	}
+	if err := cwtPair(t, func(c *cwt.ClaimsSet) { c.Expiration = now.Add(time.Hour) }, nil); err != nil {
+		t.Errorf("valid CWT: %v", err)
+	}
+	// A caller-supplied validator: audience and clock.
+	withAud := func(rc *ResponderConfig) {
+		v := cwt.NewValidator()
+		v.Audience = "coap://rs.example"
+		rc.CWTValidator = v
+	}
+	if err := cwtPair(t, func(c *cwt.ClaimsSet) { c.Expiration = now.Add(time.Hour) }, withAud); !errors.Is(err, cwt.ErrAudienceMismatch) {
+		t.Errorf("wrong audience: err = %v, want cwt.ErrAudienceMismatch", err)
+	}
+	past := func(rc *ResponderConfig) {
+		v := cwt.NewValidator()
+		v.Now = func() time.Time { return now.Add(-2 * time.Hour) }
+		rc.CWTValidator = v
+	}
+	if err := cwtPair(t, func(c *cwt.ClaimsSet) { c.Expiration = now.Add(-time.Hour) }, past); err != nil {
+		t.Errorf("custom clock: %v", err)
+	}
+}
+
+// ccsWith returns a CCS {extra..., 8: {1: COSE_Key(pub)}}.
+func ccsWith(t *testing.T, pub crypto.PublicKey, extra ...cbor.MapEntry) []byte {
+	t.Helper()
+	k, err := coseKeyOf(pub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cnf := cbor.MakeMap(cbor.MapEntry{Key: cbor.Uint(cnfCOSEKey), Value: k})
+	return item(cbor.MakeMap(append(extra, cbor.MapEntry{Key: cbor.Uint(ccsClaimCnf), Value: cnf})...))
+}
+
+// E1: a CCS sent by value has no issuer signature, but its exp and nbf
+// claims, when present, are checked with the same validator's clock.
+func TestE1_CCSTimeClaimsChecked(t *testing.T) {
+	run := func(extra ...cbor.MapEntry) error {
+		iPriv, iPub := edPair(t)
+		ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
+			ic.PrivateKey = iPriv
+			ic.Credential = &Credential{Raw: ccsWith(t, iPub, extra...)}
+			rc.PeerPublic = iPub
+		})
+		return handshake(t, ini, res)
+	}
+	now := time.Now().Unix()
+	if err := run(cbor.MapEntry{Key: cbor.Uint(4), Value: cbor.Uint(uint64(now - 3600))}); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("expired CCS: err = %v, want cwt.ErrTokenExpired", err)
+	}
+	if err := run(cbor.MapEntry{Key: cbor.Uint(5), Value: cbor.Uint(uint64(now + 3600))}); !errors.Is(err, cwt.ErrTokenNotYetValid) {
+		t.Errorf("not-yet-valid CCS: err = %v, want cwt.ErrTokenNotYetValid", err)
+	}
+	if err := run(cbor.MapEntry{Key: cbor.Uint(4), Value: cbor.Text("soon")}); !errors.Is(err, ErrAuthentication) {
+		t.Errorf("malformed exp: err = %v, want ErrAuthentication", err)
+	}
+	// No exp is fine for a CCS (RFC 9529's have none).
+	if err := run(cbor.MapEntry{Key: cbor.Uint(4), Value: cbor.Uint(uint64(now + 3600))}); err != nil {
+		t.Errorf("valid CCS: %v", err)
+	}
+	if err := run(); err != nil {
+		t.Errorf("CCS without time claims: %v", err)
 	}
 }

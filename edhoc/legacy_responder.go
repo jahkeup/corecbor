@@ -321,7 +321,7 @@ func (r *legacyResponder) verifyInitiatorSignature(plaintext3 []byte) error {
 		if issuerKey == nil {
 			issuerKey = r.cfg.PeerPublic
 		}
-		peerPub, err = extractPublicKeyFromCWT([]byte(cwtBytes), issuerKey)
+		peerPub, err = extractPublicKeyFromCWT([]byte(cwtBytes), issuerKey, nil)
 		if err != nil {
 			return err
 		}

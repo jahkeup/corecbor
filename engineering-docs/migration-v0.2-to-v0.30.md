@@ -396,6 +396,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | Change | Old behavior | Restore with |
 |---|---|---|
 | `PeerCredential()` and `PeerEAD()` return nil until the peer's Signature_or_MAC verifies, and after any failure (EAD_1 stays visible after `ProcessMessage1`, documented as unverified) | the resolved credential and decoded EAD were returned even when verification then failed | none (safety defect, 034) |
+| A CWT sent by value (kcwt) is validated after its signature verifies, with `CWTValidator` (default `cwt.NewValidator()`: exp required, exp/nbf checked, 60 s leeway); a CCS sent by value (kccs) has its exp/nbf/iat checked when present. Errors wrap `ErrAuthentication` and the `cwt` sentinel (`cwt.ErrTokenExpired`, …) | signature checked only; an expired CWT completed the handshake | none (safety defect, 034); set `CWTValidator` for audience, issuer, clock or leeway |
 
 ## eat (032)
 

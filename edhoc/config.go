@@ -10,6 +10,7 @@ import (
 	"io"
 
 	"github.com/jahkeup/corecbor/cose"
+	"github.com/jahkeup/corecbor/cwt"
 )
 
 // Method is the EDHOC authentication method (RFC 9528 §3.2): which
@@ -64,6 +65,16 @@ type InitiatorConfig struct {
 	// CWTIssuerKey verifies a CWT credential the peer sends by value
 	// (kcwt). It never falls back to PeerPublic.
 	CWTIssuerKey crypto.PublicKey
+	// CWTValidator validates the claims of a CWT the peer sends by value
+	// (kcwt), after its signature verifies. When nil, cwt.NewValidator()
+	// is used: exp required, nbf and exp checked against the current
+	// time with a 60-second leeway. Set it to require an audience or
+	// issuer, or to supply a clock. A CCS the peer sends by value
+	// (kccs) has no issuer signature; when it carries exp, nbf or iat
+	// they are checked with this validator's clock, leeway and
+	// RejectFutureIssuedAt, but none is required. Credentials returned
+	// by Peers are the resolver's to validate.
+	CWTValidator *cwt.Validator
 
 	// Method is the authentication method (default MethodSigSig).
 	Method Method
@@ -97,6 +108,8 @@ type ResponderConfig struct {
 	Credential     *Credential
 	PeerCredential *Credential
 	CWTIssuerKey   crypto.PublicKey
+	// CWTValidator is as for InitiatorConfig.
+	CWTValidator *cwt.Validator
 
 	// Method is the only authentication method accepted unless
 	// AnyMethod is set. The zero value accepts MethodSigSig, as v0.2

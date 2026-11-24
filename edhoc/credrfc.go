@@ -11,10 +11,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/cose"
+	"github.com/jahkeup/corecbor/cwt"
 )
 
 // COSE key parameters (RFC 9053).
@@ -42,7 +45,17 @@ type credParty struct {
 	peerPublic   crypto.PublicKey
 	peerCred     *Credential
 	cwtIssuerKey crypto.PublicKey
+	cwtValidator *cwt.Validator
 	peers        CredentialResolver
+}
+
+// validator returns the configured CWT claims validator, or
+// cwt.NewValidator().
+func (p credParty) validator() *cwt.Validator {
+	if p.cwtValidator != nil {
+		return p.cwtValidator
+	}
+	return cwt.NewValidator()
 }
 
 // ownCredential returns this party's CRED_x, ID_CRED_x and key: the
@@ -123,6 +136,68 @@ func publicFromCCS(ccs []byte) (crypto.PublicKey, error) {
 		return nil, fmt.Errorf("%w: cnf has no COSE_Key", ErrAuthentication)
 	}
 	return publicFromCOSEKey(key)
+}
+
+// CWT claim keys for the time claims (RFC 8392 §3.1).
+const (
+	claimExp = 4
+	claimNbf = 5
+	claimIat = 6
+)
+
+// checkCCSTimes checks the exp, nbf and iat claims a CCS carries with
+// v's clock, leeway and RejectFutureIssuedAt (RFC 9528 Appendix D.1).
+// None is required: a CCS is not signed, and RFC 9529's carry none.
+func checkCCSTimes(ccs []byte, v *cwt.Validator) error {
+	m, err := corecbor.NewDecoder(seqDecOpts...).Decode(ccs)
+	if err != nil {
+		return fmt.Errorf("%w: CCS: %w", ErrMessageFormat, err)
+	}
+	var cs cwt.ClaimsSet
+	for _, c := range []struct {
+		label int64
+		dst   *time.Time
+		name  string
+	}{{claimExp, &cs.Expiration, "exp"}, {claimNbf, &cs.NotBefore, "nbf"}, {claimIat, &cs.IssuedAt, "iat"}} {
+		val, ok := mapGet(m, c.label)
+		if !ok {
+			continue
+		}
+		t, ok := numericDate(val)
+		if !ok {
+			return fmt.Errorf("%w: peer CCS %s claim is not a NumericDate", ErrAuthentication, c.name)
+		}
+		*c.dst = t
+	}
+	tv := cwt.Validator{Leeway: v.Leeway, Now: v.Now, RejectFutureIssuedAt: v.RejectFutureIssuedAt}
+	if err := tv.Validate(&cs); err != nil {
+		return fmt.Errorf("%w: peer CCS: %w", ErrAuthentication, err)
+	}
+	return nil
+}
+
+// numericDate reads a NumericDate (RFC 8392 §2): an integer or a
+// finite float, in seconds since the epoch.
+func numericDate(v cbor.Value) (time.Time, bool) {
+	switch v.Kind {
+	case cbor.KindUint, cbor.KindNegInt:
+		n, err := valueInt(v, "NumericDate")
+		if err != nil {
+			return time.Time{}, false
+		}
+		return time.Unix(n, 0), true
+	case cbor.KindFloat32, cbor.KindFloat64:
+		f := v.Float64Val()
+		if v.Kind == cbor.KindFloat32 {
+			f = float64(v.Float32Val())
+		}
+		if math.IsNaN(f) || math.IsInf(f, 0) || math.Abs(f) > 1<<62 {
+			return time.Time{}, false
+		}
+		sec, frac := math.Modf(f)
+		return time.Unix(int64(sec), int64(frac*1e9)), true
+	}
+	return time.Time{}, false
 }
 
 func mapGet(m cbor.Value, label int64) (cbor.Value, bool) {
@@ -217,9 +292,9 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 		if pc := p.peerCred; pc != nil && pc.Type == CredentialCWT && len(pc.CWTBytes) > 0 && !bytes.Equal(pc.CWTBytes, id.KCWT) {
 			return nil, unknown
 		}
-		k, err := extractPublicKeyFromCWT(id.KCWT, p.cwtIssuerKey)
+		k, err := extractPublicKeyFromCWT(id.KCWT, p.cwtIssuerKey, p.validator())
 		if err != nil {
-			return nil, fmt.Errorf("%w: peer CWT: %w", ErrAuthentication, err)
+			return nil, err // names the CWT check that failed; wraps ErrAuthentication
 		}
 		if p.peerPublic != nil && !samePublic(k, p.peerPublic) {
 			return nil, unknown
@@ -233,6 +308,9 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 		}
 		if !samePublic(k, p.peerPublic) {
 			return nil, unknown
+		}
+		if err := checkCCSTimes(id.KCCS, p.validator()); err != nil {
+			return nil, err
 		}
 		return &Credential{Raw: id.KCCS, IDCred: id, PublicKey: k}, nil
 	}

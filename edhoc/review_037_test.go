@@ -804,6 +804,30 @@ func TestE17_RandFlaggedTestOnly(t *testing.T) {
 	}
 }
 
+// E18: the critical-EAD callback can tell which message an item came in.
+func TestE18_CriticalEADMessageNumber(t *testing.T) {
+	run := func(ead1, ead3 []EADItem) ([]int, error) {
+		var seen []int
+		ini, res := pair(t, []byte{1}, []byte{2}, func(ic *InitiatorConfig, rc *ResponderConfig) {
+			ic.EAD1, ic.EAD3 = ead1, ead3
+			rc.AcceptCriticalEAD = func(EADItem) bool { return true } // overridden
+			rc.AcceptCriticalEADInMessage = func(msg int, e EADItem) bool {
+				seen = append(seen, msg)
+				return msg == 3 && e.Label == 9
+			}
+		})
+		err := handshake(t, ini, res)
+		return seen, err
+	}
+	crit := []EADItem{{Label: 9, Critical: true}}
+	if seen, err := run(nil, crit); err != nil || len(seen) != 1 || seen[0] != 3 {
+		t.Errorf("critical item in EAD_3: %v (messages %v)", err, seen)
+	}
+	if seen, err := run(crit, nil); !errors.Is(err, ErrCriticalEAD) || len(seen) != 1 || seen[0] != 1 {
+		t.Errorf("critical item in EAD_1: %v (messages %v), want ErrCriticalEAD", err, seen)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

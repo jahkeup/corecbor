@@ -398,9 +398,10 @@ func encodeEAD(items []EADItem) ([]byte, error) {
 	return out, nil
 }
 
-// decodeEAD reads the EAD items remaining in r. accept decides whether
-// a critical item is understood; without it, any critical item fails.
-func decodeEAD(r *seqReader, accept func(EADItem) bool) ([]EADItem, error) {
+// decodeEAD reads the EAD items remaining in r, from message number
+// msg. accept decides whether a critical item is understood; without
+// it, any critical item fails.
+func decodeEAD(r *seqReader, msg int, accept func(int, EADItem) bool) ([]EADItem, error) {
 	var items []EADItem
 	for r.more() {
 		v, _, err := r.next()
@@ -428,8 +429,8 @@ func decodeEAD(r *seqReader, accept func(EADItem) bool) ([]EADItem, error) {
 				r.rest = save
 			}
 		}
-		if e.Critical && (accept == nil || !accept(e)) {
-			return nil, fmt.Errorf("%w: %w %d", ErrAuthentication, ErrCriticalEAD, e.Label)
+		if e.Critical && (accept == nil || !accept(msg, e)) {
+			return nil, fmt.Errorf("%w: %w %d in EAD_%d", ErrAuthentication, ErrCriticalEAD, e.Label, msg)
 		}
 		items = append(items, e)
 	}

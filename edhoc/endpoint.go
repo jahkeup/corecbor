@@ -47,7 +47,7 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		initiator: true,
 		method:    cfg.Method,
 		rand:      cfg.Rand,
-		accept:    cfg.AcceptCriticalEAD,
+		accept:    acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
 		ownCID:    slices.Clone(cfg.ConnectionID),
 		allocCID:  cfg.AllocateConnectionID,
 		lenient:   cfg.AcceptNonDeterministicEncoding,
@@ -59,6 +59,18 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		},
 	}
 	return &Initiator{s: s, suites: slices.Clone(cfg.Suites)}, nil
+}
+
+// acceptEAD combines the two critical-EAD callbacks: the one given the
+// message number wins.
+func acceptEAD(inMessage func(int, EADItem) bool, plain func(EADItem) bool) func(int, EADItem) bool {
+	switch {
+	case inMessage != nil:
+		return inMessage
+	case plain != nil:
+		return func(_ int, e EADItem) bool { return plain(e) }
+	}
+	return nil
 }
 
 // sess returns the RFC 9528 session, or nil for a zero-value or nil
@@ -249,7 +261,7 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 	s := &session{
 		method:   cfg.Method,
 		rand:     cfg.Rand,
-		accept:   cfg.AcceptCriticalEAD,
+		accept:   acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
 		ownCID:   slices.Clone(cfg.ConnectionID),
 		allocCID: cfg.AllocateConnectionID,
 		lenient:  cfg.AcceptNonDeterministicEncoding,

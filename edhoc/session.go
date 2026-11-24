@@ -57,7 +57,7 @@ type session struct {
 	suite     *rfcSuite
 	party     credParty
 	rand      io.Reader
-	accept    func(EADItem) bool
+	accept    func(message int, item EADItem) bool
 
 	ownCID, peerCID []byte
 	// lenient accepts received messages that are not deterministically
@@ -224,7 +224,7 @@ func (s *session) processMessage1(msg1 []byte, supported []CipherSuite, acceptMe
 	if err != nil {
 		return nil, s.fail(err)
 	}
-	ead1, err := decodeEAD(r, s.accept)
+	ead1, err := decodeEAD(r, 1, s.accept)
 	if err != nil {
 		return nil, s.fail(err)
 	}
@@ -421,7 +421,7 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, s.fail(err)
 	}
 	ead2Raw := pr.rest
-	ead2, err := decodeEAD(pr, s.accept)
+	ead2, err := decodeEAD(pr, 2, s.accept)
 	if err != nil {
 		return nil, s.fail(err)
 	}
@@ -678,7 +678,7 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 		return s.fail(err)
 	}
 	ead3Raw := pr.rest
-	ead3, err := decodeEAD(pr, s.accept)
+	ead3, err := decodeEAD(pr, 3, s.accept)
 	if err != nil {
 		return s.fail(err)
 	}
@@ -839,7 +839,7 @@ func (s *session) processMessage4(msg4 []byte) error {
 		return s.fail(err)
 	}
 	drop(&s.k4, &s.iv4, &s.a4)
-	ead4, err := decodeEAD(s.reader(pt4), s.accept)
+	ead4, err := decodeEAD(s.reader(pt4), 4, s.accept)
 	if err != nil {
 		return s.fail(err)
 	}

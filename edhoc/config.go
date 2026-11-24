@@ -109,7 +109,13 @@ type InitiatorConfig struct {
 	EAD1, EAD3 []EADItem
 	// AcceptCriticalEAD decides whether a received critical EAD item is
 	// understood. When nil, any critical item aborts (RFC 9528 §3.8).
+	// AcceptCriticalEADInMessage, when set, is used instead.
 	AcceptCriticalEAD func(EADItem) bool
+	// AcceptCriticalEADInMessage is AcceptCriticalEAD with the number of
+	// the message (1–4) the item arrived in: an EAD item is defined for
+	// particular messages (RFC 9528 §3.8), and one understood in EAD_3
+	// may not be in EAD_1.
+	AcceptCriticalEADInMessage func(message int, item EADItem) bool
 	// AcceptNonDeterministicEncoding accepts received messages that are
 	// not deterministically encoded CBOR (RFC 8949 §4.2.1): non-shortest
 	// heads, unsorted map keys outside ID_CRED, and a connection
@@ -163,6 +169,8 @@ type ResponderConfig struct {
 	// EAD2 and EAD4 are sent in message_2 and message_4.
 	EAD2, EAD4        []EADItem
 	AcceptCriticalEAD func(EADItem) bool
+	// AcceptCriticalEADInMessage is as for InitiatorConfig.
+	AcceptCriticalEADInMessage func(message int, item EADItem) bool
 	// AcceptNonDeterministicEncoding is as for InitiatorConfig.
 	AcceptNonDeterministicEncoding bool
 	// Rand is INSECURE and for tests only: deterministic runs such as

@@ -413,6 +413,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | PLAINTEXT_2 longer than 255 hash lengths (8160 bytes for SHA-256, RFC 9528 Appendix G) fails up front, naming PLAINTEXT_2: `ErrStateViolation` when building message_2, `ErrMessageFormat` when receiving it | an `ErrMessageFormat` from EDHOC_KDF after the key schedule had run | none (contract defect) |
 | Intermediate values (ephemeral keys, PRK_2e/3e2m/4e3m, TH_2–TH_4, H(message_1)) are zeroized as soon as nothing derives from them; a completed session keeps only PRK_out, PRK_exporter and, until message_4, K_4/IV_4 | kept until `Close` or failure | none (safety defect, 034; RFC 9528 §9) |
 | `Rand` is documented as INSECURE and for tests only (its bytes become the ephemeral private key); behavior unchanged | documented only as "deterministic tests" | n/a (documentation) |
+| New `AcceptCriticalEADInMessage(message, item)` gives the critical-EAD decision the message number (1–4); it takes precedence over `AcceptCriticalEAD`, which is unchanged. `ErrCriticalEAD` errors now name the EAD field | the callback could not tell EAD_1 from EAD_3 | n/a (additive) |
 
 ## eat (032)
 

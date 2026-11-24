@@ -129,6 +129,12 @@ type InitiatorConfig struct {
 	// received. Indefinite lengths and duplicate map keys are always
 	// rejected.
 	AcceptNonDeterministicEncoding bool
+	// AllowSingleCertX5ChainArray accepts a peer's x5chain that holds one
+	// certificate in an array. RFC 9360 §2 sends a single certificate as
+	// a byte string, and by default the array form fails with
+	// ErrMessageFormat. Set it only for a peer known to send the array;
+	// the received ID_CRED bytes are used in the transcript as is.
+	AllowSingleCertX5ChainArray bool
 	// Limits bound the size of received messages and the number of EAD
 	// items and certificates in them; zero fields select the defaults.
 	Limits Limits
@@ -178,6 +184,12 @@ type ResponderConfig struct {
 	AcceptCriticalEADInMessage func(message int, item EADItem) bool
 	// AcceptNonDeterministicEncoding is as for InitiatorConfig.
 	AcceptNonDeterministicEncoding bool
+	// AllowSingleCertX5ChainArray accepts a peer's x5chain that holds one
+	// certificate in an array. RFC 9360 §2 sends a single certificate as
+	// a byte string, and by default the array form fails with
+	// ErrMessageFormat. Set it only for a peer known to send the array;
+	// the received ID_CRED bytes are used in the transcript as is.
+	AllowSingleCertX5ChainArray bool
 	// Limits bound the size of received messages and the number of EAD
 	// items and certificates in them; zero fields select the defaults.
 	Limits Limits

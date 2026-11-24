@@ -1022,6 +1022,45 @@ func TestE1_CCSTimeClaimsChecked(t *testing.T) {
 	}
 }
 
+// E14: AllowSingleCertX5ChainArray accepts the one-certificate array
+// form, with the received bytes in the transcript.
+func TestE14_AllowSingleCertX5ChainArray(t *testing.T) {
+	for _, allow := range []bool{false, true} {
+		pki := newTestPKI(t)
+		iKey, chain := pki.leaf(t, "initiator")
+		rKey, rChain := pki.leaf(t, "responder")
+		rCred, _ := X509Credential(rChain, false)
+		// {33: [leaf]}
+		raw := append([]byte{0xa1, 0x18, 0x21, 0x81}, bstrItem(chain[0])...)
+		iCred := &Credential{Raw: bstrItem(chain[0]), IDCred: IDCred{X5Chain: chain[:1], Raw: raw}}
+		ini, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite0}, PrivateKey: iKey, ConnectionID: []byte{1}, Credential: iCred, Peers: X509Resolver(pki.policy())})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The intermediate comes from the policy, as the peer sent only
+		// the leaf.
+		p := pki.policy()
+		p.Intermediates = x509.NewCertPool()
+		p.Intermediates.AddCert(pki.inter)
+		res, err := NewResponder(ResponderConfig{
+			Suites: []CipherSuite{Suite0}, PrivateKey: rKey, ConnectionID: []byte{2}, Credential: rCred, Peers: X509Resolver(p),
+			AllowSingleCertX5ChainArray: allow,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = handshake(t, ini, res)
+		switch {
+		case !allow && !errors.Is(err, ErrMessageFormat):
+			t.Errorf("default: %v, want ErrMessageFormat", err)
+		case allow && err != nil:
+			t.Errorf("AllowSingleCertX5ChainArray: %v", err)
+		case allow && !bytes.Equal(res.PeerCredential().IDCred.Raw, raw):
+			t.Error("received ID_CRED bytes not kept")
+		}
+	}
+}
+
 // E1 in the legacy pre-RFC protocol: a CWT credential's claims are
 // validated there too.
 func TestE1_LegacyCWTClaimsValidated(t *testing.T) {

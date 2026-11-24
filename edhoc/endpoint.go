@@ -48,15 +48,16 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		return nil, err
 	}
 	s := &session{
-		initiator: true,
-		lim:       lim,
-		method:    cfg.Method,
-		rand:      cfg.Rand,
-		accept:    acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
-		ownCID:    slices.Clone(cfg.ConnectionID),
-		allocCID:  cfg.AllocateConnectionID,
-		lenient:   cfg.AcceptNonDeterministicEncoding,
-		ownEAD:    map[int][]EADItem{1: cfg.EAD1, 3: cfg.EAD3},
+		initiator:       true,
+		lim:             lim,
+		method:          cfg.Method,
+		rand:            cfg.Rand,
+		accept:          acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
+		ownCID:          slices.Clone(cfg.ConnectionID),
+		allocCID:        cfg.AllocateConnectionID,
+		lenient:         cfg.AcceptNonDeterministicEncoding,
+		singleCertArray: cfg.AllowSingleCertX5ChainArray,
+		ownEAD:          map[int][]EADItem{1: cfg.EAD1, 3: cfg.EAD3},
 		party: credParty{
 			signer: cfg.PrivateKey, dhKey: cfg.DHKey, cred: cfg.Credential,
 			peerPublic: cfg.PeerPublic, peerCred: cfg.PeerCredential,
@@ -268,14 +269,15 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 		return nil, err
 	}
 	s := &session{
-		lim:      lim,
-		method:   cfg.Method,
-		rand:     cfg.Rand,
-		accept:   acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
-		ownCID:   slices.Clone(cfg.ConnectionID),
-		allocCID: cfg.AllocateConnectionID,
-		lenient:  cfg.AcceptNonDeterministicEncoding,
-		ownEAD:   map[int][]EADItem{2: cfg.EAD2, 4: cfg.EAD4},
+		lim:             lim,
+		method:          cfg.Method,
+		rand:            cfg.Rand,
+		accept:          acceptEAD(cfg.AcceptCriticalEADInMessage, cfg.AcceptCriticalEAD),
+		ownCID:          slices.Clone(cfg.ConnectionID),
+		allocCID:        cfg.AllocateConnectionID,
+		lenient:         cfg.AcceptNonDeterministicEncoding,
+		singleCertArray: cfg.AllowSingleCertX5ChainArray,
+		ownEAD:          map[int][]EADItem{2: cfg.EAD2, 4: cfg.EAD4},
 		party: credParty{
 			signer: cfg.PrivateKey, dhKey: cfg.DHKey, cred: cfg.Credential,
 			peerPublic: cfg.PeerPublic, peerCred: cfg.PeerCredential,

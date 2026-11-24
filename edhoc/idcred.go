@@ -186,6 +186,12 @@ func ParseIDCred(v cbor.Value) (IDCred, error) {
 // parseIDCred parses v; raw, when given, is v's encoding, kept as Raw
 // and used to take each parameter's value byte-for-byte.
 func parseIDCred(v cbor.Value, raw []byte) (IDCred, error) {
+	return parseIDCredWith(v, raw, false)
+}
+
+// parseIDCredWith is parseIDCred; singleCertArray accepts an x5chain
+// array holding one certificate (AllowSingleCertX5ChainArray).
+func parseIDCredWith(v cbor.Value, raw []byte, singleCertArray bool) (IDCred, error) {
 	switch v.Kind {
 	case cbor.KindUint, cbor.KindNegInt, cbor.KindBytes:
 		kid, err := decodeCIDValue(v, raw)
@@ -226,7 +232,7 @@ func parseIDCred(v cbor.Value, raw []byte) (IDCred, error) {
 		if err != nil {
 			return IDCred{}, err
 		}
-		if err := id.setParam(label, p.Value, enc); err != nil {
+		if err := id.setParam(label, p.Value, enc, singleCertArray); err != nil {
 			return IDCred{}, err
 		}
 	}
@@ -235,7 +241,7 @@ func parseIDCred(v cbor.Value, raw []byte) (IDCred, error) {
 
 // setParam stores one ID_CRED parameter; enc returns its value's
 // encoding.
-func (id *IDCred) setParam(label int64, val cbor.Value, enc func() []byte) error {
+func (id *IDCred) setParam(label int64, val cbor.Value, enc func() []byte, singleCertArray bool) error {
 	dup := fmt.Errorf("%w: duplicate ID_CRED label %d", ErrMessageFormat, label)
 	switch label {
 	case labelKID:
@@ -276,7 +282,7 @@ func (id *IDCred) setParam(label int64, val cbor.Value, enc func() []byte) error
 			if len(chain) == 0 {
 				return fmt.Errorf("%w: empty x5chain", ErrMessageFormat)
 			}
-			if len(chain) == 1 {
+			if len(chain) == 1 && !singleCertArray {
 				// RFC 9360 §2: a single certificate is a byte string.
 				return fmt.Errorf("%w: x5chain with one certificate must be a byte string, not an array", ErrMessageFormat)
 			}

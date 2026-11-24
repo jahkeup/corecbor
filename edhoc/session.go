@@ -62,12 +62,15 @@ type session struct {
 	ownCID, peerCID []byte
 	// lenient accepts received messages that are not deterministically
 	// encoded (AcceptNonDeterministicEncoding).
-	lenient  bool
-	lim      Limits
-	allocCID func(peer ConnectionID) (ConnectionID, error)
-	cidHold  *cidHold          // this session's hold on ownCID (default allocator)
-	ownEAD   map[int][]EADItem // by message number
-	peerEAD  []EADItem
+	lenient bool
+	lim     Limits
+	// singleCertArray accepts a one-certificate x5chain array
+	// (AllowSingleCertX5ChainArray).
+	singleCertArray bool
+	allocCID        func(peer ConnectionID) (ConnectionID, error)
+	cidHold         *cidHold          // this session's hold on ownCID (default allocator)
+	ownEAD          map[int][]EADItem // by message number
+	peerEAD         []EADItem
 
 	eph     *ecdh.PrivateKey
 	peerEph *ecdh.PublicKey
@@ -508,7 +511,7 @@ func (s *session) idCred(v cbor.Value, raw []byte) (IDCred, error) {
 			return IDCred{}, err
 		}
 	}
-	id, err := parseIDCred(v, raw)
+	id, err := parseIDCredWith(v, raw, s.singleCertArray)
 	if err != nil {
 		return IDCred{}, err
 	}

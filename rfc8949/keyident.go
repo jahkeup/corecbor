@@ -11,6 +11,7 @@ import (
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/internal/pairmatch"
+	"github.com/jahkeup/corecbor/internal/seedhash"
 )
 
 // KeyIdentity selects when two map keys are the same key for duplicate
@@ -95,10 +96,9 @@ func keysEqual(a, b cbor.Value, legacyFloat bool) bool {
 			// Linear rather than quadratic (037 C2). Legacy equality is
 			// finer than the data model, so keyHash serves it too.
 			ap, bp := a.Pairs, b.Pairs
-			pairHash := func(p *cbor.MapEntry) uint64 { return keyHashInto(keyHashInto(fnvOffset, p.Key), p.Value) }
 			return pairmatch.Match(len(ap),
-				func(i int) uint64 { return pairHash(&ap[i]) },
-				func(j int) uint64 { return pairHash(&bp[j]) },
+				func(i int) uint64 { return pairKeyHash(&ap[i]) },
+				func(j int) uint64 { return pairKeyHash(&bp[j]) },
 				func(i, j int) bool {
 					return keysEqual(ap[i].Key, bp[j].Key, legacyFloat) && keysEqual(ap[i].Value, bp[j].Value, legacyFloat)
 				})
@@ -148,89 +148,57 @@ func floatKeysEqual(a, b cbor.Value) bool {
 	return fa == fb // value equality; +0 == -0
 }
 
-// FNV-1a over a Value's data-model form. Consistent with keysEqual
-// (non-legacy): equal keys hash equally. Legacy float equality is
-// strictly finer, so the same hash serves it too.
-const (
-	fnvOffset = 14695981039346656037
-	fnvPrime  = 1099511628211
-)
-
-func hashByte(h uint64, b byte) uint64 { return (h ^ uint64(b)) * fnvPrime }
-
-func hashU64(h uint64, n uint64) uint64 {
-	for range 8 {
-		h = hashByte(h, byte(n))
-		n >>= 8
-	}
-	return h
-}
-
-// keyHash hashes a key's data-model form. Text keys, the common case,
-// take an inlined loop instead of keyHashInto's recursive switch; the
-// result is identical to keyHashInto for them.
+// keyHash hashes a key's data-model form with the process-keyed hash
+// (internal/seedhash), so input can't be crafted to collide (037 C2).
+// Consistent with keysEqual (non-legacy): equal keys hash equally.
+// Legacy float equality is strictly finer, so the same hash serves it
+// too. Text and integer keys, the common case, take the short paths.
 func keyHash(v cbor.Value) uint64 {
-	if v.Kind == cbor.KindText {
-		h := uint64(fnvOffset)
-		h = (h ^ uint64(cbor.KindText)) * fnvPrime
-		for i := 0; i < len(v.Str); i++ {
-			h = (h ^ uint64(v.Str[i])) * fnvPrime
-		}
-		return h
-	}
-	return keyHashInto(fnvOffset, v)
-}
-
-func keyHashInto(h uint64, v cbor.Value) uint64 {
 	switch v.Kind {
+	case cbor.KindText:
+		return seedhash.String(v.Str) ^ seedhash.Salt(byte(cbor.KindText))
+	case cbor.KindBytes:
+		return seedhash.Bytes(v.Bstr) ^ seedhash.Salt(byte(cbor.KindBytes))
 	case cbor.KindFloat32, cbor.KindFloat64:
 		bits := floatBits64(v)
 		f := math.Float64frombits(bits)
-		h = hashByte(h, 'f')
 		switch {
 		case f == 0:
-			return hashByte(h, 0) // +0 and -0
+			return seedhash.Salt('f') // +0 and -0
 		case math.IsNaN(f):
-			return hashU64(hashByte(h, 'n'), bits)
+			return seedhash.Mix(bits ^ seedhash.Salt('n'))
 		default:
-			return hashU64(h, bits)
+			return seedhash.Mix(bits ^ seedhash.Salt('f'))
 		}
-	case cbor.KindText:
-		h = (h ^ uint64(cbor.KindText)) * fnvPrime
-		for i := 0; i < len(v.Str); i++ {
-			h = (h ^ uint64(v.Str[i])) * fnvPrime
-		}
-		return h
-	case cbor.KindBytes:
-		h = (h ^ uint64(cbor.KindBytes)) * fnvPrime
-		for _, c := range v.Bstr {
-			h = (h ^ uint64(c)) * fnvPrime
-		}
-		return h
 	case cbor.KindArray:
-		h = hashU64(hashByte(h, byte(v.Kind)), uint64(len(v.Items)))
+		h := seedhash.Mix(uint64(len(v.Items)) ^ seedhash.Salt(byte(cbor.KindArray)))
 		for i := range v.Items {
-			h = keyHashInto(h, v.Items[i])
+			h = seedhash.Mix(h ^ keyHash(v.Items[i]))
 		}
 		return h
 	case cbor.KindTag:
-		h = hashU64(hashByte(h, byte(v.Kind)), v.Num)
+		h := seedhash.Mix(v.Num ^ seedhash.Salt(byte(cbor.KindTag)))
 		if len(v.Items) == 1 {
-			h = keyHashInto(h, v.Items[0])
+			h = seedhash.Mix(h ^ keyHash(v.Items[0]))
 		}
 		return h
 	case cbor.KindMap:
 		// Order-independent: combine pair hashes by addition.
 		var sum uint64
 		for i := range v.Pairs {
-			ph := keyHashInto(fnvOffset, v.Pairs[i].Key)
-			ph = keyHashInto(ph, v.Pairs[i].Value)
-			sum += ph
+			sum += pairKeyHash(&v.Pairs[i])
 		}
-		return hashU64(hashU64(hashByte(h, byte(v.Kind)), uint64(len(v.Pairs))), sum)
-	default:
-		return hashU64(hashByte(h, byte(v.Kind)), v.Num)
+		return seedhash.Mix(sum ^ seedhash.Mix(uint64(len(v.Pairs))^seedhash.Salt(byte(cbor.KindMap))))
+	case cbor.KindNull, cbor.KindUndefined, cbor.KindInvalid:
+		return seedhash.Salt(byte(v.Kind))
+	default: // integers, bool, simple
+		return seedhash.Mix(v.Num ^ seedhash.Salt(byte(v.Kind)))
 	}
+}
+
+// pairKeyHash hashes a map entry, key and value in order.
+func pairKeyHash(p *cbor.MapEntry) uint64 {
+	return seedhash.Mix(seedhash.Mix(keyHash(p.Key)) ^ keyHash(p.Value))
 }
 
 // keySet tracks the keys of one map being decoded, for duplicate
@@ -286,7 +254,7 @@ func hashKeySet(ks *keySet, m []cbor.MapEntry, opts *DecodeOpts) *keySet {
 	for i := range m {
 		var h uint64
 		if encoded {
-			h = fnv1a(ks.enc[i])
+			h = seedhash.Bytes(ks.enc[i])
 		} else {
 			h = keyHash(m[i].Key)
 		}
@@ -337,7 +305,7 @@ func (ks *keySet) find(m []cbor.MapEntry, key cbor.Value, enc []byte, opts *Deco
 	encoded := opts.KeyIdentity == KeyIdentityEncoded
 	var h uint64
 	if encoded {
-		h = fnv1a(enc)
+		h = seedhash.Bytes(enc)
 	} else {
 		h = keyHash(key)
 	}

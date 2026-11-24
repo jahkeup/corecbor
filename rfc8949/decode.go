@@ -17,15 +17,6 @@ import (
 
 const dedupThreshold = 16
 
-func fnv1a(b []byte) uint64 {
-	h := uint64(14695981039346656037)
-	for _, c := range b {
-		h ^= uint64(c)
-		h *= 1099511628211
-	}
-	return h
-}
-
 type DecodeOpts struct {
 	RejectIndefiniteLength bool
 	RejectNonShortest      bool

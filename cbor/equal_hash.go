@@ -3,67 +3,44 @@
 
 package cbor
 
-import "math"
+import (
+	"math"
 
-// FNV-1a over a Value's data-model form, consistent with Equal: values
-// Equal reports as equal hash equally. It is the same function the
-// decoder's map-key tracking uses (rfc8949 keyHashInto); keep the two
-// in step.
-const (
-	fnvOffset = 14695981039346656037
-	fnvPrime  = 1099511628211
+	"github.com/jahkeup/corecbor/internal/seedhash"
 )
 
-func hashByte(h uint64, b byte) uint64 { return (h ^ uint64(b)) * fnvPrime }
-
-func hashU64(h uint64, n uint64) uint64 {
-	for range 8 {
-		h = hashByte(h, byte(n))
-		n >>= 8
-	}
-	return h
-}
-
-func pairHash(p *MapEntry) uint64 {
-	return valueHash(valueHash(fnvOffset, p.Key), p.Value)
-}
-
-func valueHash(h uint64, v Value) uint64 {
+// valueHash hashes a Value's data-model form with the process-keyed
+// hash, consistent with Equal: values Equal reports as equal hash
+// equally. Keyed so that input can't be crafted to collide (proposal
+// 037 C2); only performance depends on it. It follows the decoder's
+// map-key hash (rfc8949 keyHash); keep the two in step.
+func valueHash(v Value) uint64 {
 	switch v.Kind {
+	case KindText:
+		return seedhash.String(v.Str) ^ seedhash.Salt(byte(KindText))
+	case KindBytes:
+		return seedhash.Bytes(v.Bstr) ^ seedhash.Salt(byte(KindBytes))
 	case KindFloat32, KindFloat64:
 		bits := floatBits64(v)
 		f := math.Float64frombits(bits)
-		h = hashByte(h, 'f')
 		switch {
 		case f == 0:
-			return hashByte(h, 0) // +0 and -0
+			return seedhash.Salt('f') // +0 and -0
 		case math.IsNaN(f):
-			return hashU64(hashByte(h, 'n'), bits)
+			return seedhash.Mix(bits ^ seedhash.Salt('n'))
 		default:
-			return hashU64(h, bits)
+			return seedhash.Mix(bits ^ seedhash.Salt('f'))
 		}
-	case KindText:
-		h = hashByte(h, byte(KindText))
-		for i := 0; i < len(v.Str); i++ {
-			h = hashByte(h, v.Str[i])
-		}
-		return h
-	case KindBytes:
-		h = hashByte(h, byte(KindBytes))
-		for _, c := range v.Bstr {
-			h = hashByte(h, c)
-		}
-		return h
 	case KindArray:
-		h = hashU64(hashByte(h, byte(v.Kind)), uint64(len(v.Items)))
+		h := seedhash.Mix(uint64(len(v.Items)) ^ seedhash.Salt(byte(KindArray)))
 		for i := range v.Items {
-			h = valueHash(h, v.Items[i])
+			h = seedhash.Mix(h ^ valueHash(v.Items[i]))
 		}
 		return h
 	case KindTag:
-		h = hashU64(hashByte(h, byte(v.Kind)), v.Num)
+		h := seedhash.Mix(v.Num ^ seedhash.Salt(byte(KindTag)))
 		if len(v.Items) == 1 {
-			h = valueHash(h, v.Items[0])
+			h = seedhash.Mix(h ^ valueHash(v.Items[0]))
 		}
 		return h
 	case KindMap:
@@ -72,10 +49,15 @@ func valueHash(h uint64, v Value) uint64 {
 		for i := range v.Pairs {
 			sum += pairHash(&v.Pairs[i])
 		}
-		return hashU64(hashU64(hashByte(h, byte(v.Kind)), uint64(len(v.Pairs))), sum)
+		return seedhash.Mix(sum ^ seedhash.Mix(uint64(len(v.Pairs))^seedhash.Salt(byte(KindMap))))
 	case KindNull, KindUndefined, KindInvalid:
-		return hashByte(h, byte(v.Kind))
-	default:
-		return hashU64(hashByte(h, byte(v.Kind)), v.Num)
+		return seedhash.Salt(byte(v.Kind))
+	default: // integers, bool, simple
+		return seedhash.Mix(v.Num ^ seedhash.Salt(byte(v.Kind)))
 	}
+}
+
+// pairHash hashes a map entry, key and value in order.
+func pairHash(p *MapEntry) uint64 {
+	return seedhash.Mix(seedhash.Mix(valueHash(p.Key)) ^ valueHash(p.Value))
 }

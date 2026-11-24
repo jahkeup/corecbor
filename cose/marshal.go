@@ -645,6 +645,9 @@ func UnmarshalSignWith(data []byte, lim DecodeLimits) (*Sign, error) {
 		return nil, fmt.Errorf("%w: signatures must be array", ErrMalformed)
 	}
 
+	if len(sigsArr) == 0 {
+		return nil, fmt.Errorf("%w: signatures must not be empty (RFC 9052 §4.1)", ErrMalformed)
+	}
 	if err := checkCount("signatures", len(sigsArr), lim.MaxSignatures, defaultMaxSignatures); err != nil {
 		return nil, err
 	}
@@ -854,6 +857,9 @@ func encodeRecipients(rs []Recipient) ([]corecbor.Value, error) {
 // depth is bounded by lim.MaxDepth in the decoder. path prefixes error
 // messages ("recipient 0.1").
 func decodeRecipients(arr []corecbor.Value, lim DecodeLimits, count *int, path string) ([]Recipient, error) {
+	if len(arr) == 0 {
+		return nil, fmt.Errorf("%w: recipients must not be empty (RFC 9052 §5.1, §6.1)", ErrMalformed)
+	}
 	*count += len(arr)
 	if err := checkCount("recipients", *count, lim.MaxRecipients, defaultMaxRecipients); err != nil {
 		return nil, err

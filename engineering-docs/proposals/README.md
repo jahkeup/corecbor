@@ -11,7 +11,6 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Depends on | Last update |
 |---|---|---|---|---|---|---|
-| [037](037-spec-departure-review-2026-11-23.md) | 1 | Implemented | Specification-departure review before v0.3.0 (all rows implemented; five decisions open) | corecbor maintainers | 034, 036 | 2026-11-23 |
 | [036](036-deferred-follow-ups-2026-11.md) | 2 | Draft | Deferred follow-ups from the 2026-11 batch | corecbor maintainers | 021–035 | 2026-11-22 |
 | [015](015-tinygo-support-and-profiling.md) | 2 | Draft | TinyGo latent support and performance profiling (root module only) | corecbor maintainers | 001 | 2026-11-22 |
 
@@ -19,6 +18,7 @@ proposal lifecycle.
 
 | # | Tier | Status | Title | Owner | Closed | Outcome |
 |---|---|---|---|---|---|---|
+| [037](037-spec-departure-review-2026-11-23.md) | 1 | Closed | Specification-departure review before v0.3.0 | corecbor maintainers | 2026-11-23 | All ~110 findings fixed across all modules; no new Legacy selectors; RFC 9338, RFC 8746 and RFC 10013 completed |
 | [018](018-opt-in-performance-extensions.md) | 2 | Closed | Opt-in performance extensions | corecbor maintainers | 2026-11-22 | All ten extensions implemented and opt-in; three perf/test gaps moved to 036 (items 18–20). |
 | [019](019-encode-throughput-recovery.md) | 2 | Closed | Encode path throughput recovery | corecbor maintainers | 2026-11-22 | EncodeScalars ≈2.4 GiB/s (target ≥850 MB/s); deterministic EncodeNestedMap ≈300 MiB/s (target ≥200 MB/s); no API or unsafe changes. |
 | [017](017-cose-encoder-reuse.md) | 2 | Closed | COSE encoder reuse strategy | corecbor maintainers | 2026-11-22 | Package-level NewShared encoder (concurrency-safe); MarshalSign1 3 allocs/op (target ≤9). |
@@ -56,7 +56,7 @@ proposal lifecycle.
 
 ## Numbering
 
-Next available proposal number: **037**
+Next available proposal number: **038**
 
 Numbers are assigned at filing and never reused. Withdrawn / Rejected
 proposals keep their numbers — the historical record matters more than

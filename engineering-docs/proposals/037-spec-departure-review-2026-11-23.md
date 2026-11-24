@@ -6,7 +6,7 @@
 |---|---|
 | **Number** | 037 |
 | **Tier** | 1 |
-| **Status** | Implemented (pending the maintainer decisions below) |
+| **Status** | Closed |
 | **Filed** | 2026-11-23 |
 | **Owner** | corecbor maintainers |
 | **Depends on** | proposals: 034, 036 |
@@ -177,27 +177,27 @@ Checks on the integrated tree:
 - the full fuzz sweep passes;
 - the consumer format-stability test and suite pass.
 
-### Decisions for the maintainer
+### Maintainer decisions (2026-11-23)
 
-1. **W30:** eat `Encode` truncates NumericDates to whole seconds, its
-   documented v0.2.2 behavior. Keep it, or reject sub-second times, or
-   encode floats?
-2. **Default bounds:**
+1. **W30 — decided:** eat `Encode` now writes NumericDates as RFC
+   8392 §2 allows (integer for whole seconds, float otherwise) instead
+   of truncating.
+2. **Default bounds — accepted:**
    - `DefaultMaxItemSize` 64 MiB (reader decoding);
    - cose 1 MiB / depth 16 / 32 signatures / 64 recipients;
    - edhoc 64 KiB messages / 32 EAD items / 8 certificates.
-3. **Strength defaults:**
+3. **Strength defaults — accepted:**
    - PBES2 seal count 600,000 (OWASP);
    - minimum HMAC key length per RFC 9053;
    - strict decoders reject invalid tag content (no opt-out other than
      composing the old preset).
-4. **edhoc:**
-   - the default connection-ID allocator is process-wide;
-   - ERR_CODE 3 for unknown credentials, as RFC 9528 defines it, can
-     tell an active prober which kids exist.
+4. **edhoc — decided:** the process-wide default connection-ID
+   allocator stays (documented). `ErrorMessageFor` never sends
+   ERR_CODE 3: an unknown credential gets the generic ERR_CODE 1, so an
+   active attacker can't probe which credentials exist.
 5. **RFC 9711 Appendix A.2.2** has oemboot without oemid, which the
-   normative text forbids; `Validate` follows the text. Erratum
-   candidate.
+   normative text forbids; `Validate` follows the text. No erratum will
+   be filed.
 
 ## Changelog
 
@@ -205,3 +205,4 @@ Checks on the integrated tree:
 |---|---|---|
 | 2026-11-23 | Filed from the four module reviews | corecbor maintainers |
 | 2026-11-23 | All rows implemented; status Implemented pending five decisions | corecbor maintainers |
+| 2026-11-23 | Decisions recorded (W30 floats, no ERR_CODE 3, bounds and strength accepted); Closed | corecbor maintainers |

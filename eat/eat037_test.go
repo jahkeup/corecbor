@@ -633,3 +633,33 @@ func TestSymmetricCnf037(t *testing.T) {
 		t.Errorf("VerifyToken: %v", err)
 	}
 }
+
+// TestVerifyOptionsPlumbing037: MACOptions reach the COSE MAC check
+// (short deployed keys) and DecodeLimits bound the envelope; both
+// default to the strict, bounded behavior.
+func TestVerifyOptionsPlumbing037(t *testing.T) {
+	ctx := context.Background()
+	short := bytes.Repeat([]byte{0x33}, 16)
+	allow := cose.InsecureAllowShortMACKeys()
+	msg, err := cose.ComputeMAC0(encodeClaimsT(t, fullClaims()), short, cose.AlgHMAC256, allow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, err := cose.MarshalMac0(msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := eat.VerifyMACToken(ctx, tok, short, verifyOpts(t)); !errors.Is(err, cose.ErrInvalidKey) {
+		t.Errorf("default: %v, want cose.ErrInvalidKey", err)
+	}
+	o := verifyOpts(t)
+	o.MACOptions = []cose.MACOption{allow}
+	if _, err := eat.VerifyMACToken(ctx, tok, short, o); err != nil {
+		t.Errorf("with the opt-in: %v", err)
+	}
+	o = verifyOpts(t)
+	o.DecodeLimits = cose.DecodeLimits{MemoryBudget: 16}
+	if _, err := eat.VerifyMACToken(ctx, tok, short, o); err == nil {
+		t.Error("a 16-byte budget accepted the token")
+	}
+}

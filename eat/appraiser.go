@@ -75,6 +75,11 @@ type Appraiser struct {
 	// WithKeepAsReceived) for nested tokens SubmodVerifier verifies;
 	// pass the ones the enclosing token was decoded with.
 	Options []Option
+
+	// DecodeLimits bounds the COSE envelope of nested tokens
+	// SubmodVerifier verifies. The zero value is
+	// cose.RecommendedDecodeLimits.
+	DecodeLimits cose.DecodeLimits
 }
 
 // NewAppraiser returns an Appraiser with current-standards defaults:
@@ -97,7 +102,8 @@ func NewAppraiser() *Appraiser {
 // passed to SubmodPolicy in turn, under their own names, and fail
 // closed the same way, down to 16 levels (deeper is ErrMalformedEAT).
 // A nested token verified with SubmodVerifier is decoded with
-// cose.RecommendedDecodeLimits and Options, and validated like the
+// DecodeLimits (by default cose.RecommendedDecodeLimits) and Options,
+// and validated like the
 // enclosing token: CWTValidator (when set) and, with ValidateValues,
 // Claims.Validate. Claims returned by SubmodVerify are the callback's
 // responsibility (VerifyToken validates them).
@@ -252,7 +258,7 @@ func (a *Appraiser) verifyNested(data []byte) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-	msg, err := cose.UnmarshalSign1With(inner, tokenDecodeLimits)
+	msg, err := cose.UnmarshalSign1With(inner, a.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 	}

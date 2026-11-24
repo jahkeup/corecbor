@@ -38,3 +38,9 @@ github.com/jahkeup/corecbor/eat: (*Claims).Encode: changed from func() ([]byte, 
 github.com/jahkeup/corecbor/eat: DecodeClaims: changed from func([]byte) (*Claims, error) to func([]byte, ...Option) (*Claims, error)
 github.com/jahkeup/corecbor/eat: Sign: changed from func(*Claims, *github.com/jahkeup/corecbor/cose.Signer) ([]byte, error) to func(*Claims, *github.com/jahkeup/corecbor/cose.Signer, ...Option) ([]byte, error)
 github.com/jahkeup/corecbor/eat: Verify: changed from func([]byte, *github.com/jahkeup/corecbor/cose.Verifier) (*Claims, error) to func([]byte, *github.com/jahkeup/corecbor/cose.Verifier, ...Option) (*Claims, error)
+
+# Proposal 037: pass cose MAC options (InsecureAllowShortMACKeys) through the
+# cwt MAC paths. No-option calls behave as before apart from the 037 S6
+# defect fix (HMAC keys shorter than RFC 9053 §3.1 are rejected).
+github.com/jahkeup/corecbor/cwt: MAC: changed from func(*ClaimsSet, []byte, github.com/jahkeup/corecbor/cose.Algorithm) ([]byte, error) to func(*ClaimsSet, []byte, github.com/jahkeup/corecbor/cose.Algorithm, ...github.com/jahkeup/corecbor/cose.MACOption) ([]byte, error)
+github.com/jahkeup/corecbor/cwt: VerifyMAC: changed from func([]byte, []byte, github.com/jahkeup/corecbor/cose.Algorithm) (*ClaimsSet, error) to func([]byte, []byte, github.com/jahkeup/corecbor/cose.Algorithm, ...github.com/jahkeup/corecbor/cose.MACOption) (*ClaimsSet, error)

@@ -44,6 +44,16 @@ type VerifyOptions struct {
 	// Options adjust claims decoding (WithKeepAsReceived,
 	// WithLegacyDraftClaimKeys).
 	Options []Option
+
+	// DecodeLimits bounds the COSE envelope. The zero value is
+	// cose.RecommendedDecodeLimits; raise a field for larger tokens, or
+	// set one negative to remove that bound (see cose.DecodeLimits).
+	DecodeLimits cose.DecodeLimits
+
+	// MACOptions are passed to the COSE MAC verification of
+	// VerifyMACToken after the algorithm allow-list (for example
+	// cose.InsecureAllowShortMACKeys()).
+	MACOptions []cose.MACOption
 }
 
 // Token is a verified EAT and its COSE envelope.
@@ -55,10 +65,6 @@ type Token struct {
 	Nested      *Token // the inner token of a nested CWT; Claims are its claims
 }
 
-// tokenDecodeLimits bounds the COSE envelope of a token (claims decoding
-// has its own 8 MiB budget).
-var tokenDecodeLimits = cose.RecommendedDecodeLimits
-
 // legacyDecodeLimits bounds the envelope for Verify, the v0.2.2 entry
 // point: its budget matches the claims decoder's, so any token whose
 // claims Verify could decode before still fits.
@@ -67,7 +73,8 @@ var legacyDecodeLimits = cose.DecodeLimits{MemoryBudget: decodeBudget}
 // VerifyToken is the recommended entry point for a signed CBOR EAT
 // (RFC 9711 §3): a COSE_Sign1, tagged or untagged, optionally wrapped
 // in CWT tag 61 (which must be followed by a COSE tag, RFC 8392 §7.2).
-// It decodes the envelope with cose.RecommendedDecodeLimits, checks the
+// It decodes the envelope with opts.DecodeLimits (by default
+// cose.RecommendedDecodeLimits), checks the
 // typ header (application/eat+cwt or application/cwt, by media type or
 // CoAP content format, when present), resolves the key through
 // opts.Keys and verifies the signature, then decodes the claims,
@@ -89,7 +96,7 @@ func verifyToken(ctx context.Context, data []byte, opts VerifyOptions, depth int
 	if opts.RequireTag && depth == 0 && !tagged {
 		return nil, malformed("CWT tag 61 required")
 	}
-	msg, err := cose.UnmarshalSign1With(inner, tokenDecodeLimits)
+	msg, err := cose.UnmarshalSign1With(inner, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 	}
@@ -134,7 +141,8 @@ var defaultMACAlgs = []cose.Algorithm{cose.AlgHMAC256, cose.AlgHMAC384, cose.Alg
 // VerifyMACToken is the COSE_Mac0 counterpart of VerifyToken, for EATs
 // protected with a symmetric key (RFC 9783 §5.1.1 for PSA). It unwraps
 // an optional tag 61 (a COSE tag must follow), decodes the envelope
-// with cose.RecommendedDecodeLimits, checks typ as VerifyToken does,
+// with opts.DecodeLimits (by default cose.RecommendedDecodeLimits),
+// checks typ as VerifyToken does,
 // verifies the MAC with key under the protected alg, which must be in
 // opts.AllowedAlgorithms (by default the full-length HMACs; list
 // AlgHMAC256_64 explicitly to accept the truncated one), then decodes
@@ -150,7 +158,7 @@ func VerifyMACToken(ctx context.Context, data, key []byte, opts VerifyOptions) (
 	if opts.RequireTag && !tagged {
 		return nil, malformed("CWT tag 61 required")
 	}
-	msg, err := cose.UnmarshalMac0With(inner, tokenDecodeLimits)
+	msg, err := cose.UnmarshalMac0With(inner, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedEAT, err)
 	}
@@ -172,7 +180,7 @@ func VerifyMACToken(ctx context.Context, data, key []byte, opts VerifyOptions) (
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := cose.VerifyMAC0(msg, key, alg, cose.WithMACAlgorithms(alg)); err != nil {
+	if err := cose.VerifyMAC0(msg, key, alg, append([]cose.MACOption{cose.WithMACAlgorithms(alg)}, opts.MACOptions...)...); err != nil {
 		return nil, err
 	}
 	if nested || startsWithTag(msg.Payload) {

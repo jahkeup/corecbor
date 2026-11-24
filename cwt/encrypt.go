@@ -69,8 +69,9 @@ func Decrypt(data []byte, key []byte, nonce []byte, alg cose.Algorithm) (*Claims
 // MAC creates a MAC'd CWT (COSE_Mac0-wrapped claims).
 // The caller must supply a key and an HMAC algorithm (e.g. AlgHMAC256).
 // A symmetric cnf key by value is refused with
-// ErrSymmetricKeyNotEncrypted (RFC 8747 §3.2), as in Sign.
-func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm) ([]byte, error) {
+// ErrSymmetricKeyNotEncrypted (RFC 8747 §3.2), as in Sign. opts are
+// passed to cose.ComputeMAC0 (for example cose.InsecureAllowShortMACKeys).
+func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm, opts ...cose.MACOption) ([]byte, error) {
 	if err := claims.checkNotExposed(); err != nil {
 		return nil, err
 	}
@@ -79,7 +80,7 @@ func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm) ([]byte, error) {
 		return nil, err
 	}
 
-	msg, err := cose.ComputeMAC0(payload, key, alg)
+	msg, err := cose.ComputeMAC0(payload, key, alg, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +92,9 @@ func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm) ([]byte, error) {
 // claims. An outer CWT tag 61 is accepted (RFC 8392 §6). It checks the
 // MAC only; use VerifyMACToken to also validate claims. Like Verify, it
 // refuses a symmetric cnf key by value (ErrSymmetricKeyNotEncrypted)
-// and decodes the envelope with an 8 MiB memory budget.
-func VerifyMAC(data []byte, key []byte, alg cose.Algorithm) (*ClaimsSet, error) {
+// and decodes the envelope with an 8 MiB memory budget. opts are passed
+// to cose.VerifyMAC0 (for example cose.InsecureAllowShortMACKeys).
+func VerifyMAC(data []byte, key []byte, alg cose.Algorithm, opts ...cose.MACOption) (*ClaimsSet, error) {
 	inner, _, err := unwrapCWT(data)
 	if err != nil {
 		return nil, err
@@ -102,7 +104,7 @@ func VerifyMAC(data []byte, key []byte, alg cose.Algorithm) (*ClaimsSet, error) 
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
 
-	if err := cose.VerifyMAC0(msg, key, alg); err != nil {
+	if err := cose.VerifyMAC0(msg, key, alg, opts...); err != nil {
 		return nil, err
 	}
 

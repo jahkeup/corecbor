@@ -402,6 +402,18 @@ New, recommended:
   `SetClaimsHeader` (RFC 9597, label 15), `DecodeUCCS` (RFC 9781),
   `Confirmation.EncryptedKey` (deprecates `Encrypted`) and `Match`.
 
+Options added at integration of 037 (no behavior change on their own):
+
+- `cwt.MAC` and `cwt.VerifyMAC` take trailing `...cose.MACOption`
+  (appended variadic, allowlisted per 034), and `VerifyOptions.MACOptions`
+  reaches `VerifyMACToken`: pass `cose.InsecureAllowShortMACKeys()` for
+  deployed HMAC keys shorter than RFC 9053 §3.1 requires (rejected by
+  default since 037 S6). `eat.VerifyOptions.MACOptions` does the same for
+  `eat.VerifyMACToken`.
+- `cwt.VerifyOptions.DecodeLimits`, `eat.VerifyOptions.DecodeLimits` and
+  `eat.Appraiser.DecodeLimits` bound the COSE envelope. The zero value is
+  `cose.RecommendedDecodeLimits` (1 MiB); raise it for larger tokens.
+
 ## edhoc (033)
 
 The package implements RFC 9528 by default and reproduces the RFC 9529

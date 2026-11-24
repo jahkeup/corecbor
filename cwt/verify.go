@@ -82,6 +82,18 @@ type VerifyOptions struct {
 	// §3.11, RFC 9596), so a token of another kind signed by the same
 	// key can't be substituted. Without it a token with no typ passes.
 	RequireType bool
+
+	// DecodeLimits bounds the COSE envelope. The zero value is
+	// cose.RecommendedDecodeLimits (a 1 MiB memory budget, depth 16, and
+	// signature and recipient caps); raise a field for larger tokens,
+	// or set one negative to remove that bound (see cose.DecodeLimits).
+	DecodeLimits cose.DecodeLimits
+
+	// MACOptions are passed to the COSE MAC verification of
+	// VerifyMACToken, after the algorithm allow-list: for example
+	// cose.InsecureAllowShortMACKeys() for deployed keys shorter than
+	// RFC 9053 §3.1 requires.
+	MACOptions []cose.MACOption
 }
 
 // Token is a verified CWT and its COSE envelope.
@@ -123,7 +135,7 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 	if h := wire.ParseHead(inner); h.N > 0 && h.Major == wire.MajorTag && h.Arg == corecbor.TagCOSESign {
 		return verifySignMulti(ctx, inner, tagged, opts, depth)
 	}
-	msg, err := cose.UnmarshalSign1With(inner, cose.RecommendedDecodeLimits)
+	msg, err := cose.UnmarshalSign1With(inner, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
@@ -163,7 +175,7 @@ func verifySigned(ctx context.Context, data []byte, opts VerifyOptions, depth in
 // per signature (from its own headers) and cose.VerifyMulti applies
 // RequireAny, or RequireAll with opts.RequireAllSignatures.
 func verifySignMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOptions, depth int) (*Token, error) {
-	msg, err := cose.UnmarshalSignWith(data, cose.RecommendedDecodeLimits)
+	msg, err := cose.UnmarshalSignWith(data, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
@@ -255,7 +267,7 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 	if hasTag(inner, corecbor.TagCOSEMac) {
 		return verifyMACMulti(ctx, inner, tagged, opts)
 	}
-	msg, err := cose.UnmarshalMac0With(inner, cose.RecommendedDecodeLimits)
+	msg, err := cose.UnmarshalMac0With(inner, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
@@ -269,7 +281,7 @@ func VerifyMACToken(ctx context.Context, data []byte, key []byte, opts VerifyOpt
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := cose.VerifyMAC0(msg, key, alg, cose.WithMACAlgorithms(alg)); err != nil {
+	if err := cose.VerifyMAC0(msg, key, alg, append([]cose.MACOption{cose.WithMACAlgorithms(alg)}, opts.MACOptions...)...); err != nil {
 		return nil, err
 	}
 	claims, err := decodeNotNested(msg.Payload, opts, false)
@@ -299,7 +311,7 @@ func OpenToken(ctx context.Context, data []byte, key []byte, opts VerifyOptions)
 	if hasTag(inner, corecbor.TagCOSEEncrypt) {
 		return openMulti(ctx, inner, tagged, opts)
 	}
-	msg, err := cose.UnmarshalEncrypt0With(inner, cose.RecommendedDecodeLimits)
+	msg, err := cose.UnmarshalEncrypt0With(inner, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
@@ -356,7 +368,7 @@ func eachRecipient(ctx context.Context, n int, opts VerifyOptions, try func(i in
 
 // verifyMACMulti verifies a tagged COSE_Mac CWT with opts.Recipient.
 func verifyMACMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOptions) (*Token, error) {
-	msg, err := cose.UnmarshalMacWith(data, cose.RecommendedDecodeLimits)
+	msg, err := cose.UnmarshalMacWith(data, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
@@ -368,7 +380,7 @@ func verifyMACMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOp
 		allowed = defaultMACAlgs
 	}
 	err = eachRecipient(ctx, len(msg.Recipients), opts, func(i int) error {
-		return cose.VerifyMACMulti(msg, opts.Recipient, i, cose.WithMACAlgorithms(allowed...))
+		return cose.VerifyMACMulti(msg, opts.Recipient, i, append([]cose.MACOption{cose.WithMACAlgorithms(allowed...)}, opts.MACOptions...)...)
 	})
 	if err != nil {
 		return nil, err
@@ -382,7 +394,7 @@ func verifyMACMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOp
 
 // openMulti decrypts a tagged COSE_Encrypt CWT with opts.Recipient.
 func openMulti(ctx context.Context, data []byte, tagged bool, opts VerifyOptions) (*Token, error) {
-	msg, err := cose.UnmarshalEncryptWith(data, cose.RecommendedDecodeLimits)
+	msg, err := cose.UnmarshalEncryptWith(data, opts.DecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}

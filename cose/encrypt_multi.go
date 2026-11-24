@@ -131,7 +131,7 @@ func DecryptMulti(msg *Encrypt, recipient KeyDeriver, recipientIndex int, opts .
 		return nil, err
 	}
 
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&o.policy)
 	if err != nil {
 		return nil, err
 	}

@@ -18,6 +18,8 @@ type headerPolicy struct {
 	knownCrit  []any       // labels the caller processes (normalized)
 	legacyAlg  bool        // v0.2.2: don't bind the header alg
 	legacyCrit bool        // v0.2.2: ignore crit
+
+	emptyAsReceived bool // Allow…EmptyProtectedAsReceived (037 S14)
 }
 
 // normalizeLabel converts a caller-supplied label to the form header

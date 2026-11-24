@@ -253,7 +253,7 @@ func HPKEOpen(msg *Encrypt0, recipient *Key, opts ...EncryptOption) ([]byte, err
 	if msg.Ciphertext == nil {
 		return nil, fmt.Errorf("%w: detached ciphertext", ErrDecryption)
 	}
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&o.policy)
 	if err != nil {
 		return nil, err
 	}

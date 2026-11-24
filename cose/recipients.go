@@ -197,7 +197,7 @@ func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLe
 	if deriver.Algorithm() == AlgDirect && len(r.Ciphertext) != 0 {
 		return nil, fmt.Errorf("%w: direct recipient ciphertext must be empty (RFC 9052 §8.5.1)", ErrDecryption)
 	}
-	protBytes, err := r.Protected.encodeProtected()
+	protBytes, err := r.Protected.authProtected(&o.policy)
 	if err != nil {
 		return nil, err
 	}

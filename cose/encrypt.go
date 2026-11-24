@@ -26,6 +26,14 @@ type encryptOpts struct {
 	allowProtRecipient bool // AllowProtectedRecipientHeaders
 }
 
+// AllowEncryptEmptyProtectedAsReceived is AllowEmptyProtectedAsReceived
+// for Encrypt0Open, DecryptEncrypt0, DecryptMulti and HPKEOpen: an empty
+// protected bucket sent as h'a0' goes into the Enc_structure (and a
+// recipient's KDF context) as received.
+func AllowEncryptEmptyProtectedAsReceived() EncryptOption {
+	return func(o *encryptOpts) { o.policy.emptyAsReceived = true }
+}
+
 // AllowProtectedRecipientHeaders lets DecryptMulti open a direct or AE
 // key-wrap recipient (AES-KW, PBES2) whose protected bucket isn't empty,
 // as corecbor v0.2 wrote them (alg in the protected bucket). RFC 9052
@@ -184,7 +192,7 @@ func DecryptEncrypt0(msg *Encrypt0, key, nonce []byte, alg Algorithm, opts ...En
 		return nil, err
 	}
 
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&o.policy)
 	if err != nil {
 		return nil, err
 	}

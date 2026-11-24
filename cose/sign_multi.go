@@ -143,11 +143,17 @@ func VerifyMulti(msg *Sign, verifiers []*Verifier, policy ...VerifyPolicy) ([]in
 				policyErr = err
 				continue
 			}
-			sigProtectedBytes, err := sig.Protected.encodeProtected()
+			sigProtectedBytes, err := sig.Protected.authProtected(&v.policy)
 			if err != nil {
 				continue
 			}
-			toBeSigned, err := encodeMultiSigStructure(v.enc, bodyProtectedBytes, sigProtectedBytes, v.external, msg.Payload)
+			body := bodyProtectedBytes
+			if v.policy.emptyAsReceived {
+				if body, err = msg.Protected.authProtected(&v.policy); err != nil {
+					continue
+				}
+			}
+			toBeSigned, err := encodeMultiSigStructure(v.enc, body, sigProtectedBytes, v.external, msg.Payload)
 			if err != nil {
 				continue
 			}

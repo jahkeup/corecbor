@@ -372,6 +372,16 @@ func WithAllowedAlgorithms(algs ...Algorithm) VerifierOption {
 	return func(v *Verifier) { v.policy.allowed = slices.Clone(algs) }
 }
 
+// AllowEmptyProtectedAsReceived verifies a layer whose empty protected
+// bucket was sent as h'a0' over those bytes as received, instead of the
+// zero-length byte string RFC 9052 §3 puts in the Sig_structure. Use it
+// for senders that sign over the bytes they send; a message signed
+// over the empty string then no longer verifies. Layers sent as a
+// zero-length byte string are unaffected.
+func AllowEmptyProtectedAsReceived() VerifierOption {
+	return func(v *Verifier) { v.policy.emptyAsReceived = true }
+}
+
 // WithKnownCriticalHeaders declares header labels (int or string) that
 // the caller processes itself. A message whose crit header (RFC 9052
 // §3.1) lists a label outside this set and the RFC 9052 labels 1-6 is
@@ -451,7 +461,7 @@ func (v *Verifier) verifySign1(msg *Sign1, payload []byte) error {
 	if err != nil {
 		return err
 	}
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&v.policy)
 	if err != nil {
 		return err
 	}

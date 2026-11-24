@@ -62,6 +62,12 @@ func InsecureAllowShortMACKeys() MACOption {
 	return func(o *macOpts) { o.shortKey = true }
 }
 
+// AllowMACEmptyProtectedAsReceived is AllowEmptyProtectedAsReceived for
+// VerifyMAC0 and VerifyMACMulti (the MAC_structure).
+func AllowMACEmptyProtectedAsReceived() MACOption {
+	return func(o *macOpts) { o.policy.emptyAsReceived = true }
+}
+
 // AllowMACProtectedRecipientHeaders is AllowProtectedRecipientHeaders
 // for VerifyMACMulti.
 func AllowMACProtectedRecipientHeaders() MACOption {
@@ -173,7 +179,7 @@ func VerifyMAC0(msg *Mac0, key []byte, alg Algorithm, opts ...MACOption) error {
 		return err
 	}
 
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&o.policy)
 	if err != nil {
 		return err
 	}

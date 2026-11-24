@@ -167,7 +167,7 @@ func VerifyMACMulti(msg *Mac, recipient KeyDeriver, recipientIndex int, opts ...
 		return fmt.Errorf("%w: %w", ErrMACVerification, err)
 	}
 
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&o.policy)
 	if err != nil {
 		return err
 	}

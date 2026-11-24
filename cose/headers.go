@@ -163,6 +163,28 @@ func (h *Headers) encodeProtected() ([]byte, error) {
 	return encodeHeaderMap(h.params)
 }
 
+// authProtected returns the protected bytes a verifier or decrypter
+// puts in the Sig_structure, MAC_structure or Enc_structure: those of
+// encodeProtected, except that with p.emptyAsReceived an empty bucket
+// received as a non-empty encoding (h'a0') is used as received, for
+// senders that computed over it (proposal 037 S14).
+func (h *Headers) authProtected(p *headerPolicy) ([]byte, error) {
+	if p.emptyAsReceived && h.IsEmpty() && len(h.raw) > 0 {
+		return h.raw, nil
+	}
+	return h.encodeProtected()
+}
+
+// wireProtected returns the protected bucket bytes to write in a
+// message: the bytes as received for decoded headers (including h'a0'
+// for an empty bucket), otherwise those of encodeProtected.
+func (h *Headers) wireProtected() ([]byte, error) {
+	if h.IsEmpty() && len(h.raw) > 0 {
+		return h.raw, nil
+	}
+	return h.encodeProtected()
+}
+
 // toCBORMap converts headers to a corecbor map Value.
 func (h *Headers) toCBORMap() (corecbor.Value, error) {
 	if h.IsEmpty() {

@@ -101,7 +101,7 @@ func checkCount(what string, n, v, def int) error {
 
 // MarshalSign1 encodes a Sign1 message as CBOR with tag 18.
 func MarshalSign1(msg *Sign1) ([]byte, error) {
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.wireProtected()
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func UnmarshalSign1With(data []byte, lim DecodeLimits) (*Sign1, error) {
 }
 
 func MarshalEncrypt0(msg *Encrypt0) ([]byte, error) {
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.wireProtected()
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func UnmarshalEncrypt0With(data []byte, lim DecodeLimits) (*Encrypt0, error) {
 }
 
 func MarshalMac0(msg *Mac0) ([]byte, error) {
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.wireProtected()
 	if err != nil {
 		return nil, err
 	}
@@ -412,7 +412,7 @@ func UnmarshalMac0With(data []byte, lim DecodeLimits) (*Mac0, error) {
 }
 
 func MarshalEncrypt(msg *Encrypt) ([]byte, error) {
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.wireProtected()
 	if err != nil {
 		return nil, err
 	}
@@ -527,7 +527,7 @@ func UnmarshalEncryptWith(data []byte, lim DecodeLimits) (*Encrypt, error) {
 }
 
 func MarshalSign(msg *Sign) ([]byte, error) {
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.wireProtected()
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +549,7 @@ func MarshalSign(msg *Sign) ([]byte, error) {
 
 	signaturesArr := make([]corecbor.Value, len(msg.Signatures))
 	for i, s := range msg.Signatures {
-		sProtBytes, err := s.Protected.encodeProtected()
+		sProtBytes, err := s.Protected.wireProtected()
 		if err != nil {
 			return nil, err
 		}
@@ -688,7 +688,7 @@ func UnmarshalSignWith(data []byte, lim DecodeLimits) (*Sign, error) {
 }
 
 func MarshalMac(msg *Mac) ([]byte, error) {
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.wireProtected()
 	if err != nil {
 		return nil, err
 	}
@@ -815,7 +815,7 @@ func UnmarshalMacWith(data []byte, lim DecodeLimits) (*Mac, error) {
 func encodeRecipients(rs []Recipient) ([]corecbor.Value, error) {
 	out := make([]corecbor.Value, len(rs))
 	for i, r := range rs {
-		rProtBytes, err := r.Protected.encodeProtected()
+		rProtBytes, err := r.Protected.wireProtected()
 		if err != nil {
 			return nil, err
 		}

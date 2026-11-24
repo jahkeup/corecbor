@@ -219,6 +219,7 @@ goroutine (for example from a `sync.Pool`).
 | An ECDH-ES ephemeral key (header −1) that carries a private key parameter (`d`) is `ErrMalformed` (037 S11) | the private part was ignored | none (the sender exposed the message key) |
 | `(*Key).KeyDeriver(A128KW…)` needs `key_ops` wrapKey or unwrapKey, and the deriver wraps only with wrapKey and unwraps only with unwrapKey (RFC 9053 §6.2.1); a direct deriver seals only with encrypt/MAC create and opens only with decrypt/MAC verify (037 S12) | any of wrapKey, unwrapKey, encrypt, decrypt allowed both directions | none (`key_ops` is the key owner's restriction) |
 | `VerifyHashEnvelope` and `VerifySign1HashEnvelope` process labels 258–260, so a `crit` listing them is satisfied there (RFC 9052 §3.1, RFC 9995); `Verify` still rejects it (037 S13) | `ErrCriticalHeader` unless the caller declared them with `WithKnownCriticalHeaders` | n/a (newly accepted) |
+| `Marshal*` of a decoded message writes an empty protected bucket received as `h'a0'` back as `h'a0'`. Verification and decryption still compute over the zero-length string (RFC 9052 §3, cose-wg sign-pass-01) (037 S14) | rewritten to `h''` | senders that signed, MACed or encrypted over `h'a0'`: `AllowEmptyProtectedAsReceived()`, `AllowMACEmptyProtectedAsReceived()`, `AllowEncryptEmptyProtectedAsReceived()` |
 
 New in 028 (additive): `WithProtectedHeaders`, `WithUnprotectedHeaders`,
 `Signer.Sign1`/`Sign1Context`, `SignContext`, `SignDetached`,

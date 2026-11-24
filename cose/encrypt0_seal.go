@@ -72,7 +72,7 @@ func Encrypt0Open(msg *Encrypt0, key []byte, opts ...EncryptOption) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
-	protectedBytes, err := msg.Protected.encodeProtected()
+	protectedBytes, err := msg.Protected.authProtected(&o.policy)
 	if err != nil {
 		return nil, err
 	}

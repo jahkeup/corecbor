@@ -456,6 +456,8 @@ Existing identifiers keep their meaning (034). Changes to them:
 | A claim whose key or value holds a NaN other than `f97e00` is rejected with `cwt.ErrNonCanonicalNaN`, in submodules too; `Encode` returns the same for a typed field such as `Location` holding one (036 item 25) | decoded, then re-encoded as `f97e00` | `WithKeepAsReceived()` for unmodeled claims; a modeled claim such as `location` is always checked |
 | `eat_profile` may be an OID (`ProfileOID`) | bstr form rejected | n/a |
 | A negative `SecurityLevel` or `Debug` encodes as a CBOR negative integer | wrapped to a large uint | none |
+| `Verify` accepts an outer CWT tag 61 followed by a COSE tag (RFC 9711 §3) and decodes the envelope with an 8 MiB memory budget, the claims decoder's (037 W8) | tag 61 rejected; envelope decoded with no limit | none (safety defect, 034); use the new `VerifyToken` for `cose.RecommendedDecodeLimits` |
+| `Sign`, `Verify` and `VerifyToken` refuse a symmetric `cnf` COSE_Key by value, in inline submodules too, with `cwt.ErrSymmetricKeyNotEncrypted` in a `*cwt.ClaimError` for `cnf` (RFC 8747 §3.2; 037 W7) | emitted and accepted in plaintext | none (safety defect, 034): use `Confirmation.EncryptedKey` |
 
 `DecodeClaims` accepts the same values as before. The RFC 9711 value
 rules (nonce 8–64 bytes, UEID form, dbgstat 0–4, profile URI or OID)
@@ -473,6 +475,13 @@ New, additive:
   `SubmodDetached`, `NonceVerifier`, `MinDebugStatus`,
   `RequireProfileOID`, `MeasurementPolicy`, `AppraiseContext`.
 - Detached EAT bundles (tag 602): `DecodeDetachedBundle`.
+- `VerifyToken(ctx, data, VerifyOptions{Keys: …})` (037 W9), the
+  recommended entry point for a signed EAT: tag 61 (followed by a COSE
+  tag) or a bare COSE_Sign1; `cose.RecommendedDecodeLimits`; `typ`
+  `application/eat+cwt` (with or without parameters), 263,
+  `application/cwt` or 61; nested tokens up to `MaxNesting`; claims
+  validated with `cwt.NewValidator()` (or `VerifyOptions.Validator`)
+  and `Claims.Validate`. Returns a `Token`.
 - RFC 9782 media types and content-formats (`MediaTypeEAT*`,
   `ContentFormatEAT*`).
 - `eat/psa`: RFC 9783 PSA claims (`FromEAT`, `ToEAT`, lifecycle

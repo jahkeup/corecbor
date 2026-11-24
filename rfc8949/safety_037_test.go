@@ -140,6 +140,44 @@ func TestC2MapKeyCompareLinear(t *testing.T) {
 	}
 }
 
+// C5: the memory budget is charged for everything Decode allocates, at
+// its real size: indefinite-length containers and strings, short
+// strings on the inline paths, tag content, and Value and MapEntry
+// slots at their size.
+func TestC5BudgetChargesRealSizes(t *testing.T) {
+	rep := func(n int, b ...byte) []byte { return bytes.Repeat(b, n) }
+	cat := func(parts ...[]byte) []byte { return bytes.Join(parts, nil) }
+	for _, tc := range []struct {
+		name string
+		src  []byte
+		want int // bytes charged
+	}{
+		{"definite array", cat([]byte{0x98, 100}, rep(100, 0x00)), 100 * valueSize},
+		{"indefinite array", cat([]byte{0x9f}, rep(100, 0x00), []byte{0xff}), 100 * valueSize},
+		{"definite map", cat([]byte{0xb8, 20}, rep(20, 0x00, 0xf6)), 20 * pairSize},
+		{"indefinite map", cat([]byte{0xbf, 0x00, 0xf6, 0x01, 0xf6, 0xff}), 2 * pairSize},
+		{"indefinite bytes", cat([]byte{0x5f}, rep(10, 0x45, 1, 2, 3, 4, 5), []byte{0xff}), 50},
+		{"indefinite text", cat([]byte{0x7f}, rep(10, 0x65, 'a', 'b', 'c', 'd', 'e'), []byte{0xff}), 50},
+		{"array of short text", []byte{0x82, 0x63, 'a', 'b', 'c', 0x41, 0x00}, 2*valueSize + 3 + 1},
+		{"map with short text key", []byte{0xa1, 0x63, 'a', 'b', 'c', 0x00}, pairSize + 3},
+		{"tag", []byte{0xc1, 0x00}, valueSize},
+		{"array of tags", []byte{0x82, 0xc1, 0x00, 0xc1, 0x00}, 4 * valueSize},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := NewBudget(1 << 30)
+			if _, _, err := Decode(tc.src, DecodeOpts{Budget: b}); err != nil {
+				t.Fatal(err)
+			}
+			if b.Allocated != tc.want {
+				t.Fatalf("charged %d, want %d", b.Allocated, tc.want)
+			}
+			if _, _, err := Decode(tc.src, DecodeOpts{Budget: NewBudget(tc.want - 1)}); !errors.Is(err, cbor.ErrMemoryBudgetExceeded) {
+				t.Fatalf("budget %d: err = %v, want ErrMemoryBudgetExceeded", tc.want-1, err)
+			}
+		})
+	}
+}
+
 // C2: duplicates in an indefinite-length map are still found, before
 // and after the switch to hashing, under both key identities.
 func TestC2IndefiniteMapDuplicates(t *testing.T) {

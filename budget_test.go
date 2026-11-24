@@ -47,7 +47,9 @@ func TestMemoryBudgetResetBetweenCalls(t *testing.T) {
 	)
 	data, _ := enc.Encode(nil, m)
 
-	dec := NewDecoder(WithMemoryBudget(500))
+	// Two map entries, two 1-byte keys and 100 bytes of strings (037 C5
+	// charges entries at their real size).
+	dec := NewDecoder(WithMemoryBudget(1000))
 	_, err := dec.Decode(data)
 	if err != nil {
 		t.Fatalf("first decode failed: %v", err)

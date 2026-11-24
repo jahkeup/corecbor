@@ -8,6 +8,7 @@ import (
 	"math"
 	"slices"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/internal/decerr"
@@ -107,6 +108,13 @@ func (o DecodeOpts) avail(src []byte, pos int) int {
 	return len(src) - pos - o.reserve
 }
 
+// Bytes charged to the memory budget for one Value slot (array element,
+// tag content, sequence item) and one map entry.
+const (
+	valueSize = int(unsafe.Sizeof(cbor.Value{}))
+	pairSize  = int(unsafe.Sizeof(cbor.MapEntry{}))
+)
+
 type BudgetState struct {
 	Allocated int
 	Limit     int
@@ -130,6 +138,12 @@ func (bs *BudgetState) charge(n, off int) error {
 	}
 	return nil
 }
+
+// Charge records n bytes of allocation for the item at offset off and
+// reports ErrMemoryBudgetExceeded once the total passes the limit. A nil
+// budget charges nothing. Callers that allocate on the decoder's behalf
+// (sequences, stream buffers) use it to stay within the same budget.
+func (bs *BudgetState) Charge(n, off int) error { return bs.charge(n, off) }
 
 func StrictOpts() DecodeOpts {
 	return DecodeOpts{
@@ -357,6 +371,9 @@ func decodeIndefiniteBytes(src []byte, off int, opts DecodeOpts) (cbor.Value, in
 		if end > len(src) {
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
+		if err := opts.Budget.charge(length, off); err != nil {
+			return cbor.Value{}, off, err
+		}
 		buf = append(buf, src[start:end]...)
 		off = end
 	}
@@ -433,6 +450,9 @@ func decodeIndefiniteText(src []byte, off int, opts DecodeOpts) (cbor.Value, int
 		if end > len(src) {
 			return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 		}
+		if err := opts.Budget.charge(length, off); err != nil {
+			return cbor.Value{}, off, err
+		}
 		buf = append(buf, src[start:end]...)
 		off = end
 	}
@@ -459,7 +479,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 	if count > opts.avail(src, pos) {
 		return cbor.Value{}, off, decodeErr(cbor.ErrTruncated, off)
 	}
-	if err := opts.Budget.charge(count*16, off); err != nil {
+	if err := opts.Budget.charge(count*valueSize, off); err != nil {
 		return cbor.Value{}, off, err
 	}
 	var arr []cbor.Value
@@ -555,6 +575,11 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
 					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrInvalidUTF8, pos), opts, i)
 				}
+				if opts.Budget != nil {
+					if err := opts.Budget.charge(length, pos); err != nil {
+						return cbor.Value{}, pos, indexPath(err, opts, i)
+					}
+				}
 				var s string
 				if opts.Interner != nil {
 					s = opts.Interner.Intern(src[pos+1 : end])
@@ -577,6 +602,11 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 			length := int(ib & 0x1f)
 			end := pos + 1 + length
 			if end <= srcLen && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
+				if opts.Budget != nil {
+					if err := opts.Budget.charge(length, pos); err != nil {
+						return cbor.Value{}, pos, indexPath(err, opts, i)
+					}
+				}
 				if opts.ZeroCopy {
 					arr[i] = cbor.Bytes(src[pos+1 : end])
 				} else {
@@ -642,6 +672,9 @@ func decodeIndefiniteArray(src []byte, off, depth int, opts DecodeOpts) (cbor.Va
 		if len(arr) >= opts.maxArray() {
 			return cbor.Value{}, pos, decodeErr(cbor.ErrMaxArrayLength, pos)
 		}
+		if err := opts.Budget.charge(valueSize, pos); err != nil {
+			return cbor.Value{}, pos, err
+		}
 		co := opts
 		co.reserve++ // break code
 		v, next, err := decodeValue(src, pos, depth+1, co, false)
@@ -679,7 +712,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	ks := getKeySet(count, &opts)
 	defer putKeySet(ks)
 
-	if err := opts.Budget.charge(count*32, off); err != nil {
+	if err := opts.Budget.charge(count*pairSize, off); err != nil {
 		return cbor.Value{}, off, err
 	}
 	var m []cbor.MapEntry
@@ -705,6 +738,11 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 				var s string
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
 					return cbor.Value{}, pos, decodeErr(cbor.ErrInvalidUTF8, pos)
+				}
+				if opts.Budget != nil {
+					if err := opts.Budget.charge(length, pos); err != nil {
+						return cbor.Value{}, pos, err
+					}
 				}
 				if opts.Interner != nil {
 					s = opts.Interner.Intern(src[pos+1 : end])
@@ -789,6 +827,9 @@ func decodeIndefiniteMap(src []byte, off, depth int, opts DecodeOpts) (cbor.Valu
 		if len(m) >= opts.maxArray() {
 			return cbor.Value{}, pos, decodeErr(cbor.ErrMaxArrayLength, pos)
 		}
+		if err := opts.Budget.charge(pairSize, pos); err != nil {
+			return cbor.Value{}, pos, err
+		}
 		keyOff := pos
 		kOpts := opts
 		kOpts.reserve += 2 // this pair's value + break code
@@ -843,6 +884,9 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 
 	if depth+1 > opts.maxNesting() {
 		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
+	}
+	if err := opts.Budget.charge(valueSize, off); err != nil {
+		return cbor.Value{}, off, err
 	}
 	inner, next, err := decodeValue(src, pos, depth+1, opts, false)
 	if err != nil {

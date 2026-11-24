@@ -5,7 +5,10 @@ package corecbor
 
 import (
 	"bytes"
+	"errors"
 	"testing"
+
+	"github.com/jahkeup/corecbor/cbor"
 )
 
 // Proposal 037: regression tests for the root-module release blockers.
@@ -28,5 +31,21 @@ func TestC1SelfDescribeChain(t *testing.T) {
 	s := NewDecoder().Stream(bytes.NewReader(src))
 	if !s.Next() || s.Err() != nil {
 		t.Fatalf("Stream.Next: %v", s.Err())
+	}
+}
+
+// C5: a sequence of scalars is charged for its items, and each call
+// starts from a fresh budget.
+func TestC5SequenceBudget(t *testing.T) {
+	src := bytes.Repeat([]byte{0x00}, 1000)
+	dec := NewDecoder(WithMemoryBudget(10_000))
+	if _, err := dec.DecodeSequence(src); !errors.Is(err, cbor.ErrMemoryBudgetExceeded) {
+		t.Fatalf("1000 items in a 10 kB budget: err = %v", err)
+	}
+	if _, err := dec.DecodeSequence(src[:50]); err != nil {
+		t.Fatalf("50 items: %v", err)
+	}
+	if _, err := dec.DecodeSequence(src[:50]); err != nil {
+		t.Fatalf("50 items again: %v", err)
 	}
 }

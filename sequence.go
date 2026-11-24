@@ -4,8 +4,13 @@
 package corecbor
 
 import (
+	"unsafe"
+
 	"github.com/jahkeup/corecbor/rfc8949"
 )
+
+// valueSize is the memory budget charge for one sequence item's slot.
+const valueSize = int(unsafe.Sizeof(Value{}))
 
 // MediaTypeCBORSeq is the IANA media type for CBOR sequences (RFC 8742).
 const MediaTypeCBORSeq = "application/cbor-seq"
@@ -70,6 +75,10 @@ func (d *Decoder) DecodeSequence(src []byte) (Sequence, error) {
 	for len(remaining) > 0 {
 		v, n, err := rfc8949.Decode(remaining, d.cfg.opts)
 		if err != nil {
+			return nil, err
+		}
+		// The sequence's own slot for the item (037 C5).
+		if err := d.cfg.opts.Budget.Charge(valueSize, len(src)-len(remaining)); err != nil {
 			return nil, err
 		}
 		seq = append(seq, v)

@@ -165,7 +165,8 @@ func agreeRecipient(ka KeyAgreer, contentAlg Algorithm, keyLen int) ([]byte, Rec
 }
 
 // openRecipient recovers the content key from r with deriver. The
-// recipient's alg must be the deriver's: an alg that doesn't match would
+// recipient's alg must be present (RFC 9052 §8.5, proposal 037 S9) and
+// be the deriver's: an alg that doesn't match would
 // otherwise be processed as the deriver's algorithm (proposal 027 H2).
 // The legacy PBES2 identifiers are accepted only under
 // WithLegacyPBES2Labels.
@@ -179,7 +180,11 @@ func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLe
 			return nil, err
 		}
 		want := recipientAlg(deriver, o.legacy)
-		if loc != algAbsent && a != want {
+		if loc == algAbsent {
+			// RFC 9052 §8.5: every recipient class carries alg.
+			return nil, fmt.Errorf("%w: recipient has no alg header (RFC 9052 §8.5)", ErrAlgorithmMismatch)
+		}
+		if a != want {
 			if a == AlgPBES2_HS256_A128KW && !o.legacy.pbes2 {
 				return nil, fmt.Errorf("%w: recipient alg -11 (v0.2 PBES2 encoding; see WithLegacyPBES2Labels, WithLegacyMACPBES2Labels)", ErrUnsupportedAlgorithm)
 			}

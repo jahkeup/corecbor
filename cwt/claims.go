@@ -160,10 +160,12 @@ type ClaimsSet struct {
 	// element, and otherwise Audience (or the single element).
 	Audiences []string
 
-	Scope      *Scope  // claim 9 (RFC 9200); nil when absent or not text/bytes
-	ACEProfile *int64  // claim 38; nil when absent or not an integer
-	CNonce     []byte  // claim 39
-	Exi        *uint64 // claim 40, seconds; nil when absent or not an unsigned integer
+	// The RFC 9200 claims; nil when absent. Decoding an ill-typed one
+	// is an error naming it.
+	Scope      *Scope  // claim 9: text or bytes
+	ACEProfile *int64  // claim 38: an integer
+	CNonce     []byte  // claim 39: bytes
+	Exi        *uint64 // claim 40: seconds from first receipt; see Validator.ExiFirstSeen
 
 	// PrivateClaims holds every claim this package does not model,
 	// keyed by label, with its decoded value.
@@ -571,12 +573,13 @@ func (cs *ClaimsSet) decodeRegistered(key ClaimKey, val corecbor.Value, opts Dec
 		cs.Confirmation = cnf
 	case ClaimScope, ClaimACEProfile, ClaimCNonce, ClaimExi:
 		// v0.2.2 kept these in Private; they stay there and also fill
-		// their typed field when well-typed. An ill-typed value is kept
-		// in PrivateClaims instead, so nothing is lost.
-		cs.addPrivateCompat(key, val)
+		// their typed field. An ill-typed value is an error naming the
+		// claim (RFC 9200 §5.10, 037 W21): kept as a private claim it
+		// would silently not be applied.
 		if !cs.decodeACE(key.Int, val) {
-			cs.addPrivateTyped(key, val)
+			return true, claimErr(key, aceTypes[key.Int], nil)
 		}
+		cs.addPrivateCompat(key, val)
 	default:
 		return false, nil
 	}
@@ -605,6 +608,14 @@ func (cs *ClaimsSet) decodeAudience(val corecbor.Value) error {
 		return claimErr(key, "aud must be text or an array of text", nil)
 	}
 	return nil
+}
+
+// aceTypes describes the type each RFC 9200 claim must have.
+var aceTypes = map[int64]string{
+	ClaimScope:      "scope must be text or bytes",
+	ClaimACEProfile: "ace_profile must be an integer",
+	ClaimCNonce:     "cnonce must be bytes",
+	ClaimExi:        "exi must be an unsigned integer",
 }
 
 func (cs *ClaimsSet) decodeACE(n int64, val corecbor.Value) bool {

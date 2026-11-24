@@ -347,10 +347,9 @@ func TestACEClaimsPrivateCompat(t *testing.T) {
 	if hex.EncodeToString(out) != "a4096a72656164207772697465182602182741011828190e10" {
 		t.Fatalf("Encode = %x", out)
 	}
-	// Ill-typed scope stays a private claim.
-	cs, err = cwt.DecodeClaimsSet(h(t, "a10901"))
-	if err != nil || cs.Scope != nil || len(cs.PrivateClaims) != 1 || cs.Private[int64(9)] != int64(1) {
-		t.Fatalf("ill-typed scope: %+v, %v", cs, err)
+	// Ill-typed scope is an error naming it (037 W21).
+	if _, err = cwt.DecodeClaimsSet(h(t, "a10901")); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Fatalf("ill-typed scope: %v", err)
 	}
 }
 

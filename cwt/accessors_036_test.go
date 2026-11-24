@@ -81,11 +81,13 @@ func TestExiBoundaries(t *testing.T) {
 			t.Errorf("exi %d: decoded %v", v, cs.Exi)
 		}
 	}
-	// A negative exi is not an ACE exi value; it stays an unmodeled claim.
+	// A negative exi is not an ACE exi value: an error naming exi (037
+	// W21; it used to stay an unmodeled claim).
 	data, _ := corecbor.New(corecbor.ModeCoreDeterministic).Encode(nil,
 		corecbor.MakeMap(corecbor.MapEntry{Key: corecbor.Uint(uint64(ClaimExi)), Value: corecbor.NegInt(0)}))
-	cs, err := DecodeClaimsSet(data)
-	if err != nil || cs.Exi != nil {
-		t.Errorf("negative exi: Exi = %v, err = %v; want nil, nil", cs.Exi, err)
+	_, err := DecodeClaimsSet(data)
+	var ce *ClaimError
+	if !errors.Is(err, ErrMalformedClaims) || !errors.As(err, &ce) || ce.Key != IntKey(ClaimExi) {
+		t.Errorf("negative exi: err = %v, want ErrMalformedClaims for exi", err)
 	}
 }

@@ -704,6 +704,25 @@ func TestE12_OSCOREIDLength(t *testing.T) {
 	}
 }
 
+// E13: PLAINTEXT_2 longer than KEYSTREAM_2 can cover (255 hash
+// lengths) is refused with an error that says so, on both sides.
+func TestE13_Plaintext2Size(t *testing.T) {
+	ini, res := pair(t, []byte{1}, []byte{2}, func(_ *InitiatorConfig, rc *ResponderConfig) {
+		rc.EAD2 = []EADItem{{Label: 5, Value: make([]byte, 255*32)}}
+	})
+	m1, _ := ini.CreateMessage1()
+	if _, err := res.ProcessMessage1(m1); !errors.Is(err, ErrStateViolation) || !strings.Contains(err.Error(), "PLAINTEXT_2") {
+		t.Errorf("oversized EAD_2: %v, want ErrStateViolation naming PLAINTEXT_2", err)
+	}
+	ini, _ = pair(t, []byte{1}, []byte{2}, nil)
+	_, _ = ini.CreateMessage1()
+	body := make([]byte, 32+255*32+1)
+	body[0] = 9 // a valid X25519 u-coordinate
+	if _, err := ini.ProcessMessage2(bstrItem(body)); !errors.Is(err, ErrMessageFormat) || !strings.Contains(err.Error(), "PLAINTEXT_2") {
+		t.Errorf("oversized message_2: %v, want ErrMessageFormat naming PLAINTEXT_2", err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

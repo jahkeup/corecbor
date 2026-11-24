@@ -324,6 +324,9 @@ func (s *session) createMessage2() ([]byte, error) {
 	s.t("PRK_3e2m", s.prk3e2m)
 	s.t("Signature_or_MAC_2", som)
 	s.t("PLAINTEXT_2", pt2)
+	if limit := su.maxPlaintext2(); len(pt2) > limit {
+		return nil, s.fail(fmt.Errorf("%w: PLAINTEXT_2 is %d bytes; the suite's KEYSTREAM_2 covers at most %d (RFC 9528 Appendix G): send less EAD_2, or the credential by reference", ErrStateViolation, len(pt2), limit))
+	}
 	ks, err := su.kdf(s.prk2e, labelKeystream2, s.th2, len(pt2))
 	if err != nil {
 		return nil, s.fail(err)
@@ -360,6 +363,9 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, s.fail(fmt.Errorf("%w: message_2 too short", ErrMessageFormat))
 	}
 	gy, ct2 := body[:n], body[n:]
+	if limit := su.maxPlaintext2(); len(ct2) > limit {
+		return nil, s.fail(fmt.Errorf("%w: CIPHERTEXT_2 is %d bytes; PLAINTEXT_2 can be at most %d (RFC 9528 Appendix G)", ErrMessageFormat, len(ct2), limit))
+	}
 	if s.peerEph, err = su.decodePublic(gy); err != nil {
 		return nil, s.fail(err)
 	}

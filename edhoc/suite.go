@@ -134,6 +134,10 @@ func (s *rfcSuite) extract(salt, ikm []byte) []byte {
 	return m.Sum(nil)
 }
 
+// maxPlaintext2 is the longest PLAINTEXT_2 KEYSTREAM_2 can cover: the
+// HKDF-Expand limit of 255 hash lengths (RFC 9528 Appendix G).
+func (s *rfcSuite) maxPlaintext2() int { return 255 * s.hashSize }
+
 // kdf is EDHOC_KDF(PRK, info_label, context, length) (RFC 9528 §4.1.2):
 // HKDF-Expand with info = (info_label: int, context: bstr, length: uint).
 func (s *rfcSuite) kdf(prk []byte, label int64, context []byte, length int) ([]byte, error) {

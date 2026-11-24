@@ -34,12 +34,6 @@ type DecodeOpts struct {
 	RejectUnknownTags      bool
 	RejectNonFiniteFloats  bool
 	RejectNullMapKeys      bool
-	// RejectInvalidTagContent rejects a tag whose content is not valid
-	// for it (RFC 8949 §3.4, §5.3.2) with an error wrapping
-	// cbor.ErrMalformedTag. It covers the tags RFC 8949 §3.4 defines,
-	// the modeled tags and the RFC 8746 typed arrays; others accept any
-	// content (proposal 037 C10).
-	RejectInvalidTagContent bool
 	// ReplaceInvalidUTF8 substitutes U+FFFD per invalid byte in decoded
 	// text strings (InvalidUTF8Replace, proposal 035). Ignored when
 	// RejectInvalidUTF8 is set.
@@ -98,6 +92,13 @@ type DecodeOpts struct {
 	// RequireDeterministic so that accepted input re-encodes to the same
 	// bytes (proposal 037 C9). Errors wrap ErrNotPreferred.
 	RequireCanonicalNaN bool
+	// RejectInvalidTagContent rejects a tag whose content is not valid
+	// for it (RFC 8949 §3.4, §5.3.2) with an error wrapping
+	// cbor.ErrMalformedTag. It covers the tags RFC 8949 §3.4 defines,
+	// the modeled tags and the RFC 8746 typed arrays; others accept any
+	// content (proposal 037 C10). It sits with the other one-byte
+	// fields so DecodeOpts, copied per nested item, doesn't grow.
+	RejectInvalidTagContent bool
 
 	// spans, when non-nil, receives the entry spans of the next map
 	// decoded (MapEntrySpans). Maps clear it before decoding children.
@@ -901,8 +902,10 @@ func decodeTag(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 	if depth+1 > opts.maxNesting() {
 		return cbor.Value{}, off, decodeErr(cbor.ErrMaxNestingDepth, off)
 	}
-	if err := opts.Budget.charge(valueSize, off); err != nil {
-		return cbor.Value{}, off, err
+	if opts.Budget != nil {
+		if err := opts.Budget.charge(valueSize, off); err != nil {
+			return cbor.Value{}, off, err
+		}
 	}
 	inner, next, err := decodeValue(src, pos, depth+1, opts, false)
 	if err != nil {

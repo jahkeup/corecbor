@@ -88,7 +88,6 @@ type EncodeOpts struct {
 	//
 	// Deprecated: v0.2 compatibility only; removed no earlier than v0.32.0.
 	LegacyBignumPassthrough bool
-	SortCache               *SortStateCache
 	// RejectInvalidTagContent returns an error wrapping
 	// cbor.ErrMalformedTag for a tag whose content is not valid for it,
 	// under the rules DecodeOpts.RejectInvalidTagContent applies
@@ -97,8 +96,10 @@ type EncodeOpts struct {
 	// RejectDuplicateMapKeys returns an error wrapping
 	// cbor.ErrDuplicateMapKey for a map whose keys repeat in the CBOR
 	// data model, in modes that don't sort (the sorting modes always
-	// reject repeats) (proposal 037 C11).
+	// reject repeats) (proposal 037 C11). The bools sit together so the struct,
+	// copied per call, doesn't grow.
 	RejectDuplicateMapKeys bool
+	SortCache              *SortStateCache
 }
 
 func Encode(dst []byte, v cbor.Value, opts EncodeOpts) ([]byte, error) {
@@ -324,11 +325,13 @@ func appendShortestFloat(dst []byte, f float64) []byte {
 }
 
 func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) {
+	if opts.RejectDuplicateMapKeys {
+		if err := duplicateKeyErr(m); err != nil {
+			return dst, err
+		}
+	}
 	dst = wire.AppendHead(dst, wire.MajorMap, uint64(len(m)))
 	if !opts.Deterministic || len(m) <= 1 || opts.SortMode == SortNone {
-		if opts.RejectDuplicateMapKeys && len(m) > 1 && hasDuplicateKeys(m) {
-			return dst, fmt.Errorf("encode map: %w", cbor.ErrDuplicateMapKey)
-		}
 		var err error
 		for i := range m {
 			key := &m[i].Key
@@ -467,6 +470,17 @@ func encodeMap(dst []byte, m []cbor.MapEntry, opts *EncodeOpts) ([]byte, error) 
 		opts.SortCache.put()
 	}
 	return dst, nil
+}
+
+// duplicateKeyErr returns the duplicate-key error for m, or nil. It is
+// out of line so encodeMap's common path keeps its code generation.
+//
+//go:noinline
+func duplicateKeyErr(m []cbor.MapEntry) error {
+	if len(m) > 1 && hasDuplicateKeys(m) {
+		return fmt.Errorf("encode map: %w", cbor.ErrDuplicateMapKey)
+	}
+	return nil
 }
 
 // hasDuplicateKeys reports whether two keys of m are the same key in

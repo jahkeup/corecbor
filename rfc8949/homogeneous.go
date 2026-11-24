@@ -4,6 +4,7 @@
 package rfc8949
 
 import (
+	"encoding/binary"
 	"math"
 	"unicode/utf8"
 
@@ -145,14 +146,23 @@ func DecodeUintArray(src []byte, opts DecodeOpts) ([]uint64, int, error) {
 				pos++
 				continue
 			} else if ib <= 0x1b && !opts.RejectNonShortest {
-				n := 1 << (ib - 0x18) // 1, 2, 4 or 8 argument bytes
-				if n < len(src)-pos {
-					var arg uint64
-					for _, b := range src[pos+1 : pos+1+n] {
-						arg = arg<<8 | uint64(b)
-					}
-					result[i] = arg
-					pos += 1 + n
+				rest := src[pos+1:]
+				switch {
+				case ib == 0x18 && len(rest) >= 1:
+					result[i] = uint64(rest[0])
+					pos += 2
+					continue
+				case ib == 0x19 && len(rest) >= 2:
+					result[i] = uint64(binary.BigEndian.Uint16(rest))
+					pos += 3
+					continue
+				case ib == 0x1a && len(rest) >= 4:
+					result[i] = uint64(binary.BigEndian.Uint32(rest))
+					pos += 5
+					continue
+				case ib == 0x1b && len(rest) >= 8:
+					result[i] = binary.BigEndian.Uint64(rest)
+					pos += 9
 					continue
 				}
 			}

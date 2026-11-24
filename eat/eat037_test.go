@@ -364,6 +364,48 @@ func TestValidate_RFC9711Examples037(t *testing.T) {
 	}
 }
 
+// W13: profiles such as PSA (RFC 9783) carry no exp and rely on the
+// verifier's nonce for freshness; NewAppraiser requires exp unless the
+// caller opts in and checks the nonce.
+func TestAppraiser_NonceInsteadOfExpiration037(t *testing.T) {
+	n := bytes.Repeat([]byte{7}, 32)
+	c := &eat.Claims{Nonce: [][]byte{n}, UEID: ueid}
+	if err := eat.NewAppraiser().Appraise(c); !errors.Is(err, cwt.ErrMissingExpiration) {
+		t.Fatalf("NewAppraiser: %v, want cwt.ErrMissingExpiration", err)
+	}
+	a := eat.NewAppraiser()
+	a.AllowNonceInsteadOfExpiration = true
+	if err := a.Appraise(c); !errors.Is(err, cwt.ErrMissingExpiration) {
+		t.Errorf("opt-in without a nonce check: %v, want cwt.ErrMissingExpiration", err)
+	}
+	a.RequireNonce = n
+	if err := a.Appraise(c); err != nil {
+		t.Errorf("opt-in with RequireNonce: %v", err)
+	}
+	a.RequireNonce = nil
+	a.NonceVerifier = func(ns [][]byte) error {
+		if len(ns) == 1 && bytes.Equal(ns[0], n) {
+			return nil
+		}
+		return eat.ErrNonceMismatch
+	}
+	if err := a.Appraise(c); err != nil {
+		t.Errorf("opt-in with NonceVerifier: %v", err)
+	}
+	if err := a.Appraise(&eat.Claims{UEID: ueid}); !errors.Is(err, eat.ErrNonceMismatch) {
+		t.Errorf("no nonce at all: %v", err)
+	}
+	// A token that does carry exp is still checked.
+	expired := &eat.Claims{Nonce: [][]byte{n}, ClaimsSet: cwt.ClaimsSet{Expiration: time.Unix(1, 0)}}
+	if err := a.Appraise(expired); !errors.Is(err, cwt.ErrTokenExpired) {
+		t.Errorf("expired: %v", err)
+	}
+	// The caller's validator is not modified.
+	if !a.CWTValidator.RequireExpiration {
+		t.Error("CWTValidator.RequireExpiration was cleared")
+	}
+}
+
 // W15: claim keys are integers or text, in submodules too.
 func TestClaimKeys_IntOrText037(t *testing.T) {
 	for name, in := range map[string]string{

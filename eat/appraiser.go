@@ -62,6 +62,15 @@ type Appraiser struct {
 	// MeasurementPolicy, when set, is called with the measurements claim.
 	MeasurementPolicy func(ms []TypedBytes) error
 
+	// AllowNonceInsteadOfExpiration waives CWTValidator.RequireExpiration
+	// for a token that carries no exp, for profiles such as PSA (RFC
+	// 9783) that define no exp and rely on the verifier's nonce for
+	// freshness. It applies only when the nonce is checked: RequireNonce
+	// or NonceVerifier must be set (otherwise a token without exp still
+	// fails with cwt.ErrMissingExpiration). A token that carries exp is
+	// validated as usual. It does not apply to nested-token submodules.
+	AllowNonceInsteadOfExpiration bool
+
 	// Options are the decoding options (WithLegacyDraftClaimKeys,
 	// WithKeepAsReceived) for nested tokens SubmodVerifier verifies;
 	// pass the ones the enclosing token was decoded with.
@@ -153,8 +162,15 @@ func (a *Appraiser) AppraiseContext(ctx context.Context, claims *Claims) error {
 		}
 	}
 
-	if a.CWTValidator != nil {
-		if err := a.CWTValidator.Validate(&claims.ClaimsSet); err != nil {
+	if v := a.CWTValidator; v != nil {
+		nonceChecked := len(a.RequireNonce) > 0 || a.NonceVerifier != nil
+		if a.AllowNonceInsteadOfExpiration && nonceChecked && v.RequireExpiration && claims.Expiration.IsZero() {
+			// The nonce, checked above, is the freshness evidence.
+			waived := *v
+			waived.RequireExpiration = false
+			v = &waived
+		}
+		if err := v.Validate(&claims.ClaimsSet); err != nil {
 			return err
 		}
 	}

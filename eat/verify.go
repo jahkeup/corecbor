@@ -22,7 +22,10 @@ type VerifyOptions struct {
 	Keys cose.KeyResolver
 
 	// Validator validates the CWT claims (exp, nbf, iat, aud, ...). nil
-	// means cwt.NewValidator().
+	// means cwt.NewValidator(), which requires exp. For a profile that
+	// has no exp and relies on a nonce (PSA, RFC 9783), pass a
+	// Validator with RequireExpiration false and check the nonce when
+	// appraising (Appraiser.RequireNonce or NonceVerifier).
 	Validator *cwt.Validator
 
 	// AllowedAlgorithms restricts the protected alg; it is passed to

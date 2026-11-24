@@ -227,6 +227,15 @@ goroutine (for example from a `sync.Pool`).
 | `crit` may list label 7, the RFC 8152 counter signature, which RFC 9052 §3.1 says new implementations must understand. It is passed through, not verified; countersignatures (RFC 9338, labels 11 and 12) are not implemented and those labels stay critical (037 S20) | `ErrCriticalHeader` | n/a (newly accepted) |
 | New `AllowECDSACurveHashMismatch()` lets a Verifier accept a protected ES256/ES384/ES512 with a key on another of P-256/P-384/P-521, which RFC 9053 §2.1 permits (it only suggests the pairing). Default unchanged: the pairing is required (037 S21) | no way to verify such senders | n/a (additive) |
 
+New in 037 (rows above): `ErrLimitExceeded`; `DecodeLimits.MaxSignatures`,
+`MaxRecipients` and `AllowUnprotectedTyp`; `InsecureUnboundedDecodeLimits`;
+`Recipient.Recipients`; `(*Headers).X5ChainLenient`; and the permissive
+opt-ins `InsecureAllowShortMACKeys`, `PBES2Key.InsecureAllowWeakParams`,
+`AllowProtectedRecipientHeaders`, `AllowMACProtectedRecipientHeaders`,
+`AllowEmptyProtectedAsReceived`, `AllowMACEmptyProtectedAsReceived`,
+`AllowEncryptEmptyProtectedAsReceived` and `AllowECDSACurveHashMismatch`.
+None is on by default or part of a `CompatV02*` bundle.
+
 New in 028 (additive): `WithProtectedHeaders`, `WithUnprotectedHeaders`,
 `Signer.Sign1`/`Sign1Context`, `SignContext`, `SignDetached`,
 `SignMultiDetached`, `VerifyMultiDetached`, `ContextSigner`; typed

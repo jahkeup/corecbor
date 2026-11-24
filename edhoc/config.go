@@ -79,8 +79,9 @@ type InitiatorConfig struct {
 	// Method is the authentication method (default MethodSigSig).
 	Method Method
 	// DHKey is the static DH key for methods where this party
-	// authenticates with static DH. When nil, an *ecdsa.PrivateKey
-	// PrivateKey on the suite's curve is used.
+	// authenticates with static DH; those methods require it. PrivateKey
+	// is never used in its place: RFC 9528 §3.5.1 and RFC 9052 §12
+	// strongly discourage one key for both signatures and DH.
 	DHKey *ecdh.PrivateKey
 	// Peers resolves the peer's ID_CRED; it takes precedence over
 	// PeerCredential and PeerPublic.

@@ -292,14 +292,14 @@ func (p credParty) resolvePeer(ctx context.Context, id IDCred) (*Credential, err
 		if pc := p.peerCred; pc != nil && pc.Type == CredentialCWT && len(pc.CWTBytes) > 0 && !bytes.Equal(pc.CWTBytes, id.KCWT) {
 			return nil, unknown
 		}
-		k, err := extractPublicKeyFromCWT(id.KCWT, p.cwtIssuerKey, p.validator())
+		ck, k, err := cwtKey(id.KCWT, p.cwtIssuerKey, p.validator())
 		if err != nil {
 			return nil, err // names the CWT check that failed; wraps ErrAuthentication
 		}
 		if p.peerPublic != nil && !samePublic(k, p.peerPublic) {
 			return nil, unknown
 		}
-		return &Credential{Type: CredentialCWT, CWTBytes: id.KCWT, Raw: id.KCWT, IDCred: id, PublicKey: k}, nil
+		return &Credential{Type: CredentialCWT, CWTBytes: id.KCWT, Raw: id.KCWT, IDCred: id, PublicKey: k, coseKey: ck}, nil
 	}
 	if id.KCCS != nil && p.peerPublic != nil {
 		k, err := publicFromCCS(id.KCCS)

@@ -159,7 +159,7 @@ func (s *session) authPublic(signs bool) (any, error) {
 		}
 		return s.party.signer.Public(), nil
 	}
-	dh, err := s.suite.staticPrivate(s.party.dhKey, s.party.signer)
+	dh, err := s.suite.staticPrivate(s.party.dhKey)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +306,7 @@ func (s *session) createMessage2() ([]byte, error) {
 	if s.method.responderSigns() {
 		s.prk3e2m = slices.Clone(s.prk2e)
 	} else {
-		dh, err := su.staticPrivate(s.party.dhKey, s.party.signer)
+		dh, err := su.staticPrivate(s.party.dhKey)
 		if err != nil {
 			return nil, s.fail(err)
 		}
@@ -321,6 +321,9 @@ func (s *session) createMessage2() ([]byte, error) {
 	}
 	if s.ownCred, err = s.party.ownCredential(authPub); err != nil {
 		return nil, s.fail(err)
+	}
+	if err := checkUse(s.ownCred, s.method.responderSigns()); err != nil {
+		return nil, s.fail(fmt.Errorf("%w: own credential: %w", ErrStateViolation, err))
 	}
 	ead2, err := encodeEAD(s.ownEAD[2])
 	if err != nil {
@@ -425,6 +428,9 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 	if err != nil {
 		return nil, s.fail(err)
 	}
+	if err := checkUse(peerCred, s.method.responderSigns()); err != nil {
+		return nil, s.fail(fmt.Errorf("%w: peer credential: %w", ErrAuthentication, err))
+	}
 
 	if s.method.responderSigns() {
 		s.prk3e2m = slices.Clone(s.prk2e)
@@ -450,7 +456,7 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 	if s.method.initiatorSigns() {
 		s.prk4e3m = slices.Clone(s.prk3e2m)
 	} else {
-		dh, err := su.staticPrivate(s.party.dhKey, s.party.signer)
+		dh, err := su.staticPrivate(s.party.dhKey)
 		if err != nil {
 			return nil, s.fail(err)
 		}
@@ -565,6 +571,9 @@ func (s *session) createMessage3() ([]byte, error) {
 	if s.ownCred, err = s.party.ownCredential(authPub); err != nil {
 		return nil, s.fail(err)
 	}
+	if err := checkUse(s.ownCred, s.method.initiatorSigns()); err != nil {
+		return nil, s.fail(fmt.Errorf("%w: own credential: %w", ErrStateViolation, err))
+	}
 	ead3, err := encodeEAD(s.ownEAD[3])
 	if err != nil {
 		return nil, s.fail(err)
@@ -629,6 +638,9 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 	peerCred, err := s.party.resolvePeer(ctx, peerID)
 	if err != nil {
 		return s.fail(err)
+	}
+	if err := checkUse(peerCred, s.method.initiatorSigns()); err != nil {
+		return s.fail(fmt.Errorf("%w: peer credential: %w", ErrAuthentication, err))
 	}
 	if s.method.initiatorSigns() {
 		s.prk4e3m = slices.Clone(s.prk3e2m)

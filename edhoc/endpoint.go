@@ -40,6 +40,9 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		cfg.PeerPublic != nil || cfg.PeerCredential != nil || cfg.Peers != nil || cfg.CWTIssuerKey != nil); err != nil {
 		return nil, err
 	}
+	if err := checkMethodKey(cfg.Method.initiatorSigns(), cfg.PrivateKey != nil, cfg.DHKey != nil); err != nil {
+		return nil, err
+	}
 	s := &session{
 		initiator: true,
 		method:    cfg.Method,
@@ -54,6 +57,19 @@ func NewInitiator(cfg InitiatorConfig, opts ...Option) (*Initiator, error) {
 		},
 	}
 	return &Initiator{s: s, suites: slices.Clone(cfg.Suites)}, nil
+}
+
+// checkMethodKey fails fast when the method needs a key this party
+// lacks: PrivateKey to sign, DHKey for static DH. A signing key is never
+// used as a DH key (RFC 9528 §3.5.1).
+func checkMethodKey(signs, hasSigner, hasDH bool) error {
+	switch {
+	case signs && !hasSigner:
+		return fmt.Errorf("%w: the method authenticates this party with a signature and needs PrivateKey", ErrStateViolation)
+	case !signs && !hasDH:
+		return fmt.Errorf("%w: the method authenticates this party with static DH and needs DHKey; PrivateKey is a signing key and is not used for DH (RFC 9528 §3.5.1)", ErrStateViolation)
+	}
+	return nil
 }
 
 // checkKeys fails fast, as v0.2 did, when a party has no key to
@@ -198,6 +214,11 @@ func NewResponder(cfg ResponderConfig, opts ...Option) (*Responder, error) {
 	if err := checkKeys(cfg.PrivateKey != nil || cfg.DHKey != nil,
 		cfg.PeerPublic != nil || cfg.PeerCredential != nil || cfg.Peers != nil || cfg.CWTIssuerKey != nil); err != nil {
 		return nil, err
+	}
+	if !cfg.AnyMethod {
+		if err := checkMethodKey(cfg.Method.responderSigns(), cfg.PrivateKey != nil, cfg.DHKey != nil); err != nil {
+			return nil, err
+		}
 	}
 	s := &session{
 		method: cfg.Method,

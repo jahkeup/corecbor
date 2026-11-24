@@ -134,20 +134,16 @@ func (s *rfcSuite) staticPublic(pub crypto.PublicKey) (*ecdh.PublicKey, error) {
 	return nil, fmt.Errorf("%w: peer credential has no static DH key for this suite", ErrAuthentication)
 }
 
-func (s *rfcSuite) staticPrivate(dh *ecdh.PrivateKey, signer crypto.Signer) (*ecdh.PrivateKey, error) {
-	if dh != nil {
-		if dh.Curve() != s.curve {
-			return nil, fmt.Errorf("%w: DHKey is not on the suite's curve", ErrUnsupportedSuite)
-		}
-		return dh, nil
+// staticPrivate returns this party's static DH key. A signing key is
+// never used in its place (RFC 9528 §3.5.1): pass DHKey.
+func (s *rfcSuite) staticPrivate(dh *ecdh.PrivateKey) (*ecdh.PrivateKey, error) {
+	if dh == nil {
+		return nil, fmt.Errorf("%w: static DH authentication needs DHKey; PrivateKey is a signing key and is not used for DH (RFC 9528 §3.5.1)", ErrStateViolation)
 	}
-	if k, ok := signer.(*ecdsa.PrivateKey); ok {
-		e, err := k.ECDH()
-		if err == nil && e.Curve() == s.curve {
-			return e, nil
-		}
+	if dh.Curve() != s.curve {
+		return nil, fmt.Errorf("%w: DHKey is not on the suite's curve", ErrUnsupportedSuite)
 	}
-	return nil, fmt.Errorf("%w: static DH authentication needs DHKey on the suite's curve", ErrStateViolation)
+	return dh, nil
 }
 
 // sign produces a COSE signature (RFC 9053: raw r||s for ECDSA).

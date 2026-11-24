@@ -7,11 +7,17 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/ecdh"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jahkeup/corecbor"
 	"github.com/jahkeup/corecbor/cbor"
 	"github.com/jahkeup/corecbor/cose"
 	"github.com/jahkeup/corecbor/cwt"
@@ -77,6 +83,107 @@ func TestE3_NoPeerValuesAfterFailedMessage3(t *testing.T) {
 	}
 	if e := res.PeerEAD(); e != nil {
 		t.Errorf("PeerEAD after failed verification = %+v, want nil", e)
+	}
+}
+
+// E2: a signing key is not used as a static DH key, on either side.
+func TestE2_SigningKeyNotUsedForDH(t *testing.T) {
+	ik, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	rk, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// Local: method 2 has the Initiator authenticate with static DH;
+	// an ECDSA PrivateKey without DHKey is refused.
+	_, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite2}, Method: MethodStatSig, PrivateKey: ik, PeerPublic: &rk.PublicKey, ConnectionID: []byte{1}})
+	if !errors.Is(err, ErrStateViolation) || !strings.Contains(err.Error(), "DHKey") {
+		t.Errorf("NewInitiator(method 2, ECDSA key only): %v, want ErrStateViolation naming DHKey", err)
+	}
+	_, err = NewResponder(ResponderConfig{Suites: []CipherSuite{Suite2}, Method: MethodSigStat, PrivateKey: rk, PeerPublic: &ik.PublicKey, ConnectionID: []byte{2}})
+	if !errors.Is(err, ErrStateViolation) {
+		t.Errorf("NewResponder(method 1, ECDSA key only): %v, want ErrStateViolation", err)
+	}
+	// With AnyMethod the method is known only from message_1.
+	ini, err := NewInitiator(InitiatorConfig{Suites: []CipherSuite{Suite2}, Method: MethodSigStat, PrivateKey: ik, PeerPublic: &rk.PublicKey, ConnectionID: []byte{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite2}, AnyMethod: true, PrivateKey: rk, PeerPublic: &ik.PublicKey, ConnectionID: []byte{2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m1, _ := ini.CreateMessage1()
+	if _, err := res.ProcessMessage1(m1); !errors.Is(err, ErrStateViolation) {
+		t.Errorf("Responder static DH with an ECDSA key only: %v, want ErrStateViolation", err)
+	}
+}
+
+// E2: a peer credential whose COSE_Key names a signature algorithm is
+// not accepted for static DH, and one naming key agreement is not
+// accepted for signatures.
+func TestE2_PeerKeyUseFromCOSEKey(t *testing.T) {
+	run := func(method Method, ownToo bool, alg cose.Algorithm, ops ...cose.KeyOp) error {
+		iDH, _ := ecdh.P256().GenerateKey(rand.Reader)
+		iSig, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		rSig, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		var iPub crypto.PublicKey = iDH.PublicKey()
+		if method.initiatorSigns() {
+			iPub = &iSig.PublicKey
+		}
+		k, err := cose.NewKeyFromPublic(iPub)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if alg != 0 {
+			k.SetAlgorithm(alg)
+		}
+		if ops != nil {
+			k.SetOps(ops...)
+		}
+		kb, _ := k.MarshalCBOR()
+		kv, _ := corecbor.NewDecoder(seqDecOpts...).Decode(kb)
+		ccs := item(cbor.MakeMap(cbor.MapEntry{Key: cbor.Uint(ccsClaimCnf), Value: cbor.MakeMap(cbor.MapEntry{Key: cbor.Uint(cnfCOSEKey), Value: kv})}))
+		ic := InitiatorConfig{Suites: []CipherSuite{Suite2}, Method: method, PrivateKey: iSig, DHKey: iDH, PeerPublic: &rSig.PublicKey, ConnectionID: []byte{1}}
+		if ownToo {
+			ic.Credential = &Credential{Raw: ccs}
+		}
+		ini, err := NewInitiator(ic)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := NewResponder(ResponderConfig{Suites: []CipherSuite{Suite2}, Method: method, PrivateKey: rSig, ConnectionID: []byte{2},
+			Peers: resolverFunc(func(context.Context, IDCred) (*Credential, error) {
+				return &Credential{Raw: ccs, PublicKey: iPub}, nil
+			})})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return handshake(t, ini, res)
+	}
+	for _, c := range []struct {
+		name   string
+		method Method
+		alg    cose.Algorithm
+		ops    []cose.KeyOp
+	}{
+		{"ES256 key for static DH", MethodStatSig, cose.AlgES256, nil},
+		{"verify-only key for static DH", MethodStatSig, 0, []cose.KeyOp{cose.KeyOpVerify}},
+		{"ECDH-ES key for signatures", MethodSigSig, cose.AlgECDH_ES_HKDF_256, nil},
+		{"deriveBits-only key for signatures", MethodSigSig, 0, []cose.KeyOp{cose.KeyOpDeriveBits}},
+	} {
+		err := run(c.method, false, c.alg, c.ops...)
+		if !errors.Is(err, ErrAuthentication) || !strings.Contains(err.Error(), "not usable") {
+			t.Errorf("peer %s: %v, want ErrAuthentication naming the key use", c.name, err)
+		}
+		// The same credential as this party's own is refused locally.
+		err = run(c.method, true, c.alg, c.ops...)
+		if !errors.Is(err, ErrStateViolation) || !strings.Contains(err.Error(), "not usable") {
+			t.Errorf("own %s: %v, want ErrStateViolation naming the key use", c.name, err)
+		}
+	}
+	// Keys whose alg or key_ops match the method complete.
+	if err := run(MethodStatSig, true, cose.AlgECDH_ES_HKDF_256); err != nil {
+		t.Errorf("ECDH-ES key for static DH: %v", err)
+	}
+	if err := run(MethodSigSig, true, cose.AlgES256, cose.KeyOpVerify); err != nil {
+		t.Errorf("ES256 key for signatures: %v", err)
 	}
 }
 

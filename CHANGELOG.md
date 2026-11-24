@@ -4,6 +4,15 @@ All modules in this repository are versioned together: `vX.Y.Z` for
 the root module and `cose/vX.Y.Z`, `cwt/vX.Y.Z`, `eat/vX.Y.Z`,
 `edhoc/vX.Y.Z`, `scitt/vX.Y.Z` for the others.
 
+## v0.3.2 — 2026-11-24
+
+- **License:** every module (`cose`, `cwt`, `eat`, `edhoc`, `scitt`)
+  now carries its own copy of the Apache-2.0 `LICENSE`. A Go module zip
+  holds only its own directory, so before this the sub-modules had no
+  license file and license detection (as on pkg.go.dev) found none.
+- **Docs:** doc comments describe behavior and the relevant RFC
+  sections only; internal planning references are gone.
+
 ## v0.3.1 — 2026-11-23
 
 - **Performance:** decoding with a memory budget (`WithMemoryBudget`)

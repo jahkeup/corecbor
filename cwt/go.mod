@@ -3,8 +3,8 @@ module github.com/jahkeup/corecbor/cwt
 go 1.26.0
 
 require (
-	github.com/jahkeup/corecbor v0.3.1
-	github.com/jahkeup/corecbor/cose v0.3.1
+	github.com/jahkeup/corecbor v0.3.2
+	github.com/jahkeup/corecbor/cose v0.3.2
 )
 
 replace (

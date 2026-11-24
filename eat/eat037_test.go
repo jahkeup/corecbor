@@ -406,6 +406,42 @@ func TestAppraiser_NonceInsteadOfExpiration037(t *testing.T) {
 	}
 }
 
+// W23: CBOR-Token-Inside-CBOR-Token = bstr .cbor $CBOR-Tagged-Token.
+// W24: a text submodule is a JSON-Selector, and in a CBOR EAT its type
+// MUST NOT be "DIGEST" (RFC 9711 §4.2.18).
+func TestSubmods_NestedShapes037(t *testing.T) {
+	submods := func(v string) []byte { return hx(t, "a119010aa16161"+v) } // {266: {"a": v}}
+	for name, v := range map[string]string{
+		"untagged bytes":     "43010203",                                              // h'010203'
+		"bytes, two items":   "44d2800000",                                            // h'd28000' + 00
+		"empty bytes":        "40",                                                    // h''
+		"JSON DIGEST":        "775b2244494745535422" + "2c5b2d31362c2241414141225d5d", // ["DIGEST",[-16,"AAAA"]]
+		"JSON not an array":  "627b7d",                                                // "{}"
+		"JSON one element":   "67" + "5b224a5754225d",                                 // ["JWT"]
+		"JSON type not text": "65" + "5b312c325d",                                     // [1,2]
+	} {
+		if _, err := eat.DecodeClaims(submods(v)); !errors.Is(err, eat.ErrMalformedEAT) {
+			t.Errorf("%s: %v, want ErrMalformedEAT", name, err)
+		}
+	}
+	tagged := signedToken(&eat.Claims{UEID: ueid}, edPriv)
+	c, err := eat.DecodeClaims(encodeClaimsT(t, &eat.Claims{Submods: map[string]eat.Submod{
+		"tok": {Token: tagged}, "jwt": {JSON: []byte(`["JWT", "eyJ.e30.sig"]`)},
+	}}))
+	if err != nil || c.Submods["tok"].Token == nil || c.Submods["jwt"].JSON == nil {
+		t.Fatalf("valid nested tokens: %+v, %v", c, err)
+	}
+	// Encode refuses to write them too.
+	for name, s := range map[string]eat.Submod{
+		"untagged bytes": {Token: []byte{1, 2, 3}},
+		"JSON DIGEST":    {JSON: []byte(`["DIGEST",[-16,"AAAA"]]`)},
+	} {
+		if _, err := (&eat.Claims{Submods: map[string]eat.Submod{"a": s}}).Encode(); !errors.Is(err, eat.ErrMalformedEAT) {
+			t.Errorf("Encode %s: %v, want ErrMalformedEAT", name, err)
+		}
+	}
+}
+
 // W15: claim keys are integers or text, in submodules too.
 func TestClaimKeys_IntOrText037(t *testing.T) {
 	for name, in := range map[string]string{

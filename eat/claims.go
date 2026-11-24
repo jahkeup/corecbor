@@ -4,6 +4,7 @@
 package eat
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -404,6 +405,11 @@ func (c *Claims) submodsValue(cfg config) (corecbor.Value, bool, error) {
 		var val corecbor.Value
 		switch {
 		case sub.Token != nil:
+			if !cfg.num.legacy {
+				if err := checkNestedToken(sub.Token); err != nil {
+					return corecbor.Value{}, false, fmt.Errorf("submods[%q]: %w", name, err)
+				}
+			}
 			val = corecbor.Bytes(sub.Token)
 		case sub.Claims != nil:
 			v, err := sub.Claims.toValue(cfg)
@@ -412,6 +418,9 @@ func (c *Claims) submodsValue(cfg config) (corecbor.Value, bool, error) {
 			}
 			val = v
 		case sub.JSON != nil:
+			if err := checkJSONSelector(sub.JSON); err != nil {
+				return corecbor.Value{}, false, fmt.Errorf("submods[%q]: %w", name, err)
+			}
 			val = corecbor.Text(string(sub.JSON))
 		case sub.Detached != nil:
 			alg := intValue(int64(sub.Detached.Alg))
@@ -816,6 +825,11 @@ func (c *Claims) decodeSubmods(val corecbor.Value, raw []byte, cfg config, depth
 		name := e.Key.TextVal()
 		switch e.Value.Kind {
 		case corecbor.KindBytes:
+			if !cfg.num.legacy {
+				if err := checkNestedToken(e.Value.BytesVal()); err != nil {
+					return fmt.Errorf("submods[%q]: %w", name, err)
+				}
+			}
 			c.Submods[name] = Submod{Token: e.Value.BytesVal()}
 		case corecbor.KindMap:
 			var sub []byte
@@ -831,6 +845,9 @@ func (c *Claims) decodeSubmods(val corecbor.Value, raw []byte, cfg config, depth
 			if cfg.num.legacy {
 				return malformed("submod[%q] value must be bytes or map", name)
 			}
+			if err := checkJSONSelector([]byte(e.Value.TextVal())); err != nil {
+				return fmt.Errorf("submods[%q]: %w", name, err)
+			}
 			c.Submods[name] = Submod{JSON: []byte(e.Value.TextVal())}
 		case corecbor.KindArray:
 			if cfg.num.legacy {
@@ -844,6 +861,34 @@ func (c *Claims) decodeSubmods(val corecbor.Value, raw []byte, cfg config, depth
 		default:
 			return malformed("submod[%q] value must be a map, bytes, text or a detached digest", name)
 		}
+	}
+	return nil
+}
+
+// checkNestedToken applies CBOR-Token-Inside-CBOR-Token = bstr .cbor
+// $CBOR-Tagged-Token (RFC 9711 §4.2.18): the bytes are one CBOR data
+// item, and a tag, whose tag decides the token type.
+func checkNestedToken(b []byte) error {
+	if !startsWithTag(b) || !asreceived.OneItem(b) {
+		return malformed("nested token must be one tagged CBOR data item")
+	}
+	return nil
+}
+
+// checkJSONSelector applies RFC 9711 §4.2.18 to a text submodule in a
+// CBOR EAT: a JSON-Selector, [type, nested-token], whose type is text
+// and not "DIGEST" ("MUST NOT be used" in a CBOR-encoded EAT).
+func checkJSONSelector(b []byte) error {
+	var sel []json.RawMessage
+	if err := json.Unmarshal(b, &sel); err != nil || len(sel) != 2 {
+		return malformed("JSON submodule must be a JSON-Selector [type, nested-token]")
+	}
+	var typ string
+	if err := json.Unmarshal(sel[0], &typ); err != nil {
+		return malformed("JSON-Selector type must be a string")
+	}
+	if typ == "DIGEST" {
+		return malformed(`JSON-Selector type "DIGEST" is not allowed in a CBOR-encoded EAT`)
 	}
 	return nil
 }

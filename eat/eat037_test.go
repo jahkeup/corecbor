@@ -274,6 +274,96 @@ func TestAppraise_SubmodVerifierValidates037(t *testing.T) {
 	}
 }
 
+func claimIs(err error, key int64, sentinel error) bool {
+	var ce *cwt.ClaimError
+	return errors.Is(err, sentinel) && errors.As(err, &ce) && ce.Key == cwt.IntKey(key)
+}
+
+// W14: RFC 9711's value rules are complete in Validate, and decoding
+// rejects shapes it would otherwise silently rewrite.
+func TestValidate_RFC9711Values037(t *testing.T) {
+	n8 := bytes.Repeat([]byte{1}, 8)
+	// Decode: a nonce array holds 2 or more nonces ([ 2* nonce-type ]);
+	// sueids holds at least one.
+	for in, key := range map[string]int64{
+		"a10a80":                        eat.ClaimNonce,  // nonce: []
+		"a10a8148" + "0101010101010101": eat.ClaimNonce,  // nonce: [h'..'] (one)
+		"a1190101a0":                    eat.ClaimSUEIDs, // sueids: {}
+	} {
+		if _, err := eat.DecodeClaims(hx(t, in)); !claimIs(err, key, eat.ErrMalformedEAT) {
+			t.Errorf("decode %s: %v, want ErrMalformedEAT naming claim %d", in, err, key)
+		}
+	}
+	if c, err := eat.DecodeClaims(hx(t, "a10a8248"+"0101010101010101"+"48"+"0202020202020202")); err != nil || len(c.Nonce) != 2 {
+		t.Errorf("two nonces: %+v, %v", c, err)
+	}
+
+	pen := int64(-1)
+	cf := uint64(1 << 16)
+	ok := uint64(60)
+	for _, tc := range []struct {
+		name string
+		c    *eat.Claims
+		key  int64
+	}{
+		{"oemid 4 bytes", &eat.Claims{OEMId: []byte{1, 2, 3, 4}}, eat.ClaimOEMID},
+		{"oemid negative PEN", &eat.Claims{OEMIDPEN: &pen}, eat.ClaimOEMID},
+		{"hwmodel without oemid", &eat.Claims{HWModel: []byte{1}}, eat.ClaimHWModel},
+		{"hwmodel 33 bytes", &eat.Claims{OEMId: []byte{1, 2, 3}, HWModel: make([]byte, 33)}, eat.ClaimHWModel},
+		{"hwversion without hwmodel", &eat.Claims{HWVersion: &eat.Version{Version: "1"}}, eat.ClaimHWVersion},
+		{"oemboot without oemid", &eat.Claims{SecureBoot: ptrBool(true)}, eat.ClaimOEMBoot},
+		{"swversion without swname", &eat.Claims{SWVersion: &eat.Version{Version: "1"}}, eat.ClaimSWVersion},
+		{"manifest media type", &eat.Claims{Manifests: []eat.TypedBytes{{MediaType: "application/swid+cbor", Value: []byte{1}}}}, eat.ClaimManifests},
+		{"measurement content format > 65535", &eat.Claims{Measurements: []eat.TypedBytes{{ContentFormat: &cf, Value: []byte{1}}}}, eat.ClaimMeasurements},
+		{"measres result 5", &eat.Claims{MeasRes: []eat.MeasResGroup{{System: "s", Results: []eat.MeasResIndividual{{IDText: "x", IsText: true, Result: 5}}}}}, eat.ClaimMeasRes},
+		{"measres no results", &eat.Claims{MeasRes: []eat.MeasResGroup{{System: "s"}}}, eat.ClaimMeasRes},
+		{"dloa registrar not a URI", &eat.Claims{DLOAs: []eat.DLOA{{Registrar: "not a uri", PlatformLabel: "p"}}}, eat.ClaimDLOAs},
+		{"nonce 65 bytes", &eat.Claims{Nonce: [][]byte{make([]byte, 65)}}, eat.ClaimNonce},
+	} {
+		if err := tc.c.Validate(); !claimIs(err, tc.key, eat.ErrInvalidClaimValue) && !claimIs(err, tc.key, eat.ErrInvalidNonce) {
+			t.Errorf("%s: %v, want an error naming claim %d", tc.name, err, tc.key)
+		}
+	}
+	good := &eat.Claims{
+		Nonce: [][]byte{n8}, OEMId: []byte{1, 2, 3}, HWModel: []byte{1}, HWVersion: &eat.Version{Version: "1"},
+		SecureBoot: ptrBool(true), SWName: "fw", SWVersion: &eat.Version{Version: "2"},
+		Manifests: []eat.TypedBytes{{ContentFormat: &ok, Value: []byte{1}}},
+		MeasRes:   []eat.MeasResGroup{{System: "s", Results: []eat.MeasResIndividual{{IDText: "x", IsText: true, Result: eat.MeasResultSuccess}}}},
+		DLOAs:     []eat.DLOA{{Registrar: "https://dloa.example", PlatformLabel: "p"}},
+	}
+	if err := good.Validate(); err != nil {
+		t.Errorf("valid claims: %v", err)
+	}
+	// Inline submodules are validated too.
+	if err := (&eat.Claims{Submods: map[string]eat.Submod{"s": {Claims: &eat.Claims{HWModel: []byte{1}}}}}).Validate(); !claimIs(err, eat.ClaimHWModel, eat.ErrInvalidClaimValue) {
+		t.Errorf("inline submodule: %v", err)
+	}
+}
+
+// The RFC 9711 Appendix A examples contradict the normative text in
+// places; the text wins. A.2.1's UEID is 15 bytes after the RAND type
+// byte (§4.2.1 allows 16, 24 or 32), and A.2.2's detached TEE claims set
+// has oemboot without oemid (§4.2.8: "the oemid claim MUST be
+// present"; §4.2.18: submodules inherit nothing).
+func TestValidate_RFC9711Examples037(t *testing.T) {
+	for name, tc := range map[string]struct {
+		in  string
+		key int64
+		err error
+	}{
+		"A.2.1":     {rfcA21Payload, eat.ClaimUEID, eat.ErrInvalidUEID},
+		"A.2.2 TEE": {rfcA22TEE, eat.ClaimOEMBoot, eat.ErrInvalidClaimValue},
+	} {
+		c, err := eat.DecodeClaims(hx(t, tc.in))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if err := c.Validate(); !claimIs(err, tc.key, tc.err) {
+			t.Errorf("%s: Validate = %v, want %v for claim %d", name, err, tc.err, tc.key)
+		}
+	}
+}
+
 // W15: claim keys are integers or text, in submodules too.
 func TestClaimKeys_IntOrText037(t *testing.T) {
 	for name, in := range map[string]string{

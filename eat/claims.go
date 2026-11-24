@@ -490,9 +490,12 @@ func locationValue(l Location) corecbor.Value {
 
 // DecodeClaims deserializes a CBOR-encoded claims map into EAT Claims.
 //
-// It keeps v0.2.2's value acceptance (no nonce-length, UEID or dbgstat
-// range checks; use Claims.Validate for RFC 9711's constraints),
-// rejects duplicate claims (RFC 8392 §7.2) and bounds decode memory.
+// It keeps v0.2.2's value acceptance (no nonce-length, UEID, size,
+// dependency or range checks; use Claims.Validate for RFC 9711's
+// constraints, as VerifyToken and NewAppraiser do), but rejects shapes
+// Encode would rewrite: a nonce array of fewer than 2 nonces and an
+// empty sueids map. It rejects duplicate claims (RFC 8392 §7.2) and
+// claim keys that are not integers or text, and bounds decode memory.
 // Claims it does not model are kept in PrivateClaims. Errors wrap
 // ErrMalformedEAT; errors about one claim are *cwt.ClaimError.
 func DecodeClaims(data []byte, opts ...Option) (*Claims, error) {
@@ -734,8 +737,10 @@ func (c *Claims) decodeRFCClaim(k int64, val corecbor.Value) error {
 	var err error
 	switch k {
 	case ClaimSUEIDs:
-		if val.Kind != corecbor.KindMap {
-			return malformed("sueids must be a map")
+		if val.Kind != corecbor.KindMap || len(val.Map()) == 0 {
+			// { + tstr => ueid-type } (RFC 9711 §4.2.2); an empty map
+			// would be dropped by Encode.
+			return malformed("sueids must be a non-empty map")
 		}
 		c.SUEIDs = make(map[string][]byte, len(val.Map()))
 		for _, e := range val.Map() {
@@ -1095,6 +1100,12 @@ func parseNonce(v corecbor.Value) ([][]byte, error) {
 		return [][]byte{v.BytesVal()}, nil
 	case corecbor.KindArray:
 		items := v.Array()
+		if len(items) < 2 {
+			// [ 2* nonce-type ] (RFC 9711 §4.1). An empty array would
+			// decode as no nonce and a single one re-encode as a bare
+			// byte string, so neither survives Encode.
+			return nil, malformed("nonce array must hold at least 2 nonces, got %d", len(items))
+		}
 		nonces := make([][]byte, len(items))
 		for i, elem := range items {
 			if elem.Kind != corecbor.KindBytes {

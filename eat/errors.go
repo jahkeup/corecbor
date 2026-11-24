@@ -53,4 +53,13 @@ var (
 	// WithLegacyDraftClaimKeys, or SecurityLevel (dropped from RFC 9711)
 	// without it.
 	ErrClaimNumbering = errors.New("eat: claim not representable in the selected claim numbering")
+
+	// ErrInvalidClaimValue indicates a claim whose value, size or
+	// presence violates RFC 9711 in a way the other sentinels don't
+	// name: an oemid or hwmodel of the wrong size, a claim present
+	// without the one it depends on (hwmodel needs oemid, and so on), a
+	// manifest or measurement not identified by a CoAP Content-Format,
+	// or an out-of-range measurement result. Claims.Validate returns it
+	// inside a *cwt.ClaimError for the claim.
+	ErrInvalidClaimValue = errors.New("eat: invalid claim value")
 )

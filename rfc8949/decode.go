@@ -551,7 +551,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		if ib&0xe0 == 0x60 && ib&0x1f < 24 {
 			length := int(ib & 0x1f)
 			end := pos + 1 + length
-			if end <= srcLen {
+			if end <= srcLen && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {
 					return cbor.Value{}, pos, indexPath(decodeErr(cbor.ErrInvalidUTF8, pos), opts, i)
 				}
@@ -576,7 +576,7 @@ func decodeArray(src []byte, off int, h wire.HeadResult, depth int, opts DecodeO
 		if ib&0xe0 == 0x40 && ib&0x1f < 24 {
 			length := int(ib & 0x1f)
 			end := pos + 1 + length
-			if end <= srcLen {
+			if end <= srcLen && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
 				if opts.ZeroCopy {
 					arr[i] = cbor.Bytes(src[pos+1 : end])
 				} else {
@@ -700,7 +700,7 @@ func decodeMap(src []byte, off int, h wire.HeadResult, depth int, opts DecodeOpt
 		if pos < len(src) && src[pos]&0xe0 == 0x60 && src[pos]&0x1f < 24 {
 			length := int(src[pos] & 0x1f)
 			end := pos + 1 + length
-			if end <= len(src) {
+			if end <= len(src) && (opts.MaxByteStringLength <= 0 || length <= opts.MaxByteStringLength) {
 				raw := src[pos:end]
 				var s string
 				if opts.RejectInvalidUTF8 && !utf8.Valid(src[pos+1:end]) {

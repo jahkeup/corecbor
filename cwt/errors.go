@@ -75,6 +75,13 @@ var (
 	// *ClaimError for cnf; Seal, Encrypt, OpenToken and Decrypt accept
 	// such a key.
 	ErrSymmetricKeyNotEncrypted = errors.New("cwt: symmetric cnf key in an unencrypted CWT")
+
+	// ErrExiNotTracked indicates a token carrying exi (RFC 9200
+	// §5.10.3: its lifetime from first receipt) validated by a
+	// Validator without ExiFirstSeen, which therefore can't tell
+	// whether it has expired. It is returned inside a *ClaimError for
+	// exi.
+	ErrExiNotTracked = errors.New("cwt: exi present but first-receipt time not tracked")
 )
 
 // ClaimError reports which claim failed and why. Err wraps a cwt

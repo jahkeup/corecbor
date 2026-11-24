@@ -5,6 +5,7 @@ package cwt
 
 import (
 	"fmt"
+	"math"
 	"slices"
 	"time"
 )
@@ -56,6 +57,16 @@ type Validator struct {
 	// when audience restriction is enforced some other way. Combining
 	// it with Audience or Audiences is ErrInvalidValidator.
 	IgnoreAudience bool
+
+	// ExiFirstSeen returns when this processor first received the token
+	// (RFC 9200 §5.10.3), typically from a store keyed by its cti; an
+	// error from it fails validation. A token carrying exi is rejected
+	// once that time plus exi seconds has passed (ErrTokenExpired;
+	// Leeway does not apply, both times being local), and is rejected
+	// with ErrExiNotTracked when ExiFirstSeen is nil, since its lifetime
+	// can't be checked. A token with exi but no cti is malformed (the
+	// AS MUST add one). Tokens without exi are unaffected.
+	ExiFirstSeen func(claims *ClaimsSet) (time.Time, error)
 }
 
 // NewValidator returns a Validator with current-standards defaults:
@@ -129,11 +140,41 @@ func (v *Validator) Validate(claims *ClaimsSet) error {
 		}
 	}
 
+	if err := v.validateExi(claims, now); err != nil {
+		return err
+	}
+
 	if len(v.Issuers) > 0 && !slices.Contains(v.Issuers, claims.Issuer) {
 		return ErrIssuerMismatch
 	}
 
 	return v.validateAudience(claims)
+}
+
+// validateExi applies RFC 9200 §5.10.3: the token expires exi seconds
+// after this processor first received it.
+func (v *Validator) validateExi(claims *ClaimsSet, now time.Time) error {
+	if claims.Exi == nil {
+		return nil
+	}
+	key := IntKey(ClaimExi)
+	if len(claims.CWTID) == 0 {
+		return claimErr(key, "a token with exi must carry a cti (RFC 9200 §5.10.3)", nil)
+	}
+	if v.ExiFirstSeen == nil {
+		return &ClaimError{Key: key, Err: fmt.Errorf("%w: set Validator.ExiFirstSeen", ErrExiNotTracked)}
+	}
+	first, err := v.ExiFirstSeen(claims)
+	if err != nil {
+		return &ClaimError{Key: key, Err: err}
+	}
+	if *claims.Exi > uint64(math.MaxInt64/int64(time.Second)) {
+		return nil // beyond time.Duration: never expires in practice
+	}
+	if !now.Before(first.Add(time.Duration(*claims.Exi) * time.Second)) {
+		return &ClaimError{Key: key, Err: fmt.Errorf("%w: exi of %ds elapsed since first receipt", ErrTokenExpired, *claims.Exi)}
+	}
+	return nil
 }
 
 // validateAudience applies RFC 7519 §4.1.3: a token whose aud the

@@ -409,6 +409,75 @@ func TestClaimKeys_IntOrText037(t *testing.T) {
 	}
 }
 
+// W21: the RFC 9200 claims have registered types; an ill-typed one is
+// an error naming it, not a private claim.
+func TestACEClaims_IllTyped037(t *testing.T) {
+	for in, key := range map[string]int64{
+		"a10901":                       cwt.ClaimScope,      // scope: 1
+		"a118266178":                   cwt.ClaimACEProfile, // ace_profile: "x"
+		"a11826c249010000000000000000": cwt.ClaimACEProfile, // ace_profile: bignum 2^64
+		"a1182701":                     cwt.ClaimCNonce,     // cnonce: 1
+		"a1182820":                     cwt.ClaimExi,        // exi: -1
+		"a11828617a":                   cwt.ClaimExi,        // exi: "z"
+	} {
+		_, err := cwt.DecodeClaimsSet(h(t, in))
+		if k, ok := claimKeyOf(err); !errors.Is(err, cwt.ErrMalformedClaims) || !ok || k != cwt.IntKey(key) {
+			t.Errorf("%s: %v, want ErrMalformedClaims naming claim %d", in, err, key)
+		}
+	}
+}
+
+// W20: RFC 9200 §5.10.3 — exi is the lifetime from first receipt; a
+// validator that can't tell when it first saw the token rejects it.
+func TestValidator_Exi037(t *testing.T) {
+	exi := uint64(60)
+	c := validClaims()
+	c.Exi = &exi
+	c.CWTID = []byte{1, 2}
+	now := t0
+	isExi := func(err error, sentinel error) bool {
+		k, ok := claimKeyOf(err)
+		return errors.Is(err, sentinel) && ok && k == cwt.IntKey(cwt.ClaimExi)
+	}
+
+	v := fixedNow(cwt.NewValidator(), now)
+	if err := v.Validate(c); !isExi(err, cwt.ErrExiNotTracked) {
+		t.Errorf("no ExiFirstSeen: %v, want ErrExiNotTracked for exi", err)
+	}
+	if err := fixedNow(&cwt.Validator{}, now).Validate(c); !isExi(err, cwt.ErrExiNotTracked) {
+		t.Errorf("zero Validator: %v, want ErrExiNotTracked for exi", err)
+	}
+	first := now.Add(-30 * time.Second)
+	v.ExiFirstSeen = func(cs *cwt.ClaimsSet) (time.Time, error) {
+		if !bytes.Equal(cs.CWTID, []byte{1, 2}) {
+			t.Errorf("ExiFirstSeen got cti %x", cs.CWTID)
+		}
+		return first, nil
+	}
+	if err := v.Validate(c); err != nil {
+		t.Errorf("within exi: %v", err)
+	}
+	first = now.Add(-60 * time.Second)
+	if err := v.Validate(c); !isExi(err, cwt.ErrTokenExpired) {
+		t.Errorf("exi elapsed: %v, want ErrTokenExpired for exi", err)
+	}
+	boom := errors.New("store down")
+	v.ExiFirstSeen = func(*cwt.ClaimsSet) (time.Time, error) { return time.Time{}, boom }
+	if err := v.Validate(c); !errors.Is(err, boom) {
+		t.Errorf("hook error: %v", err)
+	}
+	// RFC 9200 §5.10.3: the AS MUST add a cti to a token with exi.
+	v.ExiFirstSeen = func(*cwt.ClaimsSet) (time.Time, error) { return now, nil }
+	c.CWTID = nil
+	if err := v.Validate(c); !isExi(err, cwt.ErrMalformedClaims) {
+		t.Errorf("exi without cti: %v, want ErrMalformedClaims for exi", err)
+	}
+	// Tokens without exi are unaffected.
+	if err := fixedNow(cwt.NewValidator(), now).Validate(validClaims()); err != nil {
+		t.Errorf("no exi: %v", err)
+	}
+}
+
 // W2: RFC 8747 §3.1 — an empty cnf, or one holding only members this
 // package doesn't understand, carries no proof-of-possession key.
 func TestValidator_RequireConfirmation037(t *testing.T) {

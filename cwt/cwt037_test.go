@@ -4,6 +4,7 @@
 package cwt_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -165,6 +166,57 @@ func TestSymmetricCnf_PlaintextRejected037(t *testing.T) {
 		if _, err := cwt.Sign(c, signer); err != nil {
 			t.Errorf("Sign %+v: %v", cnf, err)
 		}
+	}
+}
+
+// W8: the v0.2.2 entry points bound the COSE envelope (8 MiB, the
+// claims decoder's budget) instead of decoding it with no limit.
+func TestLegacyPaths_Bounded037(t *testing.T) {
+	var big cose.Headers
+	big.Set(int64(-70000), bytes.Repeat([]byte{1}, 9<<20))
+	payload, err := validClaims().Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, _ := cose.NewSigner(edPriv)
+	sig, err := signer.Sign(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig.Unprotected = big
+	signed, _ := cose.MarshalSign1(sig)
+	verifier, _ := cose.NewVerifier(edPub)
+	if _, err := cwt.Verify(signed, verifier); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("Verify: %v, want ErrMalformedClaims", err)
+	}
+
+	mac, err := cose.ComputeMAC0(payload, macKey, cose.AlgHMAC256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac.Unprotected = big
+	macked, _ := cose.MarshalMac0(mac)
+	if _, err := cwt.VerifyMAC(macked, macKey, cose.AlgHMAC256); !errors.Is(err, cwt.ErrMalformedClaims) {
+		t.Errorf("VerifyMAC: %v, want ErrMalformedClaims", err)
+	}
+
+	enc, err := cose.Encrypt0Seal(payload, aesKey, cose.AlgA128GCM, cose.WithNonce(nonce))
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc.Unprotected = big
+	sealed, _ := cose.MarshalEncrypt0(enc)
+	if _, err := cwt.Decrypt(sealed, aesKey, nonce, cose.AlgA128GCM); !errors.Is(err, cwt.ErrMalformedClaims) { //nolint:staticcheck // deprecated path
+		t.Errorf("Decrypt: %v, want ErrMalformedClaims", err)
+	}
+
+	// Anything well within the budget still verifies.
+	var ok cose.Headers
+	ok.Set(int64(-70000), bytes.Repeat([]byte{1}, 2<<20))
+	sig.Unprotected = ok
+	signed, _ = cose.MarshalSign1(sig)
+	if _, err := cwt.Verify(signed, verifier); err != nil {
+		t.Errorf("Verify, 2 MiB header: %v", err)
 	}
 }
 

@@ -9,6 +9,13 @@ import (
 	"github.com/jahkeup/corecbor/cose"
 )
 
+// legacyDecodeLimits bounds the COSE envelope in the v0.2.2 entry points
+// (Verify, VerifyMAC, Decrypt), which decoded it with no limit. The
+// budget is the claims decoder's, so any token whose claims those
+// functions could decode still fits. VerifyToken, VerifyMACToken and
+// OpenToken use the tighter cose.RecommendedDecodeLimits.
+var legacyDecodeLimits = cose.DecodeLimits{MemoryBudget: decodeBudget}
+
 // Sign encodes the claims and wraps them in a COSE_Sign1 structure. A
 // symmetric cnf key by value is refused with ErrSymmetricKeyNotEncrypted
 // (RFC 8747 §3.2: a signed CWT is not encrypted); use
@@ -36,13 +43,14 @@ func Sign(claims *ClaimsSet, signer *cose.Signer) ([]byte, error) {
 // Verify checks the signature only; it does not validate claims. Use
 // VerifyToken, or call Validator.Validate on the result. It does refuse
 // a symmetric cnf key by value with ErrSymmetricKeyNotEncrypted (RFC
-// 8747 §3.2): the key has been exposed in transit.
+// 8747 §3.2): the key has been exposed in transit. The envelope is
+// decoded with an 8 MiB memory budget (v0.2.2 used no limit).
 func Verify(data []byte, verifier *cose.Verifier) (*ClaimsSet, error) {
 	inner, _, err := unwrapCWT(data)
 	if err != nil {
 		return nil, err
 	}
-	msg, err := cose.UnmarshalSign1(inner)
+	msg, err := cose.UnmarshalSign1With(inner, legacyDecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}

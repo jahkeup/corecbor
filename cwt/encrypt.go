@@ -38,7 +38,8 @@ func Encrypt(claims *ClaimsSet, key []byte, nonce []byte, alg cose.Algorithm) ([
 }
 
 // Decrypt decodes and decrypts an encrypted CWT, returning the embedded
-// claims. An outer CWT tag 61 is accepted (RFC 8392 §6). It does not
+// claims. An outer CWT tag 61 is accepted (RFC 8392 §6). The envelope
+// is decoded with an 8 MiB memory budget. It does not
 // validate claims.
 //
 // Deprecated: use OpenToken, which reads the IV from the message and
@@ -48,7 +49,7 @@ func Decrypt(data []byte, key []byte, nonce []byte, alg cose.Algorithm) (*Claims
 	if err != nil {
 		return nil, err
 	}
-	msg, err := cose.UnmarshalEncrypt0(inner)
+	msg, err := cose.UnmarshalEncrypt0With(inner, legacyDecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}
@@ -89,13 +90,14 @@ func MAC(claims *ClaimsSet, key []byte, alg cose.Algorithm) ([]byte, error) {
 // VerifyMAC verifies and decodes a MAC'd CWT, returning the embedded
 // claims. An outer CWT tag 61 is accepted (RFC 8392 §6). It checks the
 // MAC only; use VerifyMACToken to also validate claims. Like Verify, it
-// refuses a symmetric cnf key by value (ErrSymmetricKeyNotEncrypted).
+// refuses a symmetric cnf key by value (ErrSymmetricKeyNotEncrypted)
+// and decodes the envelope with an 8 MiB memory budget.
 func VerifyMAC(data []byte, key []byte, alg cose.Algorithm) (*ClaimsSet, error) {
 	inner, _, err := unwrapCWT(data)
 	if err != nil {
 		return nil, err
 	}
-	msg, err := cose.UnmarshalMac0(inner)
+	msg, err := cose.UnmarshalMac0With(inner, legacyDecodeLimits)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrMalformedClaims, err)
 	}

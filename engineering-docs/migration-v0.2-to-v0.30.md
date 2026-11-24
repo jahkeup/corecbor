@@ -326,6 +326,7 @@ Existing identifiers keep their meaning (034). Changes to them (031):
 | Every `Validator` (zero value included) rejects a token carrying `aud` unless `Audience` or the new `Audiences` holds one of its audiences (RFC 7519 §4.1.3), with `ErrAudienceMismatch` in a `*ClaimError` for `aud`; `Audiences` accepts several audiences (037 W1) | with `Audience` unset, any `aud` was accepted | none (safety defect, 034); `Validator.IgnoreAudience` for applications that don't use `aud` |
 | `RequireConfirmation` needs a `cnf` with an understood proof-of-possession method (COSE_Key, Encrypted_COSE_Key or a non-empty kid; RFC 8747 §3.1); `{8:{}}` or a `cnf` of only unknown members fails with `ErrMissingConfirmation` in a `*ClaimError` for `cnf` (037 W2) | any `cnf` map passed, even empty | none (safety defect, 034) |
 | A symmetric `cnf` COSE_Key by value in a CWT that isn't encrypted (RFC 8747 §3.2) is refused with the new `ErrSymmetricKeyNotEncrypted` in a `*ClaimError` for `cnf` by `Sign`, `MAC`, `SetClaimsHeader`, `Verify`, `VerifyMAC`, `VerifyToken` and `VerifyMACToken`; `Seal`/`OpenToken` and `Encrypt`/`Decrypt` still carry it (037 W7) | emitted and accepted in plaintext | none (safety defect, 034): use `Confirmation.EncryptedKey` or `Seal` |
+| `Verify`, `VerifyMAC` and `Decrypt` decode the COSE envelope with an 8 MiB memory budget, the claims decoder's (037 W8) | no limit | none (safety defect, 034); `VerifyToken`/`VerifyMACToken`/`OpenToken` use `cose.RecommendedDecodeLimits` |
 
 New, recommended:
 

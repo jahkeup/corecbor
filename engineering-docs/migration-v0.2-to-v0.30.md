@@ -401,6 +401,7 @@ Behavior changes from the pre-v0.3.0 review (proposal 037):
 | `X509Resolver` requires `X509Policy.VerifyPeer` (the identity check) and fails closed without it; the leaf's keyUsage must allow the method (digitalSignature for signatures, keyAgreement for static DH; no extension means unrestricted). `KeyUsages` (extended key usage) still defaults to any, now documented | any leaf chaining to `Roots` was accepted, keyUsage unchecked | `X509Policy.AllowAnyPeerUnderRoots` accepts any leaf under `Roots` without an identity check; keyUsage: none (safety defect, 034) |
 | An automatic C_I/C_R (nil `ConnectionID`) avoids the peer's identifier and every identifier held by a live endpoint in the process (released on `Close`, failure or garbage collection), preferring one-byte integers and growing to longer identifiers when those are taken. The new `AllocateConnectionID` hook chooses it instead; callers running many sessions or keeping OSCORE contexts after `Close` must supply one (RFC 9668 §4.1.1–4.1.2) | random among 48 values, avoiding only the peer's | none (safety defect, 034); `AllocateConnectionID` is the caller-owned allocator |
 | Methods on a zero-value or nil `*Initiator`/`*Responder` return `ErrStateViolation` (accessors return nil) | nil pointer panic | none (safety defect, 034) |
+| An error message received in place of message_3 (`ProcessMessage3`) or message_4 (`ProcessMessage4`) is returned as the peer's `*ErrorMessage` (matches `ErrPeerError`) | reported as `ErrMessageFormat` | none (contract defect: RFC 9528 §6) |
 
 ## eat (032)
 

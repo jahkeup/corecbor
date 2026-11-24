@@ -402,6 +402,31 @@ func TestE19_ZeroValueEndpoints(t *testing.T) {
 	}
 }
 
+// E7: an error message received in place of message_3 or message_4 is
+// returned as the peer's *ErrorMessage, not a format error.
+func TestE7_ErrorInPlaceOfMessage3And4(t *testing.T) {
+	errBytes := []byte{0x01, 0x63, 'b', 'a', 'd'} // ERR_CODE 1, "bad"
+	ini, res := pair(t, []byte{1}, []byte{2}, nil)
+	m1, _ := ini.CreateMessage1()
+	if _, err := res.ProcessMessage1(m1); err != nil {
+		t.Fatal(err)
+	}
+	var em *ErrorMessage
+	err := res.ProcessMessage3(errBytes)
+	if !errors.As(err, &em) || !errors.Is(err, ErrPeerError) || em.Code != ErrCodeUnspecified || em.Info != "bad" {
+		t.Errorf("error in place of message_3: %v, want the peer's *ErrorMessage", err)
+	}
+
+	ini, res = pair(t, []byte{1}, []byte{2}, nil)
+	if err := handshake(t, ini, res); err != nil {
+		t.Fatal(err)
+	}
+	err = ini.ProcessMessage4(errBytes)
+	if !errors.As(err, &em) || em.Info != "bad" {
+		t.Errorf("error in place of message_4: %v, want the peer's *ErrorMessage", err)
+	}
+}
+
 // cwtFor signs a CWT whose cnf holds subject, after mut adjusts the
 // claims.
 func cwtFor(t *testing.T, issuer ed25519.PrivateKey, subject ed25519.PublicKey, mut func(*cwt.ClaimsSet)) []byte {

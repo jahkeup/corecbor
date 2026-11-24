@@ -127,6 +127,8 @@ func (i *Initiator) ProcessMessage2Context(ctx context.Context, msg2 []byte) ([]
 }
 
 // ProcessMessage4 verifies the optional message_4 (key confirmation).
+// If the Responder sent an error message instead, the error is an
+// *ErrorMessage.
 func (i *Initiator) ProcessMessage4(msg4 []byte) error {
 	if i != nil && i.legacy != nil {
 		return i.legacy.ProcessMessage4(msg4)
@@ -270,8 +272,10 @@ func (r *Responder) ProcessMessage1(msg1Raw []byte) ([]byte, error) {
 	return r.s.processMessage1(msg1Raw, r.cfg.Suites, accept)
 }
 
-// ProcessMessage3 verifies message_3, completing the handshake. The
-// resolver, if any, is called with context.Background().
+// ProcessMessage3 verifies message_3, completing the handshake. If the
+// Initiator sent an error message instead, the error is an
+// *ErrorMessage. The resolver, if any, is called with
+// context.Background().
 func (r *Responder) ProcessMessage3(msg3Raw []byte) error {
 	return r.ProcessMessage3Context(context.Background(), msg3Raw)
 }

@@ -341,12 +341,8 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		return nil, err
 	}
 	su := s.suite
-	if len(msg2) > 0 && msg2[0]>>5 <= 1 { // error message: starts with an integer
-		e, err := parseErrorMessage(msg2)
-		if err != nil {
-			return nil, s.fail(err)
-		}
-		return nil, s.fail(e)
+	if err := receivedError(msg2); err != nil {
+		return nil, s.fail(err)
 	}
 	r := newSeqReader(msg2)
 	body, err := r.nextBytes("G_Y_CIPHERTEXT_2")
@@ -448,6 +444,21 @@ func (s *session) processMessage2(ctx context.Context, msg2 []byte) ([]byte, err
 		}
 	}
 	return s.createMessage3()
+}
+
+// receivedError returns the peer's error message when msg is one in
+// place of the expected message (RFC 9528 §6), or nil. message_2,
+// message_3 and message_4 start with a byte string; an error message
+// starts with its integer ERR_CODE.
+func receivedError(msg []byte) error {
+	if len(msg) == 0 || msg[0]>>5 > 1 {
+		return nil
+	}
+	e, err := parseErrorMessage(msg)
+	if err != nil {
+		return err
+	}
+	return e
 }
 
 // staticPRK computes Extract(EDHOC_KDF(prk, label, th, hash_length),
@@ -588,6 +599,9 @@ func (s *session) processMessage3(ctx context.Context, msg3 []byte) error {
 		return err
 	}
 	su := s.suite
+	if err := receivedError(msg3); err != nil {
+		return s.fail(err)
+	}
 	r := newSeqReader(msg3)
 	ct3, err := r.nextBytes("CIPHERTEXT_3")
 	if err != nil {
@@ -742,6 +756,9 @@ func (s *session) processMessage4(msg4 []byte) error {
 	}
 	if s.message4OK {
 		return fmt.Errorf("%w: message_4 already processed", ErrStateViolation)
+	}
+	if err := receivedError(msg4); err != nil {
+		return s.fail(err)
 	}
 	r := newSeqReader(msg4)
 	ct4, err := r.nextBytes("CIPHERTEXT_4")

@@ -612,7 +612,9 @@ func (s *Stream) Value() Value {
 // Err returns the error that stopped iteration, if any. A reader that
 // ends between items (io.EOF before an item starts) is the end of the
 // stream, not an error. A reader that ends inside an item is: the error
-// wraps ErrTruncated and io.ErrUnexpectedEOF.
+// wraps ErrTruncated and io.ErrUnexpectedEOF. A DecodeError's Offset
+// counts from the start of the failing item, since a reader has no
+// position of its own (proposal 037 C19).
 func (s *Stream) Err() error {
 	return s.err
 }

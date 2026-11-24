@@ -69,18 +69,18 @@ func (d *Decoder) DecodeSequence(src []byte) (Sequence, error) {
 	// The memory budget covers one call, as it does for Decode.
 	d.resetBudget()
 	var seq Sequence
-	remaining := src
-	for len(remaining) > 0 {
-		v, n, err := rfc8949.Decode(remaining, d.cfg.opts)
+	// Error offsets are offsets in src, not in the failing item (037 C19).
+	for off := 0; off < len(src); {
+		v, next, err := rfc8949.DecodeAt(src, off, d.cfg.opts)
 		if err != nil {
 			return nil, err
 		}
 		// The sequence's own slot for the item (037 C5).
-		if err := d.cfg.opts.Budget.Charge(valueSize, len(src)-len(remaining)); err != nil {
+		if err := d.cfg.opts.Budget.Charge(valueSize, off); err != nil {
 			return nil, err
 		}
 		seq = append(seq, v)
-		remaining = remaining[n:]
+		off = next
 	}
 	return seq, nil
 }

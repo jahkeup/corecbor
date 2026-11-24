@@ -187,25 +187,35 @@ func (o DecodeOpts) maxBytes() int {
 }
 
 func Decode(src []byte, opts DecodeOpts) (cbor.Value, int, error) {
-	return decodeFrom(src, 0, opts)
+	return decodeFrom(src, 0, 0, opts)
 }
 
-// decodeFrom is Decode for an item already inside depth containers
-// (Cursor.Decode), so MaxNestingDepth counts them too.
-func decodeFrom(src []byte, depth int, opts DecodeOpts) (cbor.Value, int, error) {
+// DecodeAt decodes the item that starts at src[off:], as Decode decodes
+// src[off:], and returns it with the offset in src just past it. Error
+// offsets are offsets in src, so a caller decoding consecutive items of
+// one buffer (a CBOR sequence) gets offsets in the whole buffer
+// (proposal 037 C19).
+func DecodeAt(src []byte, off int, opts DecodeOpts) (cbor.Value, int, error) {
+	return decodeFrom(src, off, 0, opts)
+}
+
+// decodeFrom decodes the item at src[off:], already inside depth
+// containers (Cursor.Decode), so MaxNestingDepth counts them too. It
+// returns the offset just past the item.
+func decodeFrom(src []byte, off, depth int, opts DecodeOpts) (cbor.Value, int, error) {
 	if opts.KeepDuplicateMapKeys && opts.RejectDuplicateMapKeys {
-		return cbor.Value{}, 0, decodeErrDetail(cbor.ErrInvalidOption, 0, ": KeepDuplicateMapKeys with RejectDuplicateMapKeys")
+		return cbor.Value{}, 0, decodeErrDetail(cbor.ErrInvalidOption, off, ": KeepDuplicateMapKeys with RejectDuplicateMapKeys")
 	}
-	v, n, err := decodeValue(src, 0, depth, opts, true)
+	v, next, err := decodeValue(src, off, depth, opts, true)
 	if err != nil && opts.ErrorPath {
 		err = withPath(err, "$")
 	}
 	if err == nil && (opts.RequirePreferred || opts.RequireSortedMapKeys || opts.RequireCanonicalNaN) {
-		if err := checkSerialization(src[:n], opts); err != nil {
+		if _, err := checkItem(src[:next], off, &opts); err != nil {
 			return cbor.Value{}, 0, err
 		}
 	}
-	return v, n, err
+	return v, next, err
 }
 
 // DecodeNested decodes one item from the start of src the way Decode

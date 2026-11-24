@@ -12,6 +12,38 @@ import (
 	"github.com/jahkeup/corecbor/cbor"
 )
 
+// 037 C19: DecodeSequence and Cursor.Decode report error offsets in
+// their whole input, not in the failing item.
+func TestC19ErrorOffsetsAreAbsolute(t *testing.T) {
+	seq := []byte{0x01, 0x02, 0x82, 0x01, 0x1c} // third item: reserved AI at offset 4
+	_, err := DecodeSequence(seq)
+	var de *DecodeError
+	if !errors.As(err, &de) || de.Offset != 4 || !errors.Is(err, ErrReservedAI) {
+		t.Fatalf("DecodeSequence: %v (offset %v), want ErrReservedAI at 4", err, de)
+	}
+	if want := "cbor: reserved additional information value at offset 4"; err.Error() != want {
+		t.Fatalf("message %q, want %q", err.Error(), want)
+	}
+	// The checking decoder's offsets too.
+	_, err = NewDecoder(RequireDeterministic()).DecodeSequence([]byte{0x01, 0x81, 0x18, 0x01})
+	if !errors.As(err, &de) || de.Offset != 2 {
+		t.Fatalf("checking DecodeSequence: %v, want offset 2", err)
+	}
+
+	src := []byte{0x82, 0x01, 0x82, 0x02, 0x1c}
+	c := NewDecoder().Cursor(src)
+	if _, err := c.EnterArray(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Skip(); err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Decode()
+	if !errors.As(err, &de) || de.Offset != 4 {
+		t.Fatalf("Cursor.Decode: %v, want offset 4", err)
+	}
+}
+
 // 037 C22: a float too large for a float32 target says so; it is not an
 // integer overflow, though it still wraps ErrOverflow.
 func TestC22Float32OverflowMessage(t *testing.T) {

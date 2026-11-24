@@ -185,11 +185,12 @@ func (c *Cursor) Bytes() ([]byte, error) {
 // Advances the cursor past the item.
 func (c *Cursor) Decode() (cbor.Value, error) {
 	// Nesting depth continues from the containers the cursor is in.
-	v, next, err := decodeFrom(c.src[c.pos:], c.depth(), c.opts)
+	// Error offsets are offsets in the cursor's source (037 C19).
+	v, next, err := decodeFrom(c.src, c.pos, c.depth(), c.opts)
 	if err != nil {
 		return cbor.Value{}, err
 	}
-	c.pos += next
+	c.pos = next
 	c.consumeFromFrame()
 	return v, nil
 }

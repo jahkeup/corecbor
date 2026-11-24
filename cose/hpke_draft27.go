@@ -145,6 +145,17 @@ func hpkeSuiteFor(alg Algorithm, ke bool) (HPKESuite, bool) {
 	return 0, false
 }
 
+// checkHPKEKeyMix refuses the deprecated HPKEKey under WithDraftHPKE27:
+// it labels its recipients alg 35, which the draft assigns to HPKE-0
+// (integrated encryption), so one message would mix two meanings of
+// the identifier (proposal 037 S18).
+func checkHPKEKeyMix(d KeyDeriver, legacy legacyEncoding) error {
+	if _, ok := d.(*HPKEKey); ok && legacy.draftHPKE27 {
+		return fmt.Errorf("%w: HPKEKey's alg 35 is HPKE-0 under draft-ietf-cose-hpke-27; use HPKERecipient", ErrUnsupportedAlgorithm)
+	}
+	return nil
+}
+
 func requireDraftHPKE27(legacy legacyEncoding) error {
 	if !legacy.draftHPKE27 {
 		return fmt.Errorf("%w: COSE-HPKE requires WithDraftHPKE27 (draft-ietf-cose-hpke-27)", ErrUnsupportedAlgorithm)

@@ -108,6 +108,9 @@ func directEncryption(recipients []KeyDeriver, contentAlg Algorithm, keyLen int)
 func sealRecipients(cek []byte, contentAlg Algorithm, recipients []KeyDeriver, legacy legacyEncoding) ([]Recipient, error) {
 	out := make([]Recipient, len(recipients))
 	for i, r := range recipients {
+		if err := checkHPKEKeyMix(r, legacy); err != nil {
+			return nil, fmt.Errorf("recipient %d: %w", i, err)
+		}
 		alg := recipientAlg(r, legacy)
 		if emptyProtectedRecipient(alg) {
 			ciphertext, headers, err := r.WrapKey(cek, KeyWrapOpts{
@@ -171,6 +174,9 @@ func agreeRecipient(ka KeyAgreer, contentAlg Algorithm, keyLen int) ([]byte, Rec
 // The legacy PBES2 identifiers are accepted only under
 // WithLegacyPBES2Labels.
 func openRecipient(r *Recipient, deriver KeyDeriver, contentAlg Algorithm, keyLen int, o *encryptOpts) ([]byte, error) {
+	if err := checkHPKEKeyMix(deriver, o.legacy); err != nil {
+		return nil, err
+	}
 	if err := checkCrit(&r.Protected, &r.Unprotected, &o.policy); err != nil {
 		return nil, err
 	}

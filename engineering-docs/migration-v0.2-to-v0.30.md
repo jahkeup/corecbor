@@ -50,6 +50,7 @@ v0.2.2 and under the new version and diffs the output.
 | Permissive mode writes `RawMessage`/`RawTag` bytes verbatim (022) | `ModePermissive` `Marshal` | decoded and re-encoded | none; deterministic modes still canonicalize |
 | `StreamEncoder.WriteValue` applies the mode's float rules and UTF-8 validation (021 D18) | stream encoding | input width; no UTF-8 check | none |
 | `StreamEncoder` counts nested containers and rejects out-of-order map keys in deterministic modes (021 D6) | stream encoding | malformed or unsorted output | pre-sort keys, or build a `Value` and use `EncodeTo` |
+| `Marshaler` output (including `RawMessage`, `RawTag`) with repeated map keys returns `ErrDuplicateMapKey` in the deterministic modes, and keeps every entry in Permissive (037 C8) | `Marshal` of a `Marshaler` whose bytes repeat a key | the entries were merged, last one winning (`a2616101616102` → `a1616102`) | none (silent data loss, 034) |
 
 ## Decoding changes
 

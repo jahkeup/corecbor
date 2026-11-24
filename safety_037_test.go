@@ -122,6 +122,30 @@ func TestC6WrongChunkType(t *testing.T) {
 	}
 }
 
+// dupMarshaler returns fixed bytes from MarshalCBOR.
+type dupMarshaler []byte
+
+func (d dupMarshaler) MarshalCBOR() ([]byte, error) { return d, nil }
+
+// C8: Marshaler output with repeated map keys is never merged: the
+// deterministic modes reject it, and Permissive keeps every entry.
+func TestC8MarshalerDuplicateKeys(t *testing.T) {
+	dup := []byte{0xa2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x02} // {"a": 1, "a": 2}
+	sameKey := []byte{0xa2, 0x01, 0x01, 0x18, 0x01, 0x02}   // {1: 1, 1 (non-shortest): 2}
+	for _, mode := range []Mode{ModeCoreDeterministic, ModeCanonical, ModeCTAP2, ModePreferredPlus} {
+		for _, in := range []any{RawMessage(dup), dupMarshaler(dup), RawMessage(sameKey), []any{dupMarshaler(sameKey)}} {
+			out, err := New(mode).Marshal(in)
+			if !errors.Is(err, ErrDuplicateMapKey) {
+				t.Errorf("mode %d %T(%x): Marshal = %x, %v; want ErrDuplicateMapKey", mode, in, in, out, err)
+			}
+		}
+	}
+	out, err := New(ModePermissive).Marshal(dupMarshaler(dup))
+	if err != nil || !bytes.Equal(out, dup) {
+		t.Fatalf("Permissive: %x, %v; want %x", out, err, dup)
+	}
+}
+
 // C5: a sequence of scalars is charged for its items, and each call
 // starts from a fresh budget.
 func TestC5SequenceBudget(t *testing.T) {

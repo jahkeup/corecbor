@@ -180,17 +180,31 @@ func reflectToValue(rv reflect.Value, opts *marshalOpts) (cbor.Value, error) {
 	}
 }
 
+// Decoders for Marshaler output. They have no internal arena, so they
+// are safe for concurrent use and their Values outlive the call.
+var (
+	marshalerKeepDecoder   = NewDecoder(WithoutInternalArena(), KeepDuplicateMapKeys())
+	marshalerRejectDecoder = NewDecoder(WithoutInternalArena(), RejectDuplicateMapKeys())
+)
+
 // marshalerToValue converts a Marshaler's output to a Value. Its bytes
 // are always validated. In Permissive mode, RawMessage and RawTag bytes
 // are spliced into the output verbatim (proposal 014: "emitted
 // directly, no re-encoding"); otherwise the output is decoded and
 // re-encoded in the encoder's mode, which deterministic modes require.
+//
+// Repeated map keys in the output are never merged (proposal 037 C8):
+// the deterministic modes reject them with ErrDuplicateMapKey, as they
+// do for any Value, and Permissive keeps every entry.
 func marshalerToValue(m Marshaler, opts *marshalOpts) (cbor.Value, error) {
 	data, err := m.MarshalCBOR()
 	if err != nil {
 		return cbor.Value{}, fmt.Errorf("cbor: Marshaler: %w", err)
 	}
-	dec := NewDecoder()
+	dec := marshalerKeepDecoder
+	if opts.Deterministic {
+		dec = marshalerRejectDecoder
+	}
 	val, decErr := dec.Decode(data)
 	if decErr != nil {
 		return cbor.Value{}, fmt.Errorf("cbor: Marshaler produced invalid CBOR: %w", decErr)

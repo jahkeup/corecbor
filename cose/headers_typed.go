@@ -195,7 +195,10 @@ func (h *Headers) SetCWTClaims(claims corecbor.Value) error {
 }
 
 // x509Param reads a COSE_X509 parameter: bstr / [2* bstr] (RFC 9360 §2).
-func (h *Headers) x509Param(label int64) ([][]byte, error) {
+func (h *Headers) x509Param(label int64) ([][]byte, error) { return h.x509ParamMin(label, 2) }
+
+// x509ParamMin is x509Param accepting arrays of at least minArray items.
+func (h *Headers) x509ParamMin(label int64, minArray int) ([][]byte, error) {
 	v, ok := h.value(label)
 	if !ok {
 		return nil, nil
@@ -204,7 +207,10 @@ func (h *Headers) x509Param(label int64) ([][]byte, error) {
 	case corecbor.KindBytes:
 		return [][]byte{v.BytesVal()}, nil
 	case corecbor.KindArray:
-		if len(v.Items) < 2 {
+		if len(v.Items) < minArray {
+			if len(v.Items) == 1 {
+				return nil, fmt.Errorf("%w: label %d: a single certificate must be a bstr, not a 1-element array (RFC 9360 §2; see X5ChainLenient)", ErrMalformed, label)
+			}
 			return nil, fmt.Errorf("%w: label %d: COSE_X509 array needs at least 2 certificates", ErrMalformed, label)
 		}
 		out := make([][]byte, len(v.Items))
@@ -239,6 +245,13 @@ func (h *Headers) setX509Param(label int64, der [][]byte) error {
 // certificates, leaf first. A single bstr and an array are both
 // accepted; absent is (nil, nil). Chain validation is the caller's job.
 func (h *Headers) X5Chain() ([][]byte, error) { return h.x509Param(headerLabelX5Chain) }
+
+// X5ChainLenient is X5Chain that also accepts a one-element array,
+// which RFC 9360 §2 doesn't allow (one certificate is a bstr) but some
+// senders write. An empty array is still ErrMalformed.
+func (h *Headers) X5ChainLenient() ([][]byte, error) {
+	return h.x509ParamMin(headerLabelX5Chain, 1)
+}
 
 // SetX5Chain sets the x5chain header (label 33), leaf first. One
 // certificate is written as a bstr, more as an array (RFC 9360 §2).
